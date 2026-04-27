@@ -109,6 +109,14 @@ test("ENS and hex validation rejects malformed inputs before they reach clients"
   assert.throws(
     () =>
       utilities.recoverSignerAddress(
+        CALL_DATA_HASH,
+        "0x000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000000000011b",
+      ),
+    /Invalid ECDSA signature/,
+  );
+  assert.throws(
+    () =>
+      utilities.recoverSignerAddress(
         "0x28133eef788c4579d3f97f81863aef1e16c961c3719a7c3190fc6682d50a8bff",
         "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069dacca7f088d72ff9bc9cf18f7c98fb91406bfb98cdd640642de34336ed764aa001b",
       ),

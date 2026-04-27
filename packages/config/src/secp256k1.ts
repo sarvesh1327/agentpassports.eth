@@ -59,6 +59,10 @@ function recoverPublicKey(digest: bigint, r: bigint, s: bigint, recoveryId: numb
 function recoverY(x: bigint, parity: number): bigint {
   const ySquared = mod(x ** 3n + 7n, SECP256K1_P);
   let y = modularPow(ySquared, (SECP256K1_P + 1n) / 4n, SECP256K1_P);
+  // Non-residue x values do not map to secp256k1 points and must match onchain ECDSA rejection.
+  if (mod(y * y, SECP256K1_P) !== ySquared) {
+    throw new Error("Invalid ECDSA signature");
+  }
   if (Number(y & 1n) !== parity) {
     y = SECP256K1_P - y;
   }
