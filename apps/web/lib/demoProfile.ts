@@ -28,6 +28,7 @@ export type AgentProfilePreview = {
   agentName: string;
   agentNode: Hex;
   capabilities: readonly string[];
+  ensRegistryAddress: Hex | null;
   executorAddress: Hex | null;
   gasBudgetWei: bigint;
   maxGasReimbursementWei: bigint;
@@ -44,6 +45,17 @@ export type AgentProfilePreview = {
   textRecords: readonly TextRecordPreview[];
 };
 
+export type SerializableAgentProfile = Omit<
+  AgentProfilePreview,
+  "gasBudgetWei" | "maxGasReimbursementWei" | "maxValueWei" | "nextNonce" | "policyExpiresAt"
+> & {
+  gasBudgetWei: string;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
+  nextNonce: string | null;
+  policyExpiresAt: string;
+};
+
 /**
  * Builds the shared demo profile used by the home, register, and agent pages.
  */
@@ -58,6 +70,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
   const ownerNode = safeNamehash(ownerName);
   const agentNode = safeNamehash(agentName);
   const agentAddress = readAddressEnv(webEnv.demoAgentAddress);
+  const ensRegistryAddress = readAddressEnv(webEnv.ensRegistry);
   const executorAddress = readAddressEnv(webEnv.executorAddress);
   const resolverAddress = readAddressEnv(webEnv.publicResolver);
   const taskLogAddress = readAddressEnv(webEnv.taskLogAddress);
@@ -82,6 +95,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
     agentName,
     agentNode,
     capabilities: AGENT_CAPABILITIES,
+    ensRegistryAddress,
     executorAddress,
     gasBudgetWei: DEFAULT_GAS_BUDGET_WEI,
     maxGasReimbursementWei: DEFAULT_MAX_GAS_REIMBURSEMENT_WEI,
@@ -103,6 +117,20 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
       policyHash,
       policyUri
     })
+  };
+}
+
+/**
+ * Converts bigint-heavy profile previews into props that can cross the server/client boundary.
+ */
+export function serializeAgentProfile(profile: AgentProfilePreview): SerializableAgentProfile {
+  return {
+    ...profile,
+    gasBudgetWei: profile.gasBudgetWei.toString(),
+    maxGasReimbursementWei: profile.maxGasReimbursementWei.toString(),
+    maxValueWei: profile.maxValueWei.toString(),
+    nextNonce: profile.nextNonce?.toString() ?? null,
+    policyExpiresAt: profile.policyExpiresAt.toString()
   };
 }
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buildDemoAgentProfile } from "../lib/demoProfile";
+import { WalletConnection } from "./WalletConnection";
 
 /**
  * Provides the compact product navigation shared by the frontend pages.
@@ -17,6 +18,7 @@ export function SiteHeader() {
         <Link href="/register">Register</Link>
         <Link href={demoAgentHref}>Agent</Link>
       </nav>
+      <WalletConnection />
     </header>
   );
 }

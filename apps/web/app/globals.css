@@ -53,6 +53,7 @@ input {
   align-items: center;
   display: flex;
   gap: 8px;
+  margin-left: auto;
 }
 
 .site-header__nav a {
@@ -68,6 +69,16 @@ input {
   background: #f1f5f9;
   border-color: #cbd5e1;
   color: #0f172a;
+}
+
+.wallet-placeholder {
+  background: #0f172a;
+  border: 1px solid #0f172a;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 800;
+  padding: 9px 12px;
 }
 
 .home-shell {
@@ -525,6 +536,25 @@ input {
 .register-form__actions strong {
   color: #475569;
   font-size: 0.9rem;
+}
+
+.transaction-result {
+  background: #f0fdf4;
+  border-top: 1px solid #bbf7d0;
+  display: grid;
+  gap: 8px;
+  padding: 18px 24px;
+}
+
+.transaction-result span {
+  color: #166534;
+  font-weight: 800;
+}
+
+.transaction-result code {
+  color: #0f172a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
 }
 
 .empty-state {
