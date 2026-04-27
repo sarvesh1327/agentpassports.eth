@@ -260,6 +260,15 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /currentUnixSeconds\(\)/);
+  assert.match(componentSource, /normalizedAgentName/);
+  assert.match(componentSource, /safeNamehash\(normalizedAgentName\)/);
+  assert.match(componentSource, /agentName: normalizedAgentName/);
+  assert.match(componentSource, /ownerName: normalizedOwnerName/);
+  assert.doesNotMatch(
+    componentSource,
+    /safeNamehash\(agentName\)/,
+    "run page must not query nonce, policy, or resolver data from a raw ENS input node",
+  );
   assert.match(helperSource, /buildTaskRunDraft/);
   assert.match(helperSource, /serializeRelayerExecutePayload/);
   assert.match(source, /EnsProofPanel/);
@@ -294,6 +303,15 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(panelSource, /localStorage/);
   assert.match(panelSource, /resolverRead\.isSuccess/);
+  assert.match(panelSource, /normalizedAgentName/);
+  assert.match(panelSource, /safeNamehash\(normalizedAgentName\)/);
+  assert.match(panelSource, /requireAgentNode/);
+  assert.match(panelSource, /namehashEnsName\(normalizedAgentName\)/);
+  assert.doesNotMatch(
+    panelSource,
+    /safeNamehash\(agentName\)/,
+    "revoke page must not send policy or ENS record writes against a raw ENS input node",
+  );
   assert.doesNotMatch(
     panelSource,
     /nonZeroAddress\(resolverRead\.data as Hex \| undefined\) \?\? props\.resolverAddress \?\? null/,

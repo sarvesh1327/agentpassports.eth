@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { type Hex } from "@agentpassport/config";
+import { namehashEnsName, type Hex } from "@agentpassport/config";
 import { useReadContract, useWriteContract } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -12,7 +12,7 @@ import {
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
-import { safeNamehash } from "../lib/ensPreview";
+import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
   type StoredSignedTaskPayload,
@@ -47,8 +47,10 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const [statusMessage, setStatusMessage] = useState("Load or create a signed task before retrying revocation");
   const [failureProof, setFailureProof] = useState<string | null>(null);
   const [txHashes, setTxHashes] = useState<Hex[]>([]);
-  const agentNode = useMemo(() => safeNamehash(agentName), [agentName]);
-  const ownerNode = useMemo(() => safeNamehash(ownerName), [ownerName]);
+  const normalizedAgentName = useMemo(() => normalizeEnsFormName(agentName), [agentName]);
+  const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
+  const agentNode = useMemo(() => safeNamehash(normalizedAgentName), [normalizedAgentName]);
+  const ownerNode = useMemo(() => safeNamehash(normalizedOwnerName), [normalizedOwnerName]);
   const resolverRead = useReadContract({
     address: props.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -92,16 +94,27 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }, []);
 
   /**
+   * Builds the validated agent node used by write transactions so invalid input cannot hit the ENS root.
+   */
+  function requireAgentNode(): Hex {
+    if (!normalizedAgentName.includes(".")) {
+      throw new Error("Agent ENS must be a complete ENS name");
+    }
+    return namehashEnsName(normalizedAgentName);
+  }
+
+  /**
    * Disables the policy in AgentPolicyExecutor so new and old intents are blocked.
    */
   async function handleRevokePolicy() {
     try {
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+      const writeAgentNode = requireAgentNode();
       const txHash = await writeContractAsync({
         address: executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
         functionName: "revokePolicy",
-        args: [agentNode]
+        args: [writeAgentNode]
       });
       setTxHashes((hashes) => [...hashes, txHash]);
       setStatusMessage("Revoke policy transaction submitted");
@@ -116,11 +129,12 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   async function handleSetStatusRevoked() {
     try {
       const resolver = requireAddress(resolverAddress, "Resolver address is not configured");
+      const writeAgentNode = requireAgentNode();
       const txHash = await writeContractAsync({
         address: resolver,
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setText",
-        args: [agentNode, "agent.status", "revoked"]
+        args: [writeAgentNode, "agent.status", "revoked"]
       });
       setTxHashes((hashes) => [...hashes, txHash]);
       setStatusMessage("Set status revoked transaction submitted");
@@ -136,6 +150,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     event.preventDefault();
     try {
       const resolver = requireAddress(resolverAddress, "Resolver address is not configured");
+      const writeAgentNode = requireAgentNode();
       if (!isAddress(replacementAddress)) {
         throw new Error("Enter a valid replacement address");
       }
@@ -143,7 +158,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         address: resolver,
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setAddr",
-        args: [agentNode, replacementAddress]
+        args: [writeAgentNode, replacementAddress]
       });
       setTxHashes((hashes) => [...hashes, txHash]);
       setStatusMessage("Update addr record transaction submitted");

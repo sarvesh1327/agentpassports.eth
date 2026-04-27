@@ -12,7 +12,7 @@ import {
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
-import { safeNamehash } from "../lib/ensPreview";
+import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import {
   buildFreshTaskRunDraft,
   buildStoredSignedTaskPayload,
@@ -68,8 +68,10 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
-  const agentNode = useMemo(() => safeNamehash(agentName), [agentName]);
-  const ownerNode = useMemo(() => safeNamehash(ownerName), [ownerName]);
+  const normalizedAgentName = useMemo(() => normalizeEnsFormName(agentName), [agentName]);
+  const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
+  const agentNode = useMemo(() => safeNamehash(normalizedAgentName), [normalizedAgentName]);
+  const ownerNode = useMemo(() => safeNamehash(normalizedOwnerName), [normalizedOwnerName]);
   const resolverRead = useReadContract({
     address: props.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -123,13 +125,13 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       throw new Error("Waiting for executor nextNonce");
     }
     return buildFreshTaskRunDraft({
-      agentName,
+      agentName: normalizedAgentName,
       chainId: props.chainId,
       executorAddress: props.executorAddress,
       metadataURI,
       nonce: safeBigInt(nextNonceRead.data as bigint | undefined),
       nowSeconds: currentUnixSeconds(),
-      ownerName,
+      ownerName: normalizedOwnerName,
       taskDescription,
       taskLogAddress: props.taskLogAddress,
       ttlSeconds: INTENT_TTL_SECONDS
@@ -146,11 +148,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       return { draft: null, error: error instanceof Error ? error.message : "Task draft is invalid" };
     }
   }, [
-    agentName,
     metadataURI,
     nextNonceRead.data,
     nextNonceRead.isSuccess,
-    ownerName,
+    normalizedAgentName,
+    normalizedOwnerName,
     previewRefreshKey,
     props.chainId,
     props.executorAddress,
@@ -220,11 +222,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       signature: signed as Hex
     });
     const storedPayload = buildStoredSignedTaskPayload({
-      agentName,
+      agentName: normalizedAgentName,
       callData: draft.callData,
       digest: draft.digest,
       intent: draft.intent,
-      ownerName,
+      ownerName: normalizedOwnerName,
       recoveredSigner: recovered,
       signature: signed as Hex,
       taskHash: draft.taskHash,
