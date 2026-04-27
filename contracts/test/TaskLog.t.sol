@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {TaskLog} from "../src/TaskLog.sol";
-import {TestBase} from "./TestBase.sol";
+import { TaskLog } from "../src/TaskLog.sol";
+import { TestBase } from "./TestBase.sol";
 
 /// @title TaskLogTest
 /// @notice Behavior tests for executor-only task proof recording.
@@ -27,8 +27,12 @@ contract TaskLogTest is TestBase {
         assertEq(taskId, 0, "first task id");
         assertEq(taskLog.taskCount(), 1, "task count");
 
-        (bytes32 storedAgentNode, bytes32 storedOwnerNode, bytes32 storedTaskHash, string memory uri,) =
-            taskLog.tasks(0);
+        (
+            bytes32 storedAgentNode,
+            bytes32 storedOwnerNode,
+            bytes32 storedTaskHash,
+            string memory uri,
+        ) = taskLog.tasks(0);
         assertEq(storedAgentNode, agentNode, "agent node");
         assertEq(storedOwnerNode, ownerNode, "owner node");
         assertEq(storedTaskHash, taskHash, "task hash");

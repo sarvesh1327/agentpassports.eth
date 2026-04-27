@@ -181,9 +181,39 @@ test("AgentPolicyExecutor requires policy existence before budget mutation", asy
   assert.match(withdrawBody, /Policy memory policy = policies\[agentNode\]/);
   assert.match(withdrawBody, /_requirePolicyExists\(policy\)/);
   assert.ok(
-    withdrawBody.indexOf("_requirePolicyExists(policy)") < withdrawBody.indexOf("policy.ownerWallet"),
+    withdrawBody.indexOf("_requirePolicyExists(policy)") < withdrawBody.indexOf("_effectiveManager"),
     "withdrawGasBudget should check policy existence before owner authorization",
   );
+});
+
+test("AgentPolicyExecutor owner actions use the current ENS manager instead of stale creator metadata", async () => {
+  const source = await readText("contracts/src/AgentPolicyExecutor.sol");
+  const withdrawBody = source.match(
+    /function withdrawGasBudget\(bytes32 agentNode, uint256 amount\) external nonReentrant \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+  const revokeBody = source.match(
+    /function revokePolicy\(bytes32 agentNode\) external \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+
+  assert.match(withdrawBody, /msg\.sender != _effectiveManager\(policy\.ownerNode\)/);
+  assert.match(revokeBody, /msg\.sender != _effectiveManager\(policy\.ownerNode\)/);
+  assert.doesNotMatch(withdrawBody, /policy\.ownerWallet/);
+  assert.doesNotMatch(revokeBody, /policy\.ownerWallet/);
+});
+
+test("Foundry deployment script reads environment addresses and emits deployed contract addresses", async () => {
+  await assertFile("contracts/script/Deploy.s.sol");
+  const source = await readText("contracts/script/Deploy.s.sol");
+
+  assert.match(source, /interface Vm/);
+  assert.match(source, /FOUNDRY_VM\.envAddress\("ENS_REGISTRY"\)/);
+  assert.match(source, /FOUNDRY_VM\.envAddress\("NAME_WRAPPER"\)/);
+  assert.match(source, /FOUNDRY_VM\.startBroadcast\(\)/);
+  assert.match(source, /new AgentPolicyExecutor\(ensRegistry, nameWrapper\)/);
+  assert.match(source, /new TaskLog\(address\(executor\)\)/);
+  assert.match(source, /event DeploymentAddresses/);
+  assert.match(source, /emit DeploymentAddresses\(address\(executor\), address\(taskLog\)\)/);
+  assert.match(source, /FOUNDRY_VM\.stopBroadcast\(\)/);
 });
 
 test("contract behavior tests and ENS mocks are present for Foundry", async () => {
