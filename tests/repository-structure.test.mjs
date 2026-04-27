@@ -130,7 +130,7 @@ test("environment templates document required variables for Sepolia-first develo
 });
 
 test("shared config exposes Sepolia address constants and README setup instructions", async () => {
-  const constants = await readText("packages/config/src/index.ts");
+  const constants = await readText("packages/config/src/constants.ts");
   const readme = await readText("README.md");
 
   assert.match(constants, /SEPOLIA_CHAIN_ID = 11155111/);
@@ -144,6 +144,31 @@ test("shared config exposes Sepolia address constants and README setup instructi
   assert.match(readme, /pnpm test/);
   assert.match(readme, /forge test/);
   assert.match(readme, /pnpm --filter @agentpassport\/web dev/);
+});
+
+test("shared config keeps utilities split by responsibility", async () => {
+  const modulePaths = [
+    "packages/config/src/constants.ts",
+    "packages/config/src/eip712.ts",
+    "packages/config/src/ens.ts",
+    "packages/config/src/hex.ts",
+    "packages/config/src/keccak.ts",
+    "packages/config/src/policy.ts",
+    "packages/config/src/secp256k1.ts",
+    "packages/config/src/types.ts",
+  ];
+  const barrel = await readText("packages/config/src/index.ts");
+
+  for (const modulePath of modulePaths) {
+    await assertFile(modulePath);
+  }
+
+  assert.equal(barrel.length < 800, true, "index.ts should stay a small public export barrel");
+  assert.doesNotMatch(barrel, /KECCAK_ROUND_CONSTANTS/);
+  assert.doesNotMatch(barrel, /SECP256K1_P/);
+  assert.match(barrel, /export \* from "\.\/ens\.ts";/);
+  assert.match(barrel, /export \* from "\.\/eip712\.ts";/);
+  assert.match(barrel, /export \* from "\.\/policy\.ts";/);
 });
 
 test("repository-facing files do not expose staged workflow labels", async () => {
