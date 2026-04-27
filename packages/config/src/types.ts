@@ -16,6 +16,7 @@ export type TaskIntentTypedData = {
     chainId: bigint;
     verifyingContract: Hex;
   };
+  primaryType: "TaskIntent";
   types: {
     TaskIntent: readonly [
       { readonly name: "agentNode"; readonly type: "bytes32" },
