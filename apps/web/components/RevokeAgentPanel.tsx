@@ -12,6 +12,7 @@ import {
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
+import { normalizeAddressInput } from "../lib/addressInput";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
 import {
@@ -43,7 +44,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const { writeContractAsync } = useWriteContract();
   const [agentName, setAgentName] = useState(props.defaultAgentName);
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
-  const [replacementAddress, setReplacementAddress] = useState<Hex>(ZERO_ADDRESS);
+  const [replacementAddress, setReplacementAddress] = useState<string>(ZERO_ADDRESS);
   const [lastPayload, setLastPayload] = useState<StoredSignedTaskPayload | null>(null);
   const [statusMessage, setStatusMessage] = useState("Load or create a signed task before retrying revocation");
   const [failureProof, setFailureProof] = useState<string | null>(null);
@@ -153,14 +154,15 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     try {
       const resolver = requireAddress(resolverAddress, "Resolver address is not configured");
       const writeAgentNode = requireAgentNode();
-      if (!isAddress(replacementAddress)) {
+      const normalizedReplacementAddress = normalizeAddressInput(replacementAddress);
+      if (!normalizedReplacementAddress) {
         throw new Error("Enter a valid replacement address");
       }
       const txHash = await writeContractAsync({
         address: resolver,
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setAddr",
-        args: [writeAgentNode, replacementAddress]
+        args: [writeAgentNode, normalizedReplacementAddress]
       });
       setTxHashes((hashes) => [...hashes, txHash]);
       setStatusMessage("Update addr record transaction submitted");
@@ -251,7 +253,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
               <span>Replacement agent address</span>
               <input
                 name="replacementAddress"
-                onChange={(event) => setReplacementAddress(event.target.value as Hex)}
+                onChange={(event) => setReplacementAddress(event.target.value)}
                 value={replacementAddress}
               />
             </label>
@@ -336,10 +338,6 @@ function requireAddress(value: Hex | null | undefined, message: string): Hex {
     throw new Error(message);
   }
   return value;
-}
-
-function isAddress(value: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/u.test(value.trim());
 }
 
 function sameAddress(left: Hex, right: Hex): boolean {

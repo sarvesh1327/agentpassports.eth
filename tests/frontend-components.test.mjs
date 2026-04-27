@@ -309,6 +309,13 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /hashPolicyContractResult/);
   assert.match(panelSource, /policyHash={livePolicyHash}/);
   assert.doesNotMatch(panelSource, /policyHash={null}/);
+  assert.match(panelSource, /normalizeAddressInput/);
+  assert.match(panelSource, /normalizedReplacementAddress/);
+  assert.doesNotMatch(
+    panelSource,
+    /args: \[writeAgentNode, replacementAddress\]/,
+    "revoke page must not pass untrimmed address input to setAddr",
+  );
   assert.match(panelSource, /normalizedAgentName/);
   assert.match(panelSource, /safeNamehash\(normalizedAgentName\)/);
   assert.match(panelSource, /requireAgentNode/);
