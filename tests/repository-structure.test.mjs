@@ -42,7 +42,7 @@ async function collectFiles(directory, prefix = "") {
   for (const entry of entries) {
     const relativePath = path.join(prefix, entry.name);
 
-    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "docs") {
+    if (entry.name === ".git" || entry.name === ".next" || entry.name === "node_modules" || entry.name === "docs") {
       continue;
     }
 

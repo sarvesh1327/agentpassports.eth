@@ -48,11 +48,11 @@ export function parseRelayerExecuteRequest(body: unknown): RelayerExecutePayload
  */
 export function validateRelayerExecution(input: {
   context: RelayerPrecheckContext;
-  now?: bigint;
+  now: bigint;
   payload: RelayerExecutePayload;
 }): ValidatedRelayerExecution {
   const { context, payload } = input;
-  const now = input.now ?? BigInt(Math.floor(Date.now() / 1000));
+  const { now } = input;
   const calldataHash = hashCallData(payload.callData);
 
   if (calldataHash !== payload.intent.callDataHash) {

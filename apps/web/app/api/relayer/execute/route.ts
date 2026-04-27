@@ -29,7 +29,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const chain = relayerChain(config);
     const transport = http(config.rpcUrl);
     const publicClient = createPublicClient({ chain, transport });
-    const [policyResult, nextNonce, gasBudgetWei, resolverAddress] = await Promise.all([
+    const [policyResult, nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
       publicClient.readContract({
         address: config.executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
@@ -53,7 +53,8 @@ export async function POST(request: Request): Promise<NextResponse> {
         abi: ENS_REGISTRY_ABI,
         functionName: "resolver",
         args: [payload.intent.agentNode]
-      })
+      }),
+      publicClient.getBlock({ blockTag: "latest" })
     ]);
     const resolvedAgentAddress = await readResolvedAgent(publicClient, resolverAddress as Hex, payload.intent.agentNode);
     const validated = validateRelayerExecution({
@@ -66,6 +67,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         resolvedAgentAddress,
         resolverAddress: resolverAddress as Hex
       },
+      now: latestBlock.timestamp,
       payload
     });
     const account = privateKeyToAccount(config.relayerPrivateKey);
@@ -79,6 +81,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     return NextResponse.json({ status: "submitted", txHash });
   } catch (error) {
+    if (!(error instanceof RelayerValidationError)) {
+      console.error("Relayer execute failed", error);
+    }
     const response = relayerErrorResponse(error);
     return NextResponse.json(response.body, { status: response.httpStatus });
   }

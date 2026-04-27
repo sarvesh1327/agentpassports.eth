@@ -57,7 +57,7 @@ export function relayerErrorResponse(error: unknown): { body: RelayerErrorBody; 
     body: {
       status: "error",
       error: "RelayerError",
-      details: error instanceof Error ? error.message : "Unexpected relayer failure"
+      details: "Internal relayer error"
     },
     httpStatus: 500
   };

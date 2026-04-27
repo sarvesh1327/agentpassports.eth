@@ -172,6 +172,27 @@ test("relayer config reads only server-safe operational values", async () => {
   );
 });
 
+test("relayer error responses do not expose internal provider details", async () => {
+  const { relayerErrorResponse, RelayerValidationError } = await import("../apps/web/lib/relayer/errors.ts");
+
+  assert.deepEqual(relayerErrorResponse(new RelayerValidationError("BadNonce", "Nonce mismatch")), {
+    body: {
+      status: "error",
+      error: "BadNonce",
+      details: "Nonce mismatch",
+    },
+    httpStatus: 400,
+  });
+
+  const response = relayerErrorResponse(new Error("RPC failed for https://provider.example/secret-token"));
+
+  assert.equal(response.httpStatus, 500);
+  assert.equal(response.body.status, "error");
+  assert.equal(response.body.error, "RelayerError");
+  assert.equal(response.body.details, "Internal relayer error");
+  assert.doesNotMatch(response.body.details, /secret-token|provider\.example/);
+});
+
 test("relayer contract adapters map executor reads into validation input", async () => {
   const { policyFromContractResult } = await import("../apps/web/lib/relayer/contracts.ts");
 
@@ -197,8 +218,12 @@ test("relayer route submits validated executor transactions from a thin API hand
   await assertFile("apps/web/lib/relayer/validation.ts");
 
   const source = await readText("apps/web/app/api/relayer/execute/route.ts");
+  const validationSource = await readText("apps/web/lib/relayer/validation.ts");
   assert.match(source, /export const runtime = "nodejs"/);
   assert.match(source, /validateRelayerExecution/);
+  assert.match(source, /getBlock/);
+  assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
   assert.doesNotMatch(source, /NEXT_PUBLIC_RELAYER_PRIVATE_KEY/);
+  assert.doesNotMatch(validationSource, /Date\.now/);
 });
