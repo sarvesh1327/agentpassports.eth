@@ -20,6 +20,7 @@ contract AgentPolicyExecutorTest is TestBase {
     address private agent;
     address private wrongSigner;
     address private relayer = address(0xBEEF);
+    address private newOwner = address(0xCA11AB1E);
 
     bytes32 private ownerNode = keccak256("alice.eth");
     string private agentLabel = "assistant";
@@ -114,6 +115,26 @@ contract AgentPolicyExecutorTest is TestBase {
         vm.prank(owner);
         executor.withdrawGasBudget(agentNode, 0.2 ether);
         assertEq(executor.gasBudgetWei(agentNode), 0.55 ether, "after withdraw");
+    }
+
+    /// @notice Verifies a prior ENS owner cannot withdraw after transferring the owner name.
+    function testPreviousOwnerCannotWithdrawAfterEnsTransfer() public {
+        _setPolicy(0.5 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
+        ens.setOwner(ownerNode, newOwner);
+
+        vm.prank(owner);
+        vm.expectRevert(AgentPolicyExecutor.NotNameOwner.selector);
+        executor.withdrawGasBudget(agentNode, 0.1 ether);
+    }
+
+    /// @notice Verifies a prior ENS owner cannot revoke after transferring the owner name.
+    function testPreviousOwnerCannotRevokeAfterEnsTransfer() public {
+        _setPolicy(0.5 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
+        ens.setOwner(ownerNode, newOwner);
+
+        vm.prank(owner);
+        vm.expectRevert(AgentPolicyExecutor.NotNameOwner.selector);
+        executor.revokePolicy(agentNode);
     }
 
     /// @notice Verifies budget deposits cannot create balances for nodes without policies.

@@ -188,13 +188,13 @@ contract AgentPolicyExecutor {
         emit GasBudgetDeposited(agentNode, msg.sender, msg.value);
     }
 
-    /// @notice Withdraws unused gas budget to the policy owner or current ENS owner.
+    /// @notice Withdraws unused gas budget to the current ENS manager of the owner node.
     /// @param agentNode ENS namehash for the agent budget.
     /// @param amount Amount of wei to withdraw.
     function withdrawGasBudget(bytes32 agentNode, uint256 amount) external nonReentrant {
         Policy memory policy = policies[agentNode];
         _requirePolicyExists(policy);
-        if (msg.sender != policy.ownerWallet && msg.sender != _effectiveManager(policy.ownerNode)) {
+        if (msg.sender != _effectiveManager(policy.ownerNode)) {
             revert NotNameOwner();
         }
         if (gasBudgetWei[agentNode] < amount) revert InsufficientGasBudget();
@@ -211,7 +211,7 @@ contract AgentPolicyExecutor {
     function revokePolicy(bytes32 agentNode) external {
         Policy memory policy = policies[agentNode];
         _requirePolicyExists(policy);
-        if (msg.sender != policy.ownerWallet && msg.sender != _effectiveManager(policy.ownerNode)) {
+        if (msg.sender != _effectiveManager(policy.ownerNode)) {
             revert NotNameOwner();
         }
 
@@ -317,6 +317,7 @@ contract AgentPolicyExecutor {
     }
 
     /// @notice Reverts when no policy has ever been created for an agent node.
+    /// @dev ownerWallet is creation metadata here; it is not used for live authorization.
     /// @param policy Policy snapshot loaded from storage.
     function _requirePolicyExists(Policy memory policy) internal pure {
         if (policy.ownerWallet == address(0)) revert PolicyNotFound();

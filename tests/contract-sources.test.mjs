@@ -181,9 +181,24 @@ test("AgentPolicyExecutor requires policy existence before budget mutation", asy
   assert.match(withdrawBody, /Policy memory policy = policies\[agentNode\]/);
   assert.match(withdrawBody, /_requirePolicyExists\(policy\)/);
   assert.ok(
-    withdrawBody.indexOf("_requirePolicyExists(policy)") < withdrawBody.indexOf("policy.ownerWallet"),
+    withdrawBody.indexOf("_requirePolicyExists(policy)") < withdrawBody.indexOf("_effectiveManager"),
     "withdrawGasBudget should check policy existence before owner authorization",
   );
+});
+
+test("AgentPolicyExecutor owner actions use the current ENS manager instead of stale creator metadata", async () => {
+  const source = await readText("contracts/src/AgentPolicyExecutor.sol");
+  const withdrawBody = source.match(
+    /function withdrawGasBudget\(bytes32 agentNode, uint256 amount\) external nonReentrant \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+  const revokeBody = source.match(
+    /function revokePolicy\(bytes32 agentNode\) external \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+
+  assert.match(withdrawBody, /msg\.sender != _effectiveManager\(policy\.ownerNode\)/);
+  assert.match(revokeBody, /msg\.sender != _effectiveManager\(policy\.ownerNode\)/);
+  assert.doesNotMatch(withdrawBody, /policy\.ownerWallet/);
+  assert.doesNotMatch(revokeBody, /policy\.ownerWallet/);
 });
 
 test("Foundry deployment script reads environment addresses and emits deployed contract addresses", async () => {
