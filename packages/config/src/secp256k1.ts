@@ -28,7 +28,10 @@ export function recoverSignerAddress(digest: Hex, signature: Hex): Hex {
     v += 27;
   }
   const recoveryId = v - 27;
-  if (recoveryId > 3 || r <= 0n || r >= SECP256K1_N || s <= 0n || s > SECP256K1_HALF_N) {
+  if (v !== 27 && v !== 28) {
+    throw new Error("Invalid ECDSA signature");
+  }
+  if (r <= 0n || r >= SECP256K1_N || s <= 0n || s > SECP256K1_HALF_N) {
     throw new Error("Invalid ECDSA signature");
   }
 

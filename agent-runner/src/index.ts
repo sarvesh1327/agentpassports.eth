@@ -1,3 +1,6 @@
-// Entry point reserved for the local signing CLI.
-// The runner implementation will load config, build calldata, sign EIP-712, and submit to the relayer.
-export {};
+export { loadRunnerConfig } from "./config.ts";
+export { buildTaskPlan } from "./planTask.ts";
+export { signTaskIntent } from "./signIntent.ts";
+export type { RunnerConfig } from "./config.ts";
+export type { TaskPlan, TaskPlanInput } from "./planTask.ts";
+export type { SignedTaskIntent, SignTaskIntentInput, TaskIntentSigner } from "./signIntent.ts";
