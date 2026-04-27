@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { SEPOLIA_CHAIN_ID, type Hex } from "@agentpassport/config";
+import { type Hex } from "@agentpassport/config";
 import { usePublicClient, useReadContract, useSignTypedData } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -59,7 +59,7 @@ type SignDraftOptions = {
  * Builds, signs, submits, and stores one TaskLog execution intent for the live demo flow.
  */
 export function RunTaskDemo(props: RunTaskDemoProps) {
-  const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
+  const publicClient = usePublicClient({ chainId: Number(props.chainId) });
   const { signTypedDataAsync } = useSignTypedData();
   const [agentName, setAgentName] = useState(props.defaultAgentName);
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);

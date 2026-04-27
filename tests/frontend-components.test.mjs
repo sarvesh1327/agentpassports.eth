@@ -280,6 +280,12 @@ test("run page signs task intents and submits them to the relayer", async () => 
   ];
 
   assert.match(componentSource, /useSignTypedData/);
+  assert.match(componentSource, /usePublicClient\(\{ chainId: Number\(props\.chainId\) \}\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /usePublicClient\(\{ chainId: SEPOLIA_CHAIN_ID \}\)/,
+    "run page public reads must use the same configured chain id as signed intents",
+  );
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
   assert.match(componentSource, /persistForRevocation/);
