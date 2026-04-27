@@ -22,4 +22,6 @@ contracts/broadcast/
 # Local editor and OS noise.
 *.log
 .DS_Store
+
+# Local planning/spec docs are intentionally not pushed upstream.
 /docs/*

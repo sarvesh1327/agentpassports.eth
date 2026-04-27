@@ -42,7 +42,7 @@ async function collectFiles(directory, prefix = "") {
   for (const entry of entries) {
     const relativePath = path.join(prefix, entry.name);
 
-    if (entry.name === ".git" || entry.name === "node_modules") {
+    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "docs") {
       continue;
     }
 
@@ -67,13 +67,13 @@ test("workspace metadata defines a strict pnpm monorepo", async () => {
 
   assert.equal(packageJson.private, true);
   assert.equal(packageJson.packageManager.startsWith("pnpm@"), true);
-  assert.equal(packageJson.scripts.test, "node --test tests/repository-structure.test.mjs");
+  assert.equal(packageJson.scripts.test, "node --test tests/*.test.mjs");
   assert.match(workspace, /apps\/web/);
   assert.match(workspace, /packages\/config/);
   assert.match(workspace, /agent-runner/);
   assert.match(workspace, /contracts/);
   assert.equal(tsconfig.compilerOptions.strict, true);
-  assert.doesNotMatch(gitignore, /\/docs\/\*/);
+  assert.match(gitignore, /\/docs\/\*/);
   assert.match(gitignore, /\.env/);
 });
 
