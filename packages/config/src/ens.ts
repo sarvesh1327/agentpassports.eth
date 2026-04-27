@@ -54,7 +54,10 @@ function normalizeEnsLabel(label: string): string {
   if (normalizedLabel.length === 0 || normalizedLabel.includes(".") || normalizedLabel !== label || normalizedLabel !== label.toLowerCase()) {
     throw new Error("Invalid ENS label");
   }
-  if (!/^[a-z0-9-]+$/.test(normalizedLabel) || normalizedLabel.startsWith("-") || normalizedLabel.endsWith("-")) {
+  if (normalizedLabel !== normalizedLabel.normalize("NFC") || /[\u0000-\u0020\u007f]/u.test(normalizedLabel)) {
+    throw new Error("Invalid ENS label");
+  }
+  if (normalizedLabel.startsWith("-") || normalizedLabel.endsWith("-")) {
     throw new Error("Invalid ENS label");
   }
   return normalizedLabel;

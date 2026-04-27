@@ -12,6 +12,9 @@ import { MockValueTarget } from "./mocks/MockValueTarget.sol";
 /// @title AgentPolicyExecutorTest
 /// @notice Behavior tests for ENS-gated policy execution and relayer reimbursement.
 contract AgentPolicyExecutorTest is TestBase {
+    uint256 private constant SECP256K1_N =
+        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+
     uint256 private ownerKey = 0xA11CE;
     uint256 private agentKey = 0xA6E17;
     uint256 private wrongKey = 0xBAD;
@@ -185,6 +188,18 @@ contract AgentPolicyExecutorTest is TestBase {
         AgentPolicyExecutor.TaskIntent memory intent =
             _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(wrongKey, intent);
+
+        vm.expectRevert(AgentPolicyExecutor.BadSignature.selector);
+        executor.execute(intent, callData, signature);
+    }
+
+    /// @notice Verifies malleated high-s signatures cannot pass onchain recovery.
+    function testHighSSignatureFails() public {
+        _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
+        bytes memory callData = _taskCallData("ipfs://demo");
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _malleateHighS(_sign(agentKey, intent));
 
         vm.expectRevert(AgentPolicyExecutor.BadSignature.selector);
         executor.execute(intent, callData, signature);
@@ -465,5 +480,23 @@ contract AgentPolicyExecutorTest is TestBase {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    /// @notice Converts a valid low-s signature into its high-s malleated equivalent.
+    /// @param signature Signature encoded as r, s, v.
+    /// @return Malleated signature that recovers the same signer if high-s values are accepted.
+    function _malleateHighS(bytes memory signature) private pure returns (bytes memory) {
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+
+        bytes32 highS = bytes32(SECP256K1_N - uint256(s));
+        uint8 highV = v == 27 ? 28 : 27;
+        return abi.encodePacked(r, highS, highV);
     }
 }

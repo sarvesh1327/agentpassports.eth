@@ -17,6 +17,14 @@ test("ENS utilities compute Solidity-compatible namehashes and subnodes", () => 
   assert.equal(utilities.namehashEnsName("alice.eth"), OWNER_NODE);
   assert.equal(utilities.namehashEnsName("assistant.alice.eth"), AGENT_NODE);
   assert.equal(utilities.computeSubnode(OWNER_NODE, "assistant"), AGENT_NODE);
+  assert.equal(
+    utilities.namehashEnsName("büro.eth"),
+    "0x3334e64070a37532a7a5b8e14dacdef412cdd833f2b617e226a3973cd066bb36",
+  );
+  assert.equal(
+    utilities.computeSubnode(OWNER_NODE, "büro"),
+    "0x67316299f7da7d93e214a42a5714b08347585da755a432a6d8d6732ddf7e2838",
+  );
 });
 
 test("TypeScript helpers build task intent typed data and Solidity-compatible hashes", () => {

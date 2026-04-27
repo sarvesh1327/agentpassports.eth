@@ -97,6 +97,9 @@ contract AgentPolicyExecutor {
     uint256 private constant NOT_ENTERED = 1;
     uint256 private constant ENTERED = 2;
     uint256 private constant GAS_OVERHEAD = 30_000;
+    // EIP-2 low-s boundary used to reject malleable ECDSA signatures.
+    uint256 private constant SECP256K1_HALF_ORDER =
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     bytes32 public constant TASK_INTENT_TYPEHASH = keccak256(
         "TaskIntent(bytes32 agentNode,address target,bytes32 callDataHash,uint256 value,uint256 nonce,uint64 expiresAt)"
@@ -392,6 +395,8 @@ contract AgentPolicyExecutor {
             v := byte(0, calldataload(add(signature.offset, 64)))
         }
         if (v < 27) v += 27;
+        if (v != 27 && v != 28) return address(0);
+        if (uint256(s) > SECP256K1_HALF_ORDER) return address(0);
 
         return ecrecover(digest, v, r, s);
     }
