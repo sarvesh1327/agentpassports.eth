@@ -20,3 +20,156 @@ body {
 a {
   color: inherit;
 }
+
+.home-shell {
+  display: grid;
+  gap: 24px;
+  margin: 0 auto;
+  max-width: 1120px;
+  min-height: 100vh;
+  padding: 48px 20px;
+}
+
+.home-intro {
+  max-width: 760px;
+}
+
+.home-intro__eyebrow,
+.proof-panel__eyebrow {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.home-intro h1 {
+  font-size: clamp(2.25rem, 6vw, 4rem);
+  line-height: 1;
+  margin: 0;
+}
+
+.home-intro p {
+  color: #334155;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 14px 0 0;
+}
+
+.proof-panel {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 18px 40px rgb(15 23 42 / 0.08);
+  overflow: hidden;
+}
+
+.proof-panel__header {
+  align-items: flex-start;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 24px;
+}
+
+.proof-panel__header h2 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.proof-panel__status {
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.proof-panel__status--pass {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.proof-panel__status--fail {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.proof-panel__status--unknown {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.proof-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.proof-panel__row {
+  border-bottom: 1px solid #e2e8f0;
+  min-width: 0;
+  padding: 18px 24px;
+}
+
+.proof-panel__row:nth-child(odd) {
+  border-right: 1px solid #e2e8f0;
+}
+
+.proof-panel__row dt {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.proof-panel__row dd {
+  color: #0f172a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.95rem;
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.proof-panel__result {
+  align-items: center;
+  background: #f8fafc;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 18px 24px;
+}
+
+.proof-panel__result span {
+  color: #475569;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.proof-panel__result strong {
+  color: #0f172a;
+}
+
+@media (max-width: 720px) {
+  .home-shell {
+    padding: 32px 16px;
+  }
+
+  .proof-panel__header,
+  .proof-panel__result {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .proof-panel__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .proof-panel__row:nth-child(odd) {
+    border-right: 0;
+  }
+}
