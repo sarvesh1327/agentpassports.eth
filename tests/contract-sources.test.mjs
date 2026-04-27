@@ -186,6 +186,21 @@ test("AgentPolicyExecutor requires policy existence before budget mutation", asy
   );
 });
 
+test("Foundry deployment script reads environment addresses and emits deployed contract addresses", async () => {
+  await assertFile("contracts/script/Deploy.s.sol");
+  const source = await readText("contracts/script/Deploy.s.sol");
+
+  assert.match(source, /interface Vm/);
+  assert.match(source, /FOUNDRY_VM\.envAddress\("ENS_REGISTRY"\)/);
+  assert.match(source, /FOUNDRY_VM\.envAddress\("NAME_WRAPPER"\)/);
+  assert.match(source, /FOUNDRY_VM\.startBroadcast\(\)/);
+  assert.match(source, /new AgentPolicyExecutor\(ensRegistry, nameWrapper\)/);
+  assert.match(source, /new TaskLog\(address\(executor\)\)/);
+  assert.match(source, /event DeploymentAddresses/);
+  assert.match(source, /emit DeploymentAddresses\(address\(executor\), address\(taskLog\)\)/);
+  assert.match(source, /FOUNDRY_VM\.stopBroadcast\(\)/);
+});
+
 test("contract behavior tests and ENS mocks are present for Foundry", async () => {
   for (const file of [
     "contracts/test/TaskLog.t.sol",

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {AgentPolicyExecutor} from "../src/AgentPolicyExecutor.sol";
-import {TaskLog} from "../src/TaskLog.sol";
-import {TestBase} from "./TestBase.sol";
-import {MockENSRegistry} from "./mocks/MockENSRegistry.sol";
-import {MockNameWrapper} from "./mocks/MockNameWrapper.sol";
-import {MockResolver} from "./mocks/MockResolver.sol";
-import {MockValueTarget} from "./mocks/MockValueTarget.sol";
+import { AgentPolicyExecutor } from "../src/AgentPolicyExecutor.sol";
+import { TaskLog } from "../src/TaskLog.sol";
+import { TestBase } from "./TestBase.sol";
+import { MockENSRegistry } from "./mocks/MockENSRegistry.sol";
+import { MockNameWrapper } from "./mocks/MockNameWrapper.sol";
+import { MockResolver } from "./mocks/MockResolver.sol";
+import { MockValueTarget } from "./mocks/MockValueTarget.sol";
 
 /// @title AgentPolicyExecutorTest
 /// @notice Behavior tests for ENS-gated policy execution and relayer reimbursement.
@@ -145,7 +145,8 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
 
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.prank(relayer);
@@ -160,7 +161,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testWrongSignerFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(wrongKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.BadSignature.selector);
@@ -171,7 +173,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testChangingEnsAddressInvalidatesOldSignature() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         resolver.setAddr(agentNode, wrongSigner);
@@ -185,7 +188,8 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         ens.setResolver(agentNode, address(0));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.ResolverNotSet.selector);
@@ -197,7 +201,8 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         resolver.setAddr(agentNode, address(0));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.AgentAddressNotSet.selector);
@@ -221,7 +226,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testExpiredPolicyFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.warp(block.timestamp + 2);
@@ -235,12 +241,7 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = AgentPolicyExecutor.TaskIntent(
-            agentNode,
-            address(0xCAFE),
-            keccak256(callData),
-            0,
-            0,
-            uint64(block.timestamp + 1 hours)
+            agentNode, address(0xCAFE), keccak256(callData), 0, 0, uint64(block.timestamp + 1 hours)
         );
         bytes memory signature = _sign(agentKey, intent);
 
@@ -252,7 +253,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testWrongSelectorFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = abi.encodeWithSelector(bytes4(0xdeadbeef), agentNode);
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.SelectorNotAllowed.selector);
@@ -264,12 +266,7 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = AgentPolicyExecutor.TaskIntent(
-            agentNode,
-            address(taskLog),
-            bytes32("bad"),
-            0,
-            0,
-            uint64(block.timestamp + 1 hours)
+            agentNode, address(taskLog), bytes32("bad"), 0, 0, uint64(block.timestamp + 1 hours)
         );
         bytes memory signature = _sign(agentKey, intent);
 
@@ -281,7 +278,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testHighValueFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 1 wei, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 1 wei, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.ValueTooHigh.selector);
@@ -292,7 +290,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testReplayFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         executor.execute(intent, callData, signature);
@@ -305,7 +304,8 @@ contract AgentPolicyExecutorTest is TestBase {
     function testRevokedPolicyFails() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         vm.prank(owner);
@@ -320,7 +320,8 @@ contract AgentPolicyExecutorTest is TestBase {
         uint96 cap = 1 gwei;
         _setPolicy(1 ether, 0, cap, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
-        AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        AgentPolicyExecutor.TaskIntent memory intent =
+            _intent(callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
         uint256 beforeBalance = relayer.balance;

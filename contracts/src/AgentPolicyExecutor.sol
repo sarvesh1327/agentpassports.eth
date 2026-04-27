@@ -126,7 +126,7 @@ contract AgentPolicyExecutor {
     }
 
     /// @notice Accepts ETH sent directly for future budget top-ups or operational recovery.
-    receive() external payable {}
+    receive() external payable { }
 
     /// @dev Prevents reentrant calls around execution and withdrawals.
     modifier nonReentrant() {
