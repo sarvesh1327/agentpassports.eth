@@ -15,13 +15,15 @@ import {
 import { safeNamehash } from "../lib/ensPreview";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
+  buildFreshTaskRunDraft,
   buildStoredSignedTaskPayload,
-  buildTaskRunDraft,
   recoverTaskSigner,
   serializeRelayerExecutePayload,
   serializeTypedData
 } from "../lib/taskDemo";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
+
+const INTENT_TTL_SECONDS = 600n;
 
 export type RunTaskDemoProps = {
   chainId: bigint;
@@ -64,6 +66,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const [recoveredSigner, setRecoveredSigner] = useState<Hex | null>(null);
   const [submittedTxHash, setSubmittedTxHash] = useState<Hex | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const agentNode = useMemo(() => safeNamehash(agentName), [agentName]);
   const ownerNode = useMemo(() => safeNamehash(ownerName), [ownerName]);
@@ -103,26 +106,40 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
   });
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setPreviewRefreshKey((key) => key + 1), 60_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  /**
+   * Builds a task draft from the latest wall-clock time so expiresAt cannot go stale before signing.
+   */
+  function buildCurrentDraft() {
+    if (!props.executorAddress || !props.taskLogAddress) {
+      throw new Error("Executor and TaskLog addresses must be configured");
+    }
+    if (!nextNonceRead.isSuccess) {
+      throw new Error("Waiting for executor nextNonce");
+    }
+    return buildFreshTaskRunDraft({
+      agentName,
+      chainId: props.chainId,
+      executorAddress: props.executorAddress,
+      metadataURI,
+      nonce: safeBigInt(nextNonceRead.data as bigint | undefined),
+      nowSeconds: currentUnixSeconds(),
+      ownerName,
+      taskDescription,
+      taskLogAddress: props.taskLogAddress,
+      ttlSeconds: INTENT_TTL_SECONDS
+    });
+  }
+
   const draftState = useMemo(() => {
     try {
-      if (!props.executorAddress || !props.taskLogAddress) {
-        throw new Error("Executor and TaskLog addresses must be configured");
-      }
-      if (!nextNonceRead.isSuccess) {
-        throw new Error("Waiting for executor nextNonce");
-      }
       return {
-        draft: buildTaskRunDraft({
-          agentName,
-          chainId: props.chainId,
-          executorAddress: props.executorAddress,
-          expiresAt: BigInt(Math.floor(Date.now() / 1000) + 600),
-          metadataURI,
-          nonce: safeBigInt(nextNonceRead.data as bigint | undefined),
-          ownerName,
-          taskDescription,
-          taskLogAddress: props.taskLogAddress
-        }),
+        draft: buildCurrentDraft(),
         error: null
       };
     } catch (error) {
@@ -134,6 +151,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     nextNonceRead.data,
     nextNonceRead.isSuccess,
     ownerName,
+    previewRefreshKey,
     props.chainId,
     props.executorAddress,
     props.taskLogAddress,
@@ -187,32 +205,30 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
    * Signs the prepared EIP-712 payload and stores the exact relayer body for later retries.
    */
   async function signAndStoreDraft() {
-    if (!draftState.draft) {
-      throw new Error(draftState.error ?? "Task draft is invalid");
-    }
+    const draft = buildCurrentDraft();
 
     const signed = await signTypedDataAsync({
-      domain: draftState.draft.typedData.domain,
-      message: draftState.draft.typedData.message,
-      primaryType: draftState.draft.typedData.primaryType,
-      types: draftState.draft.typedData.types
+      domain: draft.typedData.domain,
+      message: draft.typedData.message,
+      primaryType: draft.typedData.primaryType,
+      types: draft.typedData.types
     });
-    const recovered = recoverTaskSigner(draftState.draft.digest, signed as Hex);
+    const recovered = recoverTaskSigner(draft.digest, signed as Hex);
     const relayerPayload = serializeRelayerExecutePayload({
-      callData: draftState.draft.callData,
-      intent: draftState.draft.intent,
+      callData: draft.callData,
+      intent: draft.intent,
       signature: signed as Hex
     });
     const storedPayload = buildStoredSignedTaskPayload({
       agentName,
-      callData: draftState.draft.callData,
-      digest: draftState.draft.digest,
-      intent: draftState.draft.intent,
+      callData: draft.callData,
+      digest: draft.digest,
+      intent: draft.intent,
       ownerName,
       recoveredSigner: recovered,
       signature: signed as Hex,
-      taskHash: draftState.draft.taskHash,
-      typedData: draftState.draft.typedData
+      taskHash: draft.taskHash,
+      typedData: draft.typedData
     });
 
     localStorage.setItem(LAST_SIGNED_TASK_STORAGE_KEY, JSON.stringify(storedPayload, null, 2));
@@ -434,6 +450,10 @@ function formatNullableHex(value?: Hex | null): string {
 
 function safeBigInt(value?: bigint): bigint {
   return typeof value === "bigint" ? value : 0n;
+}
+
+function currentUnixSeconds(): bigint {
+  return BigInt(Math.floor(Date.now() / 1000));
 }
 
 function sameAddress(left: Hex, right: Hex): boolean {

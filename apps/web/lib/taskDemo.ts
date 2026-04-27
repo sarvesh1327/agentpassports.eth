@@ -26,6 +26,11 @@ export type TaskRunDraftInput = {
   valueWei?: bigint;
 };
 
+export type FreshTaskRunDraftInput = Omit<TaskRunDraftInput, "expiresAt"> & {
+  nowSeconds: bigint;
+  ttlSeconds: bigint;
+};
+
 export type TaskRunDraft = {
   agentNode: Hex;
   callData: Hex;
@@ -97,6 +102,16 @@ export function buildTaskRunDraft(input: TaskRunDraftInput): TaskRunDraft {
 }
 
 /**
+ * Builds a task draft with an expiry derived from the current signing moment.
+ */
+export function buildFreshTaskRunDraft(input: FreshTaskRunDraftInput): TaskRunDraft {
+  return buildTaskRunDraft({
+    ...input,
+    expiresAt: input.nowSeconds + input.ttlSeconds
+  });
+}
+
+/**
  * Serializes bigint-heavy relayer payloads into the JSON shape accepted by /api/relayer/execute.
  */
 export function serializeRelayerExecutePayload(payload: RelayerExecutePayload): SerializableRelayerExecutePayload {
@@ -121,14 +136,17 @@ export function buildStoredSignedTaskPayload(input: {
   taskHash: Hex;
   typedData: TaskIntentTypedData;
 }): StoredSignedTaskPayload {
+  const agentName = normalizeEnsName(input.agentName, "Agent ENS");
+  const ownerName = normalizeEnsName(input.ownerName, "Owner ENS");
+
   return {
-    agentName: normalizeEnsName(input.agentName, "Agent ENS"),
+    agentName,
     agentNode: input.intent.agentNode,
     callData: input.callData,
     digest: input.digest,
     intent: serializeTaskIntent(input.intent),
-    ownerName: normalizeEnsName(input.ownerName, "Owner ENS"),
-    ownerNode: namehashEnsName(input.ownerName),
+    ownerName,
+    ownerNode: namehashEnsName(ownerName),
     recoveredSigner: input.recoveredSigner,
     signature: input.signature,
     taskHash: input.taskHash,

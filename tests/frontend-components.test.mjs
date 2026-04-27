@@ -258,6 +258,8 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(componentSource, /useSignTypedData/);
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(componentSource, /localStorage/);
+  assert.match(componentSource, /buildFreshTaskRunDraft/);
+  assert.match(componentSource, /currentUnixSeconds\(\)/);
   assert.match(helperSource, /buildTaskRunDraft/);
   assert.match(helperSource, /serializeRelayerExecutePayload/);
   assert.match(source, /EnsProofPanel/);

@@ -52,3 +52,53 @@ test("task demo draft requires owner ENS to match the agent immediate parent", a
     /immediate parent/
   );
 });
+
+test("task demo fresh draft derives expiry from the current signing time", async () => {
+  const { buildFreshTaskRunDraft } = await import("../apps/web/lib/taskDemo.ts");
+
+  const draft = buildFreshTaskRunDraft({
+    agentName: "assistant.agentpassports.eth",
+    chainId: 11155111n,
+    executorAddress: EXECUTOR_ADDRESS,
+    metadataURI: "ipfs://task-proof",
+    nonce: 7n,
+    nowSeconds: 1_800_000_000n,
+    ownerName: "agentpassports.eth",
+    taskDescription: "Record wallet health check",
+    taskLogAddress: TASK_LOG_ADDRESS,
+    ttlSeconds: 600n
+  });
+
+  assert.equal(draft.intent.expiresAt, 1_800_000_600n);
+});
+
+test("stored signed payload hashes the normalized owner ENS name", async () => {
+  const { buildStoredSignedTaskPayload, buildTaskRunDraft } = await import("../apps/web/lib/taskDemo.ts");
+  const { namehashEnsName } = await import("../packages/config/src/index.ts");
+  const draft = buildTaskRunDraft({
+    agentName: "assistant.agentpassports.eth",
+    chainId: 11155111n,
+    executorAddress: EXECUTOR_ADDRESS,
+    expiresAt: 1_800_000_000n,
+    metadataURI: "ipfs://task-proof",
+    nonce: 7n,
+    ownerName: "agentpassports.eth",
+    taskDescription: "Record wallet health check",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+
+  const stored = buildStoredSignedTaskPayload({
+    agentName: "assistant.agentpassports.eth ",
+    callData: draft.callData,
+    digest: draft.digest,
+    intent: draft.intent,
+    ownerName: "agentpassports.eth ",
+    recoveredSigner: null,
+    signature: `0x${"11".repeat(65)}`,
+    taskHash: draft.taskHash,
+    typedData: draft.typedData
+  });
+
+  assert.equal(stored.ownerName, "agentpassports.eth");
+  assert.equal(stored.ownerNode, namehashEnsName("agentpassports.eth"));
+});
