@@ -73,6 +73,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [optimisticNextNonce, setOptimisticNextNonce] = useState<bigint | null>(null);
+  const [chainNowSeconds, setChainNowSeconds] = useState<bigint | null>(null);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const normalizedAgentName = useMemo(() => normalizeEnsFormName(agentName), [agentName]);
   const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
@@ -122,6 +123,43 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  /**
+   * Reads the latest block timestamp so signed expiries use the same clock as relayer validation.
+   */
+  async function readLatestBlockTimestamp(): Promise<bigint> {
+    if (!publicClient) {
+      throw new Error("Waiting for latest block timestamp");
+    }
+    const block = await publicClient.getBlock({ blockTag: "latest" });
+    return block.timestamp;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    /**
+     * Refreshes the latest chain timestamp used for previewed TaskIntent expiries.
+     */
+    async function refreshChainNowSeconds() {
+      try {
+        const latestTimestamp = await readLatestBlockTimestamp();
+        if (!cancelled) {
+          setChainNowSeconds(latestTimestamp);
+        }
+      } catch {
+        if (!cancelled) {
+          setChainNowSeconds(null);
+        }
+      }
+    }
+
+    refreshChainNowSeconds();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, previewRefreshKey]);
+
   useEffect(() => {
     setOptimisticNextNonce(null);
   }, [agentNode]);
@@ -133,9 +171,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   }, [chainNextNonce, nextNonceRead.isSuccess, optimisticNextNonce]);
 
   /**
-   * Builds a task draft from the latest wall-clock time so expiresAt cannot go stale before signing.
+   * Builds a task draft from a chain timestamp so expiresAt matches relayer validation time.
    */
-  function buildCurrentDraft() {
+  function buildCurrentDraft(nowSeconds: bigint) {
     if (!props.executorAddress || !props.taskLogAddress) {
       throw new Error("Executor and TaskLog addresses must be configured");
     }
@@ -148,7 +186,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       executorAddress: props.executorAddress,
       metadataURI,
       nonce: effectiveNextNonce,
-      nowSeconds: currentUnixSeconds(),
+      nowSeconds,
       ownerName: normalizedOwnerName,
       taskDescription,
       taskLogAddress: props.taskLogAddress,
@@ -158,14 +196,18 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
 
   const draftState = useMemo(() => {
     try {
+      if (chainNowSeconds === null) {
+        throw new Error("Waiting for latest block timestamp");
+      }
       return {
-        draft: buildCurrentDraft(),
+        draft: buildCurrentDraft(chainNowSeconds),
         error: null
       };
     } catch (error) {
       return { draft: null, error: error instanceof Error ? error.message : "Task draft is invalid" };
     }
   }, [
+    chainNowSeconds,
     effectiveNextNonce,
     metadataURI,
     nextNonceRead.isSuccess,
@@ -226,7 +268,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
    * Signs the prepared EIP-712 payload and optionally stores an unsubmitted copy for revoke retries.
    */
   async function signAndStoreDraft(options: SignDraftOptions) {
-    const draft = buildCurrentDraft();
+    const chainTimestamp = await readLatestBlockTimestamp();
+    setChainNowSeconds(chainTimestamp);
+    const draft = buildCurrentDraft(chainTimestamp);
 
     const signed = await signTypedDataAsync({
       domain: draft.typedData.domain,
@@ -476,10 +520,6 @@ function formatNullableHex(value?: Hex | null): string {
 
 function safeBigInt(value?: bigint): bigint {
   return typeof value === "bigint" ? value : 0n;
-}
-
-function currentUnixSeconds(): bigint {
-  return BigInt(Math.floor(Date.now() / 1000));
 }
 
 function sameAddress(left: Hex, right: Hex): boolean {

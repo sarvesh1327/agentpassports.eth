@@ -81,11 +81,12 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = typeof gasBudgetRead.data === "bigint" ? gasBudgetRead.data : 0n;
+  const displayRecoveredSigner = storedRecoveredSigner(lastPayload);
   /**
    * Keeps stale localStorage payloads from driving the active revocation proof surface.
    */
   const savedPayloadMatchesAgentNode = lastPayload ? storedPayloadMatchesAgentNode(lastPayload, agentNode) : false;
-  const proofRecoveredSigner = savedPayloadMatchesAgentNode ? lastPayload?.recoveredSigner ?? null : null;
+  const proofRecoveredSigner = savedPayloadMatchesAgentNode ? displayRecoveredSigner : null;
   const activeFailureProof = savedPayloadMatchesAgentNode ? failureProof : null;
   const proofStatus =
     activeFailureProof || (proofRecoveredSigner && liveAgentAddress && !sameAddress(proofRecoveredSigner, liveAgentAddress))
@@ -294,7 +295,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           <dl className="fact-grid">
             <PreviewRow label="Saved agent" value={lastPayload?.agentName ?? "No saved payload"} />
             <PreviewRow label="Saved nonce" value={lastPayload?.intent?.nonce ?? "Unknown"} />
-            <PreviewRow label="Recovered signer" title={lastPayload?.recoveredSigner ?? undefined} value={formatNullableHex(lastPayload?.recoveredSigner)} />
+            <PreviewRow label="Recovered signer" title={displayRecoveredSigner ?? undefined} value={formatNullableHex(displayRecoveredSigner)} />
             <PreviewRow label="Failure proof" value={activeFailureProof ?? "Not retried"} />
           </dl>
           <div className="register-form__actions register-form__actions--flush">
@@ -354,6 +355,14 @@ function readLastPayload(): StoredSignedTaskPayload | null {
 
 function formatNullableHex(value?: Hex | null): string {
   return value ? shortenHex(value) : "Unknown";
+}
+
+function storedRecoveredSigner(payload: StoredSignedTaskPayload | null): Hex | null {
+  const recoveredSigner = (payload as { recoveredSigner?: unknown } | null)?.recoveredSigner;
+  if (typeof recoveredSigner !== "string") {
+    return null;
+  }
+  return normalizeAddressInput(recoveredSigner);
 }
 
 function requireAddress(value: Hex | null | undefined, message: string): Hex {

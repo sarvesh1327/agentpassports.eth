@@ -297,7 +297,16 @@ test("run page signs task intents and submits them to the relayer", async () => 
     "normal relayer submission must not overwrite the saved revocation retry payload",
   );
   assert.match(componentSource, /buildFreshTaskRunDraft/);
-  assert.match(componentSource, /currentUnixSeconds\(\)/);
+  assert.match(componentSource, /chainNowSeconds/);
+  assert.match(componentSource, /readLatestBlockTimestamp/);
+  assert.match(componentSource, /publicClient\.getBlock\(\{ blockTag: "latest" \}\)/);
+  assert.match(componentSource, /const chainTimestamp = await readLatestBlockTimestamp\(\)/);
+  assert.match(componentSource, /const draft = buildCurrentDraft\(chainTimestamp\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /currentUnixSeconds\(\)/,
+    "run page must derive signed intent expiry from chain time instead of the browser clock",
+  );
   assert.match(componentSource, /optimisticNextNonce/);
   assert.match(componentSource, /setOptimisticNextNonce\(BigInt\(relayerPayload\.intent\.nonce\) \+ 1n\)/);
   assert.match(componentSource, /nextNonceRead\.refetch\(\)/);
@@ -391,6 +400,19 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /proofRecoveredSigner/);
   assert.match(panelSource, /recoveredSigner={proofRecoveredSigner}/);
   assert.match(panelSource, /Saved payload belongs to a different agent/);
+  assert.match(panelSource, /displayRecoveredSigner/);
+  assert.match(panelSource, /storedRecoveredSigner\(lastPayload\)/);
+  assert.match(panelSource, /normalizeAddressInput\(recoveredSigner\)/);
+  assert.doesNotMatch(
+    panelSource,
+    /formatNullableHex\(lastPayload\?\.recoveredSigner\)/,
+    "revoke retry facts must validate stored signer data before formatting it as hex",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /title={lastPayload\?\.recoveredSigner/,
+    "revoke retry facts must not put arbitrary localStorage signer values into the DOM",
+  );
   assert.match(panelSource, /lastPayload\?\.intent\?\.nonce/);
   assert.doesNotMatch(
     panelSource,
