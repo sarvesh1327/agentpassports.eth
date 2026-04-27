@@ -1,0 +1,8 @@
+{
+  "name": "@agentpassport/contracts",
+  "private": true,
+  "scripts": {
+    "test": "forge test",
+    "build": "forge build"
+  }
+}

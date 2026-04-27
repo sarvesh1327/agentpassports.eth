@@ -42,6 +42,53 @@ The executor must resolve the agent address from ENS during `execute()`. Do not 
 - Relayer: Next.js API route or small Node service.
 - Network: Sepolia first.
 
+## Setup
+
+Prerequisites:
+
+- Node.js 22 or newer.
+- pnpm 9 or newer.
+- Foundry for Solidity build, test, and deployment.
+
+Install JavaScript dependencies:
+
+```bash
+pnpm install
+```
+
+Copy environment templates before running local services:
+
+```bash
+cp .env.example .env
+cp apps/web/.env.example apps/web/.env.local
+cp agent-runner/.env.example agent-runner/.env
+cp contracts/.env.example contracts/.env
+```
+
+Run the repository structure test:
+
+```bash
+pnpm test
+```
+
+Run the web app:
+
+```bash
+pnpm --filter @agentpassport/web dev
+```
+
+Run contract tests after contracts are implemented:
+
+```bash
+forge test
+```
+
+Run the agent runner after the signing flow is implemented:
+
+```bash
+pnpm agent:run
+```
+
 ## Markdown docs in this package
 
 | File | Purpose |
