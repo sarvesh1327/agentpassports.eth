@@ -13,11 +13,9 @@ import { loadRelayerConfig, type RelayerConfig } from "../../../../lib/relayer/c
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
 import {
   createIntentSubmissionStore,
-  type IntentSubmissionStore,
-  markIntentSubmissionSubmitted,
-  releaseIntentSubmission,
   reserveIntentSubmission
 } from "../../../../lib/relayer/inflight";
+import { reconcileBroadcastReceipt } from "../../../../lib/relayer/reconcile";
 import {
   ZERO_ADDRESS,
   parseRelayerExecuteRequest,
@@ -171,31 +169,6 @@ async function readResolvedAgent(
     functionName: "addr",
     args: [agentNode]
   }) as Promise<Hex>;
-}
-
-/**
- * Re-checks a previously broadcast transaction before rejecting a duplicate retry.
- */
-async function reconcileBroadcastReceipt(
-  publicClient: ReturnType<typeof createPublicClient>,
-  reservationStore: IntentSubmissionStore,
-  input: {
-    agentNode: Hex;
-    nonce: bigint;
-    txHash: Hex;
-  }
-): Promise<"pending" | "reverted" | "submitted"> {
-  try {
-    const receipt = await publicClient.getTransactionReceipt({ hash: input.txHash });
-    if (receipt.status === "success") {
-      await markIntentSubmissionSubmitted({ ...input, store: reservationStore });
-      return "submitted";
-    }
-    await releaseIntentSubmission({ ...input, store: reservationStore });
-    return "reverted";
-  } catch {
-    return "pending";
-  }
 }
 
 function relayerChain(config: RelayerConfig) {

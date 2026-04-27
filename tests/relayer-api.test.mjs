@@ -376,14 +376,45 @@ test("relayer in-flight guard supports a shared Redis REST reservation store", a
   assert.ok(commands.some((command) => command[0] === "SET" && command.includes("PX")));
 });
 
+test("relayer receipt reconciliation surfaces store failures after known transaction outcomes", async () => {
+  const { reconcileBroadcastReceipt } = await import("../apps/web/lib/relayer/reconcile.ts");
+  const receiptClient = {
+    getTransactionReceipt: async () => ({ status: "success" }),
+  };
+  const missingReceiptClient = {
+    getTransactionReceipt: async () => {
+      throw new Error("receipt not found");
+    },
+  };
+  const failingStore = {
+    markBroadcast: async () => {},
+    markSubmitted: async () => {
+      throw new Error("reservation store unavailable");
+    },
+    release: async () => {},
+    reserve: async () => ({ status: "pending" }),
+  };
+
+  await assert.rejects(
+    () => reconcileBroadcastReceipt(receiptClient, failingStore, { agentNode: AGENT_NODE, nonce: 0n, txHash: TX_HASH }),
+    /reservation store unavailable/,
+  );
+  assert.equal(
+    await reconcileBroadcastReceipt(missingReceiptClient, failingStore, { agentNode: AGENT_NODE, nonce: 0n, txHash: TX_HASH }),
+    "pending",
+  );
+});
+
 test("relayer route submits validated executor transactions from a thin API handler", async () => {
   await assertFile("apps/web/app/api/relayer/execute/route.ts");
   await assertFile("apps/web/lib/relayer/config.ts");
   await assertFile("apps/web/lib/relayer/contracts.ts");
   await assertFile("apps/web/lib/relayer/inflight.ts");
+  await assertFile("apps/web/lib/relayer/reconcile.ts");
   await assertFile("apps/web/lib/relayer/validation.ts");
 
   const source = await readText("apps/web/app/api/relayer/execute/route.ts");
+  const reconciliationSource = await readText("apps/web/lib/relayer/reconcile.ts");
   const validationSource = await readText("apps/web/lib/relayer/validation.ts");
   const txHashIndex = source.indexOf("let txHash");
   const innerTryIndex = source.indexOf("try {", txHashIndex);
@@ -393,9 +424,10 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /validateRelayerExecution/);
   assert.match(source, /reserveIntentSubmission/);
   assert.match(source, /markBroadcast/);
-  assert.match(source, /markIntentSubmissionSubmitted/);
-  assert.match(source, /releaseIntentSubmission/);
-  assert.match(source, /getTransactionReceipt/);
+  assert.match(source, /reconcileBroadcastReceipt/);
+  assert.match(reconciliationSource, /markIntentSubmissionSubmitted/);
+  assert.match(reconciliationSource, /releaseIntentSubmission/);
+  assert.match(reconciliationSource, /getTransactionReceipt/);
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
