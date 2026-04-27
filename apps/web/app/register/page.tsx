@@ -23,6 +23,7 @@ export default function RegisterPage() {
         defaultOwnerName={profile.ownerName}
         defaultPolicyExpiresAt={profile.policyExpiresAt.toString()}
         defaultPolicyUri={profile.policyUri}
+        ensRegistryAddress={profile.ensRegistryAddress}
         executorAddress={profile.executorAddress}
         resolverAddress={profile.resolverAddress}
         taskLogAddress={profile.taskLogAddress}

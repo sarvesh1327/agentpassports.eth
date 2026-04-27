@@ -134,7 +134,8 @@ test("agent passport page exposes route-level ENS profile sections", async () =>
 
   const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
   const demoSource = await readText("apps/web/lib/demoProfile.ts");
-  const source = `${pageSource}\n${demoSource}`;
+  const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const source = `${pageSource}\n${demoSource}\n${viewSource}`;
   const requiredText = [
     "AgentPassportCard",
     "EnsProofPanel",
@@ -151,4 +152,70 @@ test("agent passport page exposes route-level ENS profile sections", async () =>
   for (const label of requiredText) {
     assert.match(source, new RegExp(label.replace(/[()]/g, "\\$&")), `${label} should be rendered`);
   }
+});
+
+test("web layout configures wallet providers for Sepolia", async () => {
+  await assertFile("apps/web/components/Web3Providers.tsx");
+  await assertFile("apps/web/components/WalletConnection.tsx");
+  await assertFile("apps/web/lib/wagmiConfig.ts");
+
+  const layoutSource = await readText("apps/web/app/layout.tsx");
+  const providerSource = await readText("apps/web/components/Web3Providers.tsx");
+  const walletSource = await readText("apps/web/components/WalletConnection.tsx");
+  const configSource = await readText("apps/web/lib/wagmiConfig.ts");
+  const packageSource = await readText("apps/web/package.json");
+
+  assert.match(layoutSource, /@rainbow-me\/rainbowkit\/styles\.css/);
+  assert.match(layoutSource, /Web3Providers/);
+  assert.match(providerSource, /WagmiProvider/);
+  assert.match(providerSource, /RainbowKitProvider/);
+  assert.match(providerSource, /QueryClientProvider/);
+  assert.match(walletSource, /ConnectButton/);
+  assert.match(configSource, /sepolia/);
+  assert.match(configSource, /createConfig/);
+  assert.match(configSource, /injected/);
+  assert.match(configSource, /NEXT_PUBLIC_CHAIN_ID/);
+  assert.match(packageSource, /@tanstack\/react-query/);
+});
+
+test("register form resolves ENS ownership and submits wallet transactions", async () => {
+  const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const contractsSource = await readText("apps/web/lib/contracts.ts");
+
+  assert.match(formSource, /useAccount/);
+  assert.match(formSource, /useEnsAddress/);
+  assert.match(formSource, /useReadContract/);
+  assert.match(formSource, /useWriteContract/);
+  assert.match(formSource, /ownerResolvedAddress/);
+  assert.match(formSource, /ownerManager/);
+  assert.match(formSource, /writeContractAsync/);
+  assert.match(formSource, /setAddr/);
+  assert.match(formSource, /setText/);
+  assert.match(formSource, /setPolicy/);
+  assert.match(formSource, /depositGasBudget/);
+  assert.match(formSource, /Registration submitted/);
+  assert.match(contractsSource, /PUBLIC_RESOLVER_ABI/);
+  assert.match(contractsSource, /AGENT_POLICY_EXECUTOR_ABI/);
+});
+
+test("agent page reads live ENS, policy, gas budget, and task history", async () => {
+  await assertFile("apps/web/components/AgentProfileView.tsx");
+
+  const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
+  const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const contractsSource = await readText("apps/web/lib/contracts.ts");
+  const source = `${pageSource}\n${viewSource}\n${contractsSource}`;
+
+  assert.match(pageSource, /serializeAgentProfile/);
+  assert.match(viewSource, /useReadContract/);
+  assert.match(viewSource, /useReadContracts/);
+  assert.match(viewSource, /usePublicClient/);
+  assert.match(viewSource, /getLogs/);
+  assert.match(viewSource, /TaskRecorded/);
+  assert.match(viewSource, /AGENT_TEXT_RECORD_KEYS/);
+  assert.match(source, /ENS_REGISTRY_ABI/);
+  assert.match(source, /PUBLIC_RESOLVER_ABI/);
+  assert.match(source, /TASK_LOG_ABI/);
+  assert.match(source, /gasBudgetWei/);
+  assert.match(source, /nextNonce/);
 });

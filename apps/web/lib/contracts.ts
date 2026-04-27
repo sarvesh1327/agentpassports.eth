@@ -1,0 +1,173 @@
+import type { Hex } from "@agentpassport/config";
+
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+
+export const AGENT_TEXT_RECORD_KEYS = [
+  "agent.v",
+  "agent.owner",
+  "agent.kind",
+  "agent.capabilities",
+  "agent.policy.uri",
+  "agent.policy.hash",
+  "agent.executor",
+  "agent.status",
+  "agent.description"
+] as const;
+
+export type PolicyContractResult = readonly [Hex, Hex, Hex, Hex, bigint, bigint, bigint, boolean];
+
+/**
+ * ENS registry calls needed for live resolver and owner-manager checks.
+ */
+export const ENS_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ name: "owner", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "resolver",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ name: "resolver", type: "address" }]
+  }
+] as const;
+
+/**
+ * Public resolver reads and writes used by registration and profile pages.
+ */
+export const PUBLIC_RESOLVER_ABI = [
+  {
+    type: "function",
+    name: "addr",
+    stateMutability: "view",
+    inputs: [{ name: "node", type: "bytes32" }],
+    outputs: [{ name: "addr", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "text",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "key", type: "string" }
+    ],
+    outputs: [{ name: "value", type: "string" }]
+  },
+  {
+    type: "function",
+    name: "setAddr",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "addr", type: "address" }
+    ],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "setText",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "key", type: "string" },
+      { name: "value", type: "string" }
+    ],
+    outputs: []
+  }
+] as const;
+
+/**
+ * Executor reads and writes needed for policy creation, funding, and profile display.
+ */
+export const AGENT_POLICY_EXECUTOR_ABI = [
+  {
+    type: "function",
+    name: "policies",
+    stateMutability: "view",
+    inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: [
+      { name: "ownerNode", type: "bytes32" },
+      { name: "ownerWallet", type: "address" },
+      { name: "target", type: "address" },
+      { name: "selector", type: "bytes4" },
+      { name: "maxValueWei", type: "uint96" },
+      { name: "maxGasReimbursementWei", type: "uint96" },
+      { name: "expiresAt", type: "uint64" },
+      { name: "enabled", type: "bool" }
+    ]
+  },
+  {
+    type: "function",
+    name: "gasBudgetWei",
+    stateMutability: "view",
+    inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: [{ name: "budget", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "nextNonce",
+    stateMutability: "view",
+    inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: [{ name: "nonce", type: "uint256" }]
+  },
+  {
+    type: "function",
+    name: "setPolicy",
+    stateMutability: "payable",
+    inputs: [
+      { name: "ownerNode", type: "bytes32" },
+      { name: "agentLabel", type: "string" },
+      { name: "target", type: "address" },
+      { name: "selector", type: "bytes4" },
+      { name: "maxValueWei", type: "uint96" },
+      { name: "maxGasReimbursementWei", type: "uint96" },
+      { name: "expiresAt", type: "uint64" }
+    ],
+    outputs: [{ name: "agentNode", type: "bytes32" }]
+  },
+  {
+    type: "function",
+    name: "depositGasBudget",
+    stateMutability: "payable",
+    inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: []
+  }
+] as const;
+
+/**
+ * TaskLog event/read surface used to display historical agent proofs.
+ */
+export const TASK_LOG_ABI = [
+  {
+    type: "event",
+    name: "TaskRecorded",
+    inputs: [
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "agentNode", type: "bytes32" },
+      { indexed: true, name: "ownerNode", type: "bytes32" },
+      { indexed: false, name: "taskHash", type: "bytes32" },
+      { indexed: false, name: "metadataURI", type: "string" },
+      { indexed: false, name: "timestamp", type: "uint256" }
+    ]
+  },
+  {
+    type: "function",
+    name: "taskCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "count", type: "uint256" }]
+  }
+] as const;
+
+export const TASK_RECORDED_EVENT = TASK_LOG_ABI[0];
+
+/**
+ * Removes the zero address sentinel returned by unset ENS and executor reads.
+ */
+export function nonZeroAddress(value?: Hex | null): Hex | null {
+  return value && value.toLowerCase() !== ZERO_ADDRESS ? value : null;
+}
