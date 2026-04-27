@@ -125,7 +125,8 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
   const client = input.client ?? createRunnerPublicClient(config);
   const signer = input.signer ?? createPrivateKeyAgentSigner(config.agentPrivateKey);
   const agentNode = namehashEnsName(config.agentName);
-  const ownerNode = namehashEnsName(config.ownerName);
+  const ownerName = validateAgentOwnerName(config.agentName, config.ownerName);
+  const ownerNode = namehashEnsName(ownerName);
   const resolverAddress = await getResolverAddress({
     client,
     ensRegistryAddress: config.ensRegistryAddress ?? ENS_REGISTRY_ADDRESS,
@@ -181,7 +182,7 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
       callData: plan.callData,
       digest: signed.digest,
       intent: serializeIntent(signed.intent),
-      ownerName: config.ownerName,
+      ownerName,
       ownerNode,
       recoveredSigner: signed.recoveredSigner,
       resolverAddress,
@@ -232,6 +233,18 @@ export async function submitRelayerPayload(
 export async function writeSignedPayload(filePath: string, payload: SavedSignedPayload): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(payload, jsonBigintReplacer, 2)}\n`, "utf8");
+}
+
+/**
+ * Ensures TaskLog owner attribution is the parent ENS name of the configured agent.
+ */
+function validateAgentOwnerName(agentName: string, ownerName: string): string {
+  const normalizedAgentName = agentName.trim().toLowerCase();
+  const normalizedOwnerName = ownerName.trim().toLowerCase();
+  if (!normalizedAgentName.endsWith(`.${normalizedOwnerName}`)) {
+    throw new Error("OWNER_ENS_NAME must match the parent name of AGENT_ENS_NAME");
+  }
+  return normalizedOwnerName;
 }
 
 async function readExecutorNonce(client: ContractReadClient, executorAddress: Hex, agentNode: Hex): Promise<bigint> {
