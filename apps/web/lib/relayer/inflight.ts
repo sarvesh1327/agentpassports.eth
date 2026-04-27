@@ -3,7 +3,7 @@ import type { Hex } from "@agentpassport/config";
 export const INTENT_SUBMISSION_TTL_MS = 5 * 60 * 1000;
 
 type IntentSubmissionRecord = {
-  expiresAtMs: number;
+  submittedExpiresAtMs?: number;
   txHash?: Hex;
 };
 
@@ -46,16 +46,14 @@ export function reserveIntentSubmission(input: {
     return { status: "pending" };
   }
 
-  const record: IntentSubmissionRecord = {
-    expiresAtMs: nowMs + INTENT_SUBMISSION_TTL_MS
-  };
+  const record: IntentSubmissionRecord = {};
   inFlightSubmissions.set(key, record);
 
   return {
     status: "acquired",
     markSubmitted: (txHash: Hex, submittedAtMs = Date.now()) => {
       record.txHash = txHash;
-      record.expiresAtMs = submittedAtMs + INTENT_SUBMISSION_TTL_MS;
+      record.submittedExpiresAtMs = submittedAtMs + INTENT_SUBMISSION_TTL_MS;
     },
     release: () => {
       if (inFlightSubmissions.get(key) === record) {
@@ -78,7 +76,7 @@ function intentSubmissionKey(agentNode: Hex, nonce: bigint): string {
 
 function pruneExpiredSubmissions(nowMs: number): void {
   for (const [key, record] of inFlightSubmissions.entries()) {
-    if (record.expiresAtMs < nowMs) {
+    if (record.submittedExpiresAtMs !== undefined && record.submittedExpiresAtMs < nowMs) {
       inFlightSubmissions.delete(key);
     }
   }

@@ -227,6 +227,12 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_001 }), {
     status: "pending",
   });
+  assert.deepEqual(
+    reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 + INTENT_SUBMISSION_TTL_MS + 1 }),
+    {
+      status: "pending",
+    },
+  );
 
   assert.equal(first.status, "acquired");
   first.markSubmitted(TX_HASH, 1_500);
