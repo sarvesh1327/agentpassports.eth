@@ -15,6 +15,7 @@ import {
 import { normalizeAddressInput } from "../lib/addressInput";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
+import { revocationFailureProof, type RelayerRetryResponse } from "../lib/revocationProof";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
   type StoredSignedTaskPayload,
@@ -28,13 +29,6 @@ export type RevokeAgentPanelProps = {
   defaultOwnerName: string;
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
-};
-
-type RelayerRetryResponse = {
-  details?: string;
-  error?: string;
-  status?: string;
-  txHash?: Hex;
 };
 
 /**
@@ -218,13 +212,18 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         setStatusMessage(`Retry unexpectedly submitted: ${body.txHash}`);
         return;
       }
-      const details = body.details ?? body.error ?? response.statusText;
-      setFailureProof(details || "Relayer rejected the old signed payload");
-      setStatusMessage("Failure proof captured");
+      const proof = revocationFailureProof(body);
+      if (proof) {
+        setFailureProof(proof);
+        setStatusMessage("Failure proof captured");
+        return;
+      }
+      setFailureProof(null);
+      setStatusMessage(`Not a revocation proof: ${body.details ?? body.error ?? response.statusText}`);
     } catch (error) {
       const details = error instanceof Error ? error.message : "Retry request failed";
-      setFailureProof(details);
-      setStatusMessage("Failure proof captured");
+      setFailureProof(null);
+      setStatusMessage(`Not a revocation proof: ${details}`);
     }
   }
 

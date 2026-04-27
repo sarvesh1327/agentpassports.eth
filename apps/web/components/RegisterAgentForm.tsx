@@ -109,7 +109,18 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     args: [preview.agentNode],
     query: { enabled: Boolean(props.ensRegistryAddress) }
   });
-  const liveResolverAddress = nonZeroAddress(agentResolver.data as Hex | undefined) ?? props.resolverAddress ?? null;
+  const registryResolverAddress = nonZeroAddress(agentResolver.data as Hex | undefined);
+  const liveResolverAddress = agentResolver.isSuccess ? registryResolverAddress : null;
+
+  /**
+   * Returns the live ENS registry resolver so record writes are reachable through normal ENS resolution.
+   */
+  function requireLiveResolverAddress(): Hex {
+    if (!agentResolver.isSuccess) {
+      throw new Error("Waiting for live resolver lookup");
+    }
+    return requireAddress(registryResolverAddress, "Resolver is not configured for record writes");
+  }
 
   /**
    * Submits resolver and executor writes in the order required by the demo registration flow.
@@ -122,7 +133,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
     try {
       validateRegistrationInput({ agentLabel: normalizedAgentLabel, ownerNode: preview.ownerNode });
-      const resolverAddress = requireAddress(liveResolverAddress, "Resolver is not configured for record writes");
+      const resolverAddress = requireLiveResolverAddress();
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
       const taskLogAddress = requireAddress(props.taskLogAddress, "TaskLog address is not configured");
       const submitted: Hex[] = [];

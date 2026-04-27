@@ -207,6 +207,23 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
     formSource.indexOf("validateRegistrationInput") < formSource.indexOf("setAddr"),
     "registration input should be validated before resolver writes",
   );
+  assert.match(formSource, /agentResolver\.isSuccess/);
+  assert.match(
+    formSource,
+    /const liveResolverAddress = agentResolver\.isSuccess \? registryResolverAddress : null/,
+    "registration resolver preview must wait for the live registry resolver read",
+  );
+  assert.match(formSource, /requireLiveResolverAddress/);
+  assert.match(
+    formSource,
+    /throw new Error\("Waiting for live resolver lookup"\)/,
+    "registration resolver writes must wait until the live registry resolver read settles",
+  );
+  assert.doesNotMatch(
+    formSource,
+    /nonZeroAddress\(agentResolver\.data as Hex \| undefined\) \?\? props\.resolverAddress \?\? null/,
+    "registration must not write records through a configured fallback resolver",
+  );
   assert.match(formSource, /Registration submitted/);
   assert.match(contractsSource, /PUBLIC_RESOLVER_ABI/);
   assert.match(contractsSource, /AGENT_POLICY_EXECUTOR_ABI/);
@@ -265,6 +282,14 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(componentSource, /useSignTypedData/);
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
+  assert.match(componentSource, /persistForRevocation/);
+  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: true \}\)/);
+  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: false \}\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /const \{ relayerPayload \} = await signAndStoreDraft\(\)/,
+    "normal relayer submission must not overwrite the saved revocation retry payload",
+  );
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /currentUnixSeconds\(\)/);
   assert.match(componentSource, /hashPolicyContractResult/);
@@ -311,6 +336,13 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /setText/);
   assert.match(panelSource, /setAddr/);
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
+  assert.match(panelSource, /revocationFailureProof/);
+  assert.match(panelSource, /Not a revocation proof/);
+  assert.doesNotMatch(
+    panelSource,
+    /setFailureProof\(details \|\| "Relayer rejected the old signed payload"\)/,
+    "revoke page must only capture failure proof for revocation-specific relayer errors",
+  );
   assert.match(panelSource, /localStorage/);
   assert.match(panelSource, /resolverRead\.isSuccess/);
   assert.match(panelSource, /requireLiveResolverAddress/);

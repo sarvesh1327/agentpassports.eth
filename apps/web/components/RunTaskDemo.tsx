@@ -51,6 +51,10 @@ type RelayerResponse = {
   txHash?: Hex;
 };
 
+type SignDraftOptions = {
+  persistForRevocation: boolean;
+};
+
 /**
  * Builds, signs, submits, and stores one TaskLog execution intent for the live demo flow.
  */
@@ -206,9 +210,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   }, [agentNode, historyRefreshKey, props.taskLogAddress, publicClient]);
 
   /**
-   * Signs the prepared EIP-712 payload and stores the exact relayer body for later retries.
+   * Signs the prepared EIP-712 payload and optionally stores an unsubmitted copy for revoke retries.
    */
-  async function signAndStoreDraft() {
+  async function signAndStoreDraft(options: SignDraftOptions) {
     const draft = buildCurrentDraft();
 
     const signed = await signTypedDataAsync({
@@ -223,19 +227,22 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       intent: draft.intent,
       signature: signed as Hex
     });
-    const storedPayload = buildStoredSignedTaskPayload({
-      agentName: normalizedAgentName,
-      callData: draft.callData,
-      digest: draft.digest,
-      intent: draft.intent,
-      ownerName: normalizedOwnerName,
-      recoveredSigner: recovered,
-      signature: signed as Hex,
-      taskHash: draft.taskHash,
-      typedData: draft.typedData
-    });
+    let stored = false;
 
-    const stored = storeSignedTaskPayload({ payload: storedPayload });
+    if (options.persistForRevocation) {
+      const storedPayload = buildStoredSignedTaskPayload({
+        agentName: normalizedAgentName,
+        callData: draft.callData,
+        digest: draft.digest,
+        intent: draft.intent,
+        ownerName: normalizedOwnerName,
+        recoveredSigner: recovered,
+        signature: signed as Hex,
+        taskHash: draft.taskHash,
+        typedData: draft.typedData
+      });
+      stored = storeSignedTaskPayload({ payload: storedPayload });
+    }
     setSignature(signed as Hex);
     setRecoveredSigner(recovered);
     return { relayerPayload, stored };
@@ -252,7 +259,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     setSubmittedTxHash(null);
 
     try {
-      const { stored } = await signAndStoreDraft();
+      const { stored } = await signAndStoreDraft({ persistForRevocation: true });
       setStatus("signed");
       setStatusMessage(stored ? "Signed payload saved for revocation retry" : "Signed payload created; browser storage unavailable");
     } catch (error) {
@@ -273,7 +280,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     setSubmittedTxHash(null);
 
     try {
-      const { relayerPayload } = await signAndStoreDraft();
+      const { relayerPayload } = await signAndStoreDraft({ persistForRevocation: false });
       const response = await fetch("/api/relayer/execute", {
         body: JSON.stringify(relayerPayload),
         headers: { "content-type": "application/json" },
