@@ -165,6 +165,27 @@ test("AgentPolicyExecutor charges both call value and reimbursement to the agent
   assert.doesNotMatch(source, /gasBudgetWei\[intent\.agentNode\] -= reimbursement/);
 });
 
+test("AgentPolicyExecutor requires policy existence before budget mutation", async () => {
+  const source = await readText("contracts/src/AgentPolicyExecutor.sol");
+  const depositBody = source.match(
+    /function depositGasBudget\(bytes32 agentNode\) external payable nonReentrant \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+  const withdrawBody = source.match(
+    /function withdrawGasBudget\(bytes32 agentNode, uint256 amount\) external nonReentrant \{[\s\S]*?\n    \}/,
+  )?.[0] ?? "";
+
+  assert.match(source, /error PolicyNotFound\(\)/);
+  assert.match(source, /function _requirePolicyExists\(Policy memory policy\) internal pure/);
+  assert.match(depositBody, /Policy memory policy = policies\[agentNode\]/);
+  assert.match(depositBody, /_requirePolicyExists\(policy\)/);
+  assert.match(withdrawBody, /Policy memory policy = policies\[agentNode\]/);
+  assert.match(withdrawBody, /_requirePolicyExists\(policy\)/);
+  assert.ok(
+    withdrawBody.indexOf("_requirePolicyExists(policy)") < withdrawBody.indexOf("policy.ownerWallet"),
+    "withdrawGasBudget should check policy existence before owner authorization",
+  );
+});
+
 test("contract behavior tests and ENS mocks are present for Foundry", async () => {
   for (const file of [
     "contracts/test/TaskLog.t.sol",

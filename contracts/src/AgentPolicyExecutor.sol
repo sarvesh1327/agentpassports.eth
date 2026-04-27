@@ -50,6 +50,7 @@ contract AgentPolicyExecutor {
     error TargetCallFailed(bytes returndata);
     error ReentrantCall();
     error ZeroAmount();
+    error PolicyNotFound();
 
     event PolicySet(
         bytes32 indexed ownerNode,
@@ -179,7 +180,10 @@ contract AgentPolicyExecutor {
     /// @notice Adds ETH to an agent-specific gas reimbursement budget.
     /// @param agentNode ENS namehash for the funded agent.
     function depositGasBudget(bytes32 agentNode) external payable nonReentrant {
+        Policy memory policy = policies[agentNode];
+        _requirePolicyExists(policy);
         if (msg.value == 0) revert ZeroAmount();
+
         gasBudgetWei[agentNode] += msg.value;
         emit GasBudgetDeposited(agentNode, msg.sender, msg.value);
     }
@@ -189,6 +193,7 @@ contract AgentPolicyExecutor {
     /// @param amount Amount of wei to withdraw.
     function withdrawGasBudget(bytes32 agentNode, uint256 amount) external nonReentrant {
         Policy memory policy = policies[agentNode];
+        _requirePolicyExists(policy);
         if (msg.sender != policy.ownerWallet && msg.sender != _effectiveManager(policy.ownerNode)) {
             revert NotNameOwner();
         }
@@ -205,6 +210,7 @@ contract AgentPolicyExecutor {
     /// @param agentNode ENS namehash for the policy to revoke.
     function revokePolicy(bytes32 agentNode) external {
         Policy memory policy = policies[agentNode];
+        _requirePolicyExists(policy);
         if (msg.sender != policy.ownerWallet && msg.sender != _effectiveManager(policy.ownerNode)) {
             revert NotNameOwner();
         }
@@ -308,6 +314,12 @@ contract AgentPolicyExecutor {
         uint256 totalDebit = intentValue + reimbursement;
         if (budgetBeforeCall < totalDebit) revert InsufficientGasBudget();
         gasBudgetWei[agentNode] = budgetBeforeCall - totalDebit;
+    }
+
+    /// @notice Reverts when no policy has ever been created for an agent node.
+    /// @param policy Policy snapshot loaded from storage.
+    function _requirePolicyExists(Policy memory policy) internal pure {
+        if (policy.ownerWallet == address(0)) revert PolicyNotFound();
     }
 
     /// @notice Returns the wallet currently allowed to manage an ENS node.

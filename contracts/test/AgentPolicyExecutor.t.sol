@@ -116,6 +116,30 @@ contract AgentPolicyExecutorTest is TestBase {
         assertEq(executor.gasBudgetWei(agentNode), 0.55 ether, "after withdraw");
     }
 
+    /// @notice Verifies budget deposits cannot create balances for nodes without policies.
+    function testCannotDepositGasBudgetBeforePolicyExists() public {
+        bytes32 unknownAgentNode = keccak256("unknown.agent");
+
+        vm.expectRevert(AgentPolicyExecutor.PolicyNotFound.selector);
+        executor.depositGasBudget{ value: 0.25 ether }(unknownAgentNode);
+    }
+
+    /// @notice Verifies unset policy nodes cannot fall back to ENS root ownership for withdrawals.
+    function testCannotWithdrawGasBudgetBeforePolicyExists() public {
+        bytes32 unknownAgentNode = keccak256("unknown.agent");
+
+        vm.expectRevert(AgentPolicyExecutor.PolicyNotFound.selector);
+        executor.withdrawGasBudget(unknownAgentNode, 0);
+    }
+
+    /// @notice Verifies unset policy nodes cannot be revoked through default owner fields.
+    function testCannotRevokePolicyBeforePolicyExists() public {
+        bytes32 unknownAgentNode = keccak256("unknown.agent");
+
+        vm.expectRevert(AgentPolicyExecutor.PolicyNotFound.selector);
+        executor.revokePolicy(unknownAgentNode);
+    }
+
     /// @notice Verifies a valid ENS-resolved signature records a task and consumes one nonce.
     function testValidTaskExecutesAndRecordsTask() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
