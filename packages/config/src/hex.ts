@@ -1,4 +1,4 @@
-import type { Hex } from "./types.ts";
+import type { Hex } from "./types";
 
 export const ZERO_BYTES32 = `0x${"00".repeat(32)}` as const;
 

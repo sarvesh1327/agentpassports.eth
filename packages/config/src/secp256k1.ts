@@ -1,6 +1,6 @@
-import type { Hex } from "./types.ts";
-import { assertHex, bigIntToBytes, bytesToBigInt, concatBytes, hexToBytes, normalizeBytes32 } from "./hex.ts";
-import { keccak256Hex, keccak256Utf8 } from "./keccak.ts";
+import type { Hex } from "./types";
+import { assertHex, bigIntToBytes, bytesToBigInt, concatBytes, hexToBytes, normalizeBytes32 } from "./hex";
+import { keccak256Hex, keccak256Utf8 } from "./keccak";
 
 type EcPoint = {
   x: bigint;

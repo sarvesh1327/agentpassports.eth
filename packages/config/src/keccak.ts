@@ -1,5 +1,5 @@
-import type { Hex } from "./types.ts";
-import { bytesToHex, bytesToLittleEndianBigInt, littleEndianBigIntToBytes, utf8ToBytes } from "./hex.ts";
+import type { Hex } from "./types";
+import { bytesToHex, bytesToLittleEndianBigInt, littleEndianBigIntToBytes, utf8ToBytes } from "./hex";
 
 const MASK_64 = (1n << 64n) - 1n;
 
