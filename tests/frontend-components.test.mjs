@@ -377,6 +377,12 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /proofRecoveredSigner/);
   assert.match(panelSource, /recoveredSigner={proofRecoveredSigner}/);
   assert.match(panelSource, /Saved payload belongs to a different agent/);
+  assert.match(panelSource, /lastPayload\?\.intent\?\.nonce/);
+  assert.doesNotMatch(
+    panelSource,
+    /lastPayload\?\.intent\.nonce/,
+    "revoke retry facts must not crash on malformed saved payloads without intent data",
+  );
   assert.doesNotMatch(
     panelSource,
     /lastPayload\?\.recoveredSigner && liveAgentAddress && !sameAddress\(lastPayload\.recoveredSigner, liveAgentAddress\)/,

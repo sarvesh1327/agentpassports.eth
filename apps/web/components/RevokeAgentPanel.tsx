@@ -293,7 +293,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           </div>
           <dl className="fact-grid">
             <PreviewRow label="Saved agent" value={lastPayload?.agentName ?? "No saved payload"} />
-            <PreviewRow label="Saved nonce" value={lastPayload?.intent.nonce ?? "Unknown"} />
+            <PreviewRow label="Saved nonce" value={lastPayload?.intent?.nonce ?? "Unknown"} />
             <PreviewRow label="Recovered signer" title={lastPayload?.recoveredSigner ?? undefined} value={formatNullableHex(lastPayload?.recoveredSigner)} />
             <PreviewRow label="Failure proof" value={activeFailureProof ?? "Not retried"} />
           </dl>
