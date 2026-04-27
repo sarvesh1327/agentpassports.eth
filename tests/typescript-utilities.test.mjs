@@ -92,6 +92,7 @@ test("Policy helpers produce deterministic metadata and hashes", () => {
 test("ENS and hex validation rejects malformed inputs before they reach clients", () => {
   assert.throws(() => utilities.namehashEnsName("alice..eth"), /Invalid ENS name/);
   assert.throws(() => utilities.computeSubnode(OWNER_NODE, "bad.label"), /Invalid ENS label/);
+  assert.throws(() => utilities.computeSubnode(OWNER_NODE, "Assistant"), /Invalid ENS label/);
   assert.throws(() => utilities.hashCallData("36736d1e"), /Expected hex string/);
   assert.throws(
     () =>

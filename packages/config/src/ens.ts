@@ -50,8 +50,8 @@ function normalizeEnsName(name: string): string {
 }
 
 function normalizeEnsLabel(label: string): string {
-  const normalizedLabel = label.trim().toLowerCase();
-  if (normalizedLabel.length === 0 || normalizedLabel.includes(".") || normalizedLabel !== label.toLowerCase()) {
+  const normalizedLabel = label.trim();
+  if (normalizedLabel.length === 0 || normalizedLabel.includes(".") || normalizedLabel !== label || normalizedLabel !== label.toLowerCase()) {
     throw new Error("Invalid ENS label");
   }
   if (!/^[a-z0-9-]+$/.test(normalizedLabel) || normalizedLabel.startsWith("-") || normalizedLabel.endsWith("-")) {
