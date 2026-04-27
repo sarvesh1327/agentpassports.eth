@@ -196,6 +196,13 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(formSource, /depositGasBudget/);
   assert.match(formSource, /validateRegistrationInput/);
   assert.match(formSource, /Agent label is required/);
+  assert.match(formSource, /normalizeAddressInput/);
+  assert.match(formSource, /normalizedAgentAddress/);
+  assert.doesNotMatch(
+    formSource,
+    /args: \[preview\.agentNode, agentAddress as Hex\]/,
+    "registration should not pass untrimmed address input to setAddr",
+  );
   assert.ok(
     formSource.indexOf("validateRegistrationInput") < formSource.indexOf("setAddr"),
     "registration input should be validated before resolver writes",
@@ -306,6 +313,13 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(panelSource, /localStorage/);
   assert.match(panelSource, /resolverRead\.isSuccess/);
+  assert.match(panelSource, /requireLiveResolverAddress/);
+  assert.match(panelSource, /return registryResolverAddress/);
+  assert.doesNotMatch(
+    panelSource,
+    /requireAddress\(resolverAddress, "Resolver address is not configured"\)/,
+    "revoke resolver writes must wait for a live registry resolver read instead of using a fallback resolver",
+  );
   assert.match(panelSource, /hashPolicyContractResult/);
   assert.match(panelSource, /policyHash={livePolicyHash}/);
   assert.doesNotMatch(panelSource, /policyHash={null}/);
@@ -315,6 +329,12 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     panelSource,
     /args: \[writeAgentNode, replacementAddress\]/,
     "revoke page must not pass untrimmed address input to setAddr",
+  );
+  assert.match(panelSource, /storedPayloadMatchesAgentNode/);
+  assert.match(panelSource, /Saved payload belongs to a different agent/);
+  assert.ok(
+    panelSource.indexOf("storedPayloadMatchesAgentNode") < panelSource.indexOf('fetch("/api/relayer/execute"'),
+    "revoke page must verify the stored payload node before retrying the relayer call",
   );
   assert.match(panelSource, /normalizedAgentName/);
   assert.match(panelSource, /safeNamehash\(normalizedAgentName\)/);

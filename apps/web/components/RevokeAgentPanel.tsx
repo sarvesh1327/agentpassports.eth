@@ -18,6 +18,7 @@ import { hashPolicyContractResult } from "../lib/policyProof";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
   type StoredSignedTaskPayload,
+  storedPayloadMatchesAgentNode,
   storedPayloadToRelayerBody
 } from "../lib/taskDemo";
 import { EnsProofPanel, shortenHex } from "./EnsProofPanel";
@@ -107,6 +108,19 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }
 
   /**
+   * Returns the live registry resolver for resolver writes after the lookup has settled.
+   */
+  function requireLiveResolverAddress(): Hex {
+    if (!resolverRead.isSuccess) {
+      throw new Error("Waiting for live resolver lookup");
+    }
+    if (!registryResolverAddress) {
+      throw new Error("Resolver address is not configured");
+    }
+    return registryResolverAddress;
+  }
+
+  /**
    * Disables the policy in AgentPolicyExecutor so new and old intents are blocked.
    */
   async function handleRevokePolicy() {
@@ -131,7 +145,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
    */
   async function handleSetStatusRevoked() {
     try {
-      const resolver = requireAddress(resolverAddress, "Resolver address is not configured");
+      const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
       const txHash = await writeContractAsync({
         address: resolver,
@@ -152,7 +166,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   async function handleUpdateAddrRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const resolver = requireAddress(resolverAddress, "Resolver address is not configured");
+      const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
       const normalizedReplacementAddress = normalizeAddressInput(replacementAddress);
       if (!normalizedReplacementAddress) {
@@ -179,6 +193,11 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     setLastPayload(payload);
     if (!payload) {
       setStatusMessage("No saved signed payload found");
+      return;
+    }
+    if (!storedPayloadMatchesAgentNode(payload, agentNode)) {
+      setFailureProof(null);
+      setStatusMessage("Saved payload belongs to a different agent");
       return;
     }
 

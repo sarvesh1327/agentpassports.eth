@@ -154,3 +154,22 @@ test("signed payload storage is best-effort when browser storage is unavailable"
 
   assert.equal(stored, false);
 });
+
+test("stored payload matching rejects signatures from another agent node", async () => {
+  const { storedPayloadMatchesAgentNode } = await import("../apps/web/lib/taskDemo.ts");
+  const payload = {
+    intent: {
+      agentNode: `0x${"11".repeat(32)}`
+    }
+  };
+
+  assert.equal(storedPayloadMatchesAgentNode(payload, `0x${"11".repeat(32)}`), true);
+  assert.equal(storedPayloadMatchesAgentNode(payload, `0x${"22".repeat(32)}`), false);
+});
+
+test("stored payload matching rejects malformed saved payloads", async () => {
+  const { storedPayloadMatchesAgentNode } = await import("../apps/web/lib/taskDemo.ts");
+
+  assert.equal(storedPayloadMatchesAgentNode({}, `0x${"11".repeat(32)}`), false);
+  assert.equal(storedPayloadMatchesAgentNode({ intent: {} }, `0x${"11".repeat(32)}`), false);
+});

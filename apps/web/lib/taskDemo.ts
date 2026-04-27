@@ -191,6 +191,15 @@ export function storedPayloadToRelayerBody(payload: StoredSignedTaskPayload): Se
 }
 
 /**
+ * Checks whether a stored retry payload safely belongs to the currently selected agent node.
+ */
+export function storedPayloadMatchesAgentNode(payload: unknown, agentNode: Hex): boolean {
+  const candidate = payload as { intent?: { agentNode?: unknown } } | null;
+  const payloadAgentNode = candidate?.intent?.agentNode;
+  return typeof payloadAgentNode === "string" && payloadAgentNode.toLowerCase() === agentNode.toLowerCase();
+}
+
+/**
  * Recovers the signer shown in the ENS proof panel after a browser signature is produced.
  */
 export function recoverTaskSigner(digest: Hex, signature: Hex): Hex {
