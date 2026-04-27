@@ -1,0 +1,9 @@
+packages:
+  # Frontend application package.
+  - "apps/web"
+  # Shared TypeScript constants consumed by app and runner packages.
+  - "packages/config"
+  # Local agent signing CLI.
+  - "agent-runner"
+  # Solidity project wrapper for workspace scripts.
+  - "contracts"

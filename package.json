@@ -1,0 +1,12 @@
+{
+  "name": "agentpassports.eth",
+  "private": true,
+  "packageManager": "pnpm@9.4.0",
+  "scripts": {
+    "dev": "pnpm --filter @agentpassport/web dev",
+    "test": "node --test tests/repository-structure.test.mjs",
+    "web:dev": "pnpm --filter @agentpassport/web dev",
+    "agent:run": "pnpm --filter @agentpassport/agent-runner start",
+    "contracts:test": "forge test"
+  }
+}
