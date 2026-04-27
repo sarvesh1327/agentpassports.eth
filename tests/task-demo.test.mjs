@@ -102,3 +102,55 @@ test("stored signed payload hashes the normalized owner ENS name", async () => {
   assert.equal(stored.ownerName, "agentpassports.eth");
   assert.equal(stored.ownerNode, namehashEnsName("agentpassports.eth"));
 });
+
+test("signed payload storage is best-effort when browser storage is unavailable", async () => {
+  const { storeSignedTaskPayload } = await import("../apps/web/lib/taskDemo.ts");
+  const payload = {
+    agentName: "assistant.agentpassports.eth",
+    agentNode: `0x${"11".repeat(32)}`,
+    callData: "0x1234",
+    digest: `0x${"22".repeat(32)}`,
+    intent: {
+      agentNode: `0x${"11".repeat(32)}`,
+      callDataHash: `0x${"33".repeat(32)}`,
+      expiresAt: "1800000000",
+      nonce: "7",
+      target: TASK_LOG_ADDRESS,
+      value: "0"
+    },
+    ownerName: "agentpassports.eth",
+    ownerNode: `0x${"44".repeat(32)}`,
+    recoveredSigner: null,
+    signature: `0x${"55".repeat(65)}`,
+    taskHash: `0x${"66".repeat(32)}`,
+    typedData: {
+      domain: {
+        chainId: "11155111",
+        name: "AgentPolicyExecutor",
+        verifyingContract: EXECUTOR_ADDRESS,
+        version: "1"
+      },
+      message: {
+        agentNode: `0x${"11".repeat(32)}`,
+        callDataHash: `0x${"33".repeat(32)}`,
+        expiresAt: "1800000000",
+        nonce: "7",
+        target: TASK_LOG_ADDRESS,
+        value: "0"
+      },
+      primaryType: "TaskIntent",
+      types: { TaskIntent: [] }
+    }
+  };
+
+  const stored = storeSignedTaskPayload({
+    payload,
+    storage: {
+      setItem() {
+        throw new Error("storage unavailable");
+      }
+    }
+  });
+
+  assert.equal(stored, false);
+});

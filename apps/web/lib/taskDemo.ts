@@ -64,6 +64,10 @@ export type StoredSignedTaskPayload = SerializableRelayerExecutePayload & {
   typedData: ReturnType<typeof serializeTypedData>;
 };
 
+type SignedTaskPayloadStorage = {
+  setItem(key: string, value: string): void;
+};
+
 /**
  * Builds the TaskLog calldata and EIP-712 intent that the browser signing flow displays.
  */
@@ -155,6 +159,27 @@ export function buildStoredSignedTaskPayload(input: {
 }
 
 /**
+ * Saves the last signed payload when browser storage is available without blocking execution.
+ */
+export function storeSignedTaskPayload(input: {
+  key?: string;
+  payload: StoredSignedTaskPayload;
+  storage?: SignedTaskPayloadStorage | null;
+}): boolean {
+  const storage = input.storage ?? browserStorage();
+  if (!storage) {
+    return false;
+  }
+
+  try {
+    storage.setItem(input.key ?? LAST_SIGNED_TASK_STORAGE_KEY, JSON.stringify(input.payload, null, 2));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Rebuilds a relayer request body from a stored signed payload.
  */
 export function storedPayloadToRelayerBody(payload: StoredSignedTaskPayload): SerializableRelayerExecutePayload {
@@ -220,4 +245,8 @@ function normalizeRequiredText(value: string, label: string): string {
     throw new Error(`${label} is required`);
   }
   return normalized;
+}
+
+function browserStorage(): SignedTaskPayloadStorage | null {
+  return typeof globalThis.localStorage === "undefined" ? null : globalThis.localStorage;
 }

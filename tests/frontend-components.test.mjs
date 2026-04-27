@@ -257,7 +257,7 @@ test("run page signs task intents and submits them to the relayer", async () => 
 
   assert.match(componentSource, /useSignTypedData/);
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
-  assert.match(componentSource, /localStorage/);
+  assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /currentUnixSeconds\(\)/);
   assert.match(helperSource, /buildTaskRunDraft/);
@@ -293,6 +293,12 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /setAddr/);
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(panelSource, /localStorage/);
+  assert.match(panelSource, /resolverRead\.isSuccess/);
+  assert.doesNotMatch(
+    panelSource,
+    /nonZeroAddress\(resolverRead\.data as Hex \| undefined\) \?\? props\.resolverAddress \?\? null/,
+    "revoke panel must not fall back to a configured resolver after a live zero resolver read",
+  );
   assert.match(source, /EnsProofPanel/);
   assert.match(contractsSource, /name: "revokePolicy"/);
   for (const label of requiredText) {

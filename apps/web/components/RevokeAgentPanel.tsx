@@ -56,7 +56,8 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     args: [agentNode],
     query: { enabled: Boolean(props.ensRegistryAddress) }
   });
-  const resolverAddress = nonZeroAddress(resolverRead.data as Hex | undefined) ?? props.resolverAddress ?? null;
+  const registryResolverAddress = nonZeroAddress(resolverRead.data as Hex | undefined);
+  const resolverAddress = resolverRead.isSuccess ? registryResolverAddress : registryResolverAddress ?? props.resolverAddress ?? null;
   const currentAgentAddress = useReadContract({
     address: resolverAddress ?? undefined,
     abi: PUBLIC_RESOLVER_ABI,

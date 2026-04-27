@@ -14,12 +14,12 @@ import {
 } from "../lib/contracts";
 import { safeNamehash } from "../lib/ensPreview";
 import {
-  LAST_SIGNED_TASK_STORAGE_KEY,
   buildFreshTaskRunDraft,
   buildStoredSignedTaskPayload,
   recoverTaskSigner,
   serializeRelayerExecutePayload,
-  serializeTypedData
+  serializeTypedData,
+  storeSignedTaskPayload
 } from "../lib/taskDemo";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
 
@@ -231,10 +231,10 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       typedData: draft.typedData
     });
 
-    localStorage.setItem(LAST_SIGNED_TASK_STORAGE_KEY, JSON.stringify(storedPayload, null, 2));
+    const stored = storeSignedTaskPayload({ payload: storedPayload });
     setSignature(signed as Hex);
     setRecoveredSigner(recovered);
-    return relayerPayload;
+    return { relayerPayload, stored };
   }
 
   /**
@@ -248,9 +248,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     setSubmittedTxHash(null);
 
     try {
-      await signAndStoreDraft();
+      const { stored } = await signAndStoreDraft();
       setStatus("signed");
-      setStatusMessage("Signed payload saved for revocation retry");
+      setStatusMessage(stored ? "Signed payload saved for revocation retry" : "Signed payload created; browser storage unavailable");
     } catch (error) {
       setStatus("error");
       setStatusMessage(error instanceof Error ? error.message : "Task signing failed");
@@ -269,7 +269,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     setSubmittedTxHash(null);
 
     try {
-      const relayerPayload = await signAndStoreDraft();
+      const { relayerPayload } = await signAndStoreDraft();
       const response = await fetch("/api/relayer/execute", {
         body: JSON.stringify(relayerPayload),
         headers: { "content-type": "application/json" },
