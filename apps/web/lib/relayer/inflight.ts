@@ -3,6 +3,7 @@ import type { Hex } from "@agentpassport/config";
 export const INTENT_SUBMISSION_TTL_MS = 5 * 60 * 1000;
 
 type IntentSubmissionRecord = {
+  status: "pending" | "submitted";
   submittedExpiresAtMs?: number;
   txHash?: Hex;
 };
@@ -10,11 +11,13 @@ type IntentSubmissionRecord = {
 export type IntentSubmissionReservation =
   | {
       status: "acquired";
+      markBroadcast: (txHash: Hex) => void;
       markSubmitted: (txHash: Hex, nowMs?: number) => void;
       release: () => void;
     }
   | {
       status: "pending";
+      txHash?: Hex;
     }
   | {
       status: "submitted";
@@ -36,22 +39,28 @@ export function reserveIntentSubmission(input: {
   pruneExpiredSubmissions(nowMs);
 
   const existing = inFlightSubmissions.get(key);
-  if (existing?.txHash) {
+  if (existing?.status === "submitted" && existing.txHash) {
     return {
       status: "submitted",
       txHash: existing.txHash
     };
   }
   if (existing) {
-    return { status: "pending" };
+    return existing.txHash ? { status: "pending", txHash: existing.txHash } : { status: "pending" };
   }
 
-  const record: IntentSubmissionRecord = {};
+  const record: IntentSubmissionRecord = {
+    status: "pending"
+  };
   inFlightSubmissions.set(key, record);
 
   return {
     status: "acquired",
+    markBroadcast: (txHash: Hex) => {
+      record.txHash = txHash;
+    },
     markSubmitted: (txHash: Hex, submittedAtMs = Date.now()) => {
+      record.status = "submitted";
       record.txHash = txHash;
       record.submittedExpiresAtMs = submittedAtMs + INTENT_SUBMISSION_TTL_MS;
     },
@@ -76,7 +85,11 @@ function intentSubmissionKey(agentNode: Hex, nonce: bigint): string {
 
 function pruneExpiredSubmissions(nowMs: number): void {
   for (const [key, record] of inFlightSubmissions.entries()) {
-    if (record.submittedExpiresAtMs !== undefined && record.submittedExpiresAtMs < nowMs) {
+    if (
+      record.status === "submitted" &&
+      record.submittedExpiresAtMs !== undefined &&
+      record.submittedExpiresAtMs < nowMs
+    ) {
       inFlightSubmissions.delete(key);
     }
   }

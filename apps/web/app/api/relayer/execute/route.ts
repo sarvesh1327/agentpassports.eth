@@ -79,16 +79,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
     }
     if (reservation.status === "pending") {
+      const pendingDetails = reservation.txHash
+        ? `A transaction for this agent nonce is already being relayed: ${reservation.txHash}`
+        : "A transaction for this agent nonce is already being relayed";
       throw new RelayerValidationError(
         "IntentAlreadyPending",
-        "A transaction for this agent nonce is already being relayed",
+        pendingDetails,
         409
       );
     }
 
     const account = privateKeyToAccount(config.relayerPrivateKey);
     const walletClient = createWalletClient({ account, chain, transport });
-    let txHash: Hex;
+    let txHash: Hex | undefined;
     try {
       txHash = await walletClient.writeContract({
         address: config.executorAddress,
@@ -96,13 +99,17 @@ export async function POST(request: Request): Promise<NextResponse> {
         functionName: "execute",
         args: [validated.intent, validated.callData, validated.signature]
       });
+      reservation.markBroadcast(txHash);
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       if (receipt.status !== "success") {
+        reservation.release();
         throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
       }
       reservation.markSubmitted(txHash);
     } catch (error) {
-      reservation.release();
+      if (!txHash) {
+        reservation.release();
+      }
       throw error;
     }
 

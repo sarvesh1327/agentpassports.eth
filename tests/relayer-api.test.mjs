@@ -235,6 +235,13 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   );
 
   assert.equal(first.status, "acquired");
+  first.markBroadcast(TX_HASH);
+  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_250 }), {
+    status: "pending",
+    txHash: TX_HASH,
+  });
+
+  assert.equal(first.status, "acquired");
   first.markSubmitted(TX_HASH, 1_500);
   assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_501 }), {
     status: "submitted",
@@ -262,10 +269,15 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /export const runtime = "nodejs"/);
   assert.match(source, /validateRelayerExecution/);
   assert.match(source, /reserveIntentSubmission/);
+  assert.match(source, /markBroadcast/);
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
   assert.match(source, /waitForTransactionReceipt/);
+  assert.ok(
+    source.indexOf("reservation.markBroadcast") < source.indexOf("waitForTransactionReceipt"),
+    "broadcast hashes should be stored before waiting for a receipt",
+  );
   assert.ok(
     source.indexOf("waitForTransactionReceipt") < source.indexOf("reservation.markSubmitted"),
     "submitted cache entries should only be written after a successful receipt",
