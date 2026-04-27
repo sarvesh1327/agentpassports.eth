@@ -6,9 +6,20 @@ export type RelayerConfig = {
   chainId: bigint;
   ensRegistryAddress: Hex;
   executorAddress: Hex;
+  reservationStore: RelayerReservationStoreConfig;
   relayerPrivateKey: Hex;
   rpcUrl: string;
 };
+
+export type RelayerReservationStoreConfig =
+  | {
+      kind: "memory";
+    }
+  | {
+      kind: "redisRest";
+      token: string;
+      url: string;
+    };
 
 type RelayerEnv = Record<string, string | undefined>;
 
@@ -20,6 +31,7 @@ export function loadRelayerConfig(env: RelayerEnv = process.env): RelayerConfig 
     chainId: readChainId(env, "NEXT_PUBLIC_CHAIN_ID"),
     ensRegistryAddress: readAddress(env, "NEXT_PUBLIC_ENS_REGISTRY"),
     executorAddress: readAddress(env, "NEXT_PUBLIC_EXECUTOR_ADDRESS"),
+    reservationStore: readReservationStore(env),
     relayerPrivateKey: readPrivateKey(env, "RELAYER_PRIVATE_KEY"),
     rpcUrl: readUrl(env, "RPC_URL")
   };
@@ -73,5 +85,36 @@ function readUrl(env: RelayerEnv, name: string): string {
     return new URL(value).toString().replace(/\/$/, "");
   } catch {
     throw new RelayerValidationError("InvalidConfig", `${name} must be a valid URL`, 500);
+  }
+}
+
+function readOptional(env: RelayerEnv, name: string): string | undefined {
+  const value = env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function readReservationStore(env: RelayerEnv): RelayerReservationStoreConfig {
+  const url = readOptional(env, "RELAYER_RESERVATION_REDIS_REST_URL");
+  const token = readOptional(env, "RELAYER_RESERVATION_REDIS_REST_TOKEN");
+  if (!url && !token) {
+    if (env.NODE_ENV === "production") {
+      throw new RelayerValidationError("MissingConfig", "Missing RELAYER_RESERVATION_REDIS_REST_URL", 500);
+    }
+    return { kind: "memory" };
+  }
+  if (!url) {
+    throw new RelayerValidationError("MissingConfig", "Missing RELAYER_RESERVATION_REDIS_REST_URL", 500);
+  }
+  if (!token) {
+    throw new RelayerValidationError("MissingConfig", "Missing RELAYER_RESERVATION_REDIS_REST_TOKEN", 500);
+  }
+  try {
+    return {
+      kind: "redisRest",
+      token,
+      url: new URL(url).toString().replace(/\/$/, "")
+    };
+  } catch {
+    throw new RelayerValidationError("InvalidConfig", "RELAYER_RESERVATION_REDIS_REST_URL must be a valid URL", 500);
   }
 }

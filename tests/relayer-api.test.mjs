@@ -17,6 +17,8 @@ const SIGNATURE =
   "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069d533580f7728d00643630e708367046eab3ef2359d1e499f8e19e2b1df8d197411c";
 const RELAYER_PRIVATE_KEY = `0x${"22".repeat(32)}`;
 const TX_HASH = `0x${"33".repeat(32)}`;
+const RESERVATION_STORE_URL = "https://redis.example";
+const RESERVATION_STORE_TOKEN = "redis-token";
 
 async function readText(relativePath) {
   return readFile(path.join(root, relativePath), "utf8");
@@ -158,9 +160,40 @@ test("relayer config reads only server-safe operational values", async () => {
       chainId: 11155111n,
       ensRegistryAddress: ENS_REGISTRY_ADDRESS,
       executorAddress: EXECUTOR_ADDRESS,
+      reservationStore: { kind: "memory" },
       relayerPrivateKey: RELAYER_PRIVATE_KEY,
       rpcUrl: "http://127.0.0.1:8545",
     },
+  );
+
+  assert.deepEqual(
+    loadRelayerConfig({
+      NEXT_PUBLIC_CHAIN_ID: "11155111",
+      NEXT_PUBLIC_ENS_REGISTRY: ENS_REGISTRY_ADDRESS,
+      NEXT_PUBLIC_EXECUTOR_ADDRESS: EXECUTOR_ADDRESS,
+      RELAYER_PRIVATE_KEY,
+      RELAYER_RESERVATION_REDIS_REST_TOKEN: RESERVATION_STORE_TOKEN,
+      RELAYER_RESERVATION_REDIS_REST_URL: `${RESERVATION_STORE_URL}/`,
+      RPC_URL: "http://127.0.0.1:8545",
+    }).reservationStore,
+    {
+      kind: "redisRest",
+      token: RESERVATION_STORE_TOKEN,
+      url: RESERVATION_STORE_URL,
+    },
+  );
+
+  assertRelayerCode(
+    () =>
+      loadRelayerConfig({
+        NEXT_PUBLIC_CHAIN_ID: "11155111",
+        NEXT_PUBLIC_ENS_REGISTRY: ENS_REGISTRY_ADDRESS,
+        NEXT_PUBLIC_EXECUTOR_ADDRESS: EXECUTOR_ADDRESS,
+        NODE_ENV: "production",
+        RELAYER_PRIVATE_KEY,
+        RPC_URL: "http://127.0.0.1:8545",
+      }),
+    "MissingConfig",
   );
 
   assertRelayerCode(() => loadRelayerConfig({ NEXT_PUBLIC_CHAIN_ID: "11155111" }), "MissingConfig");
@@ -227,25 +260,25 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   } = await import("../apps/web/lib/relayer/inflight.ts");
   resetIntentSubmissionCache();
 
-  const first = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  const first = await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
   assert.equal(first.status, "acquired");
-  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_001 }), {
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_001 }), {
     status: "pending",
   });
   assert.deepEqual(
-    reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 + INTENT_SUBMISSION_TTL_MS + 1 }),
+    await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 + INTENT_SUBMISSION_TTL_MS + 1 }),
     {
       status: "pending",
     },
   );
 
   assert.equal(first.status, "acquired");
-  first.markBroadcast(TX_HASH, 1_200);
-  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_250 }), {
+  await first.markBroadcast(TX_HASH, 1_200);
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_250 }), {
     status: "pending",
     txHash: TX_HASH,
   });
-  const staleBroadcast = reserveIntentSubmission({
+  const staleBroadcast = await reserveIntentSubmission({
     agentNode: AGENT_NODE,
     nonce: 0n,
     nowMs: 1_200 + BROADCAST_PENDING_TTL_MS + 1,
@@ -253,33 +286,94 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   assert.equal(staleBroadcast.status, "acquired");
 
   resetIntentSubmissionCache();
-  const pending = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  const pending = await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
   assert.equal(pending.status, "acquired");
-  pending.markBroadcast(TX_HASH, 1_100);
-  markIntentSubmissionSubmitted({ agentNode: AGENT_NODE, nonce: 0n, txHash: TX_HASH, nowMs: 1_200 });
-  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_201 }), {
+  await pending.markBroadcast(TX_HASH, 1_100);
+  await markIntentSubmissionSubmitted({ agentNode: AGENT_NODE, nonce: 0n, txHash: TX_HASH, nowMs: 1_200 });
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_201 }), {
     status: "submitted",
     txHash: TX_HASH,
   });
-  releaseIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n });
-  assert.equal(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_202 }).status, "acquired");
+  await releaseIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n });
+  assert.equal((await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_202 })).status, "acquired");
 
   resetIntentSubmissionCache();
-  const firstAfterReset = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  const firstAfterReset = await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
   assert.equal(firstAfterReset.status, "acquired");
-  firstAfterReset.markSubmitted(TX_HASH, 1_500);
-  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_501 }), {
+  await firstAfterReset.markSubmitted(TX_HASH, 1_500);
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_501 }), {
     status: "submitted",
     txHash: TX_HASH,
   });
 
-  const afterTtl = reserveIntentSubmission({
+  const afterTtl = await reserveIntentSubmission({
     agentNode: AGENT_NODE,
     nonce: 0n,
     nowMs: 1_500 + INTENT_SUBMISSION_TTL_MS + 1,
   });
   assert.equal(afterTtl.status, "acquired");
   resetIntentSubmissionCache();
+});
+
+test("relayer in-flight guard supports a shared Redis REST reservation store", async () => {
+  const {
+    createRedisRestIntentSubmissionStore,
+    markIntentSubmissionSubmitted,
+    releaseIntentSubmission,
+    reserveIntentSubmission,
+  } = await import("../apps/web/lib/relayer/inflight.ts");
+  const commands = [];
+  const values = new Map();
+  const store = createRedisRestIntentSubmissionStore({
+    fetch: async (_url, init) => {
+      const command = JSON.parse(init.body);
+      commands.push(command);
+      const [name, key, value, ...options] = command;
+      let result = null;
+
+      if (name === "GET") {
+        result = values.get(key) ?? null;
+      }
+      if (name === "SET") {
+        const requiresMissing = options.includes("NX");
+        const requiresExisting = options.includes("XX");
+        if ((!requiresMissing || !values.has(key)) && (!requiresExisting || values.has(key))) {
+          values.set(key, value);
+          result = "OK";
+        }
+      }
+      if (name === "DEL") {
+        result = values.delete(key) ? 1 : 0;
+      }
+
+      return new Response(JSON.stringify({ result }), { status: 200 });
+    },
+    token: RESERVATION_STORE_TOKEN,
+    url: RESERVATION_STORE_URL,
+  });
+
+  const first = await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_000, store });
+  assert.equal(first.status, "acquired");
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_001, store }), {
+    status: "pending",
+  });
+
+  await first.markBroadcast(TX_HASH, 1_200);
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_201, store }), {
+    status: "pending",
+    txHash: TX_HASH,
+  });
+
+  await markIntentSubmissionSubmitted({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_300, store, txHash: TX_HASH });
+  assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_301, store }), {
+    status: "submitted",
+    txHash: TX_HASH,
+  });
+
+  await releaseIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, store });
+  assert.equal((await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 7n, nowMs: 1_302, store })).status, "acquired");
+  assert.ok(commands.some((command) => command[0] === "SET" && command.includes("NX")));
+  assert.ok(commands.some((command) => command[0] === "SET" && command.includes("PX")));
 });
 
 test("relayer route submits validated executor transactions from a thin API handler", async () => {
@@ -291,7 +385,11 @@ test("relayer route submits validated executor transactions from a thin API hand
 
   const source = await readText("apps/web/app/api/relayer/execute/route.ts");
   const validationSource = await readText("apps/web/lib/relayer/validation.ts");
+  const txHashIndex = source.indexOf("let txHash");
+  const innerTryIndex = source.indexOf("try {", txHashIndex);
+  const accountIndex = source.indexOf("privateKeyToAccount", txHashIndex);
   assert.match(source, /export const runtime = "nodejs"/);
+  assert.match(source, /createIntentSubmissionStore/);
   assert.match(source, /validateRelayerExecution/);
   assert.match(source, /reserveIntentSubmission/);
   assert.match(source, /markBroadcast/);
@@ -305,6 +403,10 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.ok(
     source.indexOf("reservation.markBroadcast") < source.indexOf("waitForTransactionReceipt"),
     "broadcast hashes should be stored before waiting for a receipt",
+  );
+  assert.ok(
+    txHashIndex !== -1 && innerTryIndex !== -1 && innerTryIndex < accountIndex,
+    "relayer wallet setup should be inside the reservation cleanup try block",
   );
   assert.ok(
     source.indexOf("waitForTransactionReceipt") < source.indexOf("reservation.markSubmitted"),

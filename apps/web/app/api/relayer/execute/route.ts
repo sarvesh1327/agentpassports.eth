@@ -12,6 +12,8 @@ import {
 import { loadRelayerConfig, type RelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
 import {
+  createIntentSubmissionStore,
+  type IntentSubmissionStore,
   markIntentSubmissionSubmitted,
   releaseIntentSubmission,
   reserveIntentSubmission
@@ -34,6 +36,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const chain = relayerChain(config);
     const transport = http(config.rpcUrl);
     const publicClient = createPublicClient({ chain, transport });
+    const reservationStore = createIntentSubmissionStore(config.reservationStore);
     const [policyResult, nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
       publicClient.readContract({
         address: config.executorAddress,
@@ -75,20 +78,25 @@ export async function POST(request: Request): Promise<NextResponse> {
       now: latestBlock.timestamp,
       payload
     });
-    const reservation = reserveIntentSubmission({
+    const reservation = await reserveIntentSubmission({
       agentNode: validated.intent.agentNode,
-      nonce: validated.intent.nonce
+      nonce: validated.intent.nonce,
+      store: reservationStore
     });
     if (reservation.status === "submitted") {
       return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
     }
     if (reservation.status === "pending") {
       if (reservation.txHash) {
-        const reconciled = await reconcileBroadcastReceipt(publicClient, {
-          agentNode: validated.intent.agentNode,
-          nonce: validated.intent.nonce,
-          txHash: reservation.txHash
-        });
+        const reconciled = await reconcileBroadcastReceipt(
+          publicClient,
+          reservationStore,
+          {
+            agentNode: validated.intent.agentNode,
+            nonce: validated.intent.nonce,
+            txHash: reservation.txHash
+          }
+        );
         if (reconciled === "submitted") {
           return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
         }
@@ -107,26 +115,26 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    const account = privateKeyToAccount(config.relayerPrivateKey);
-    const walletClient = createWalletClient({ account, chain, transport });
     let txHash: Hex | undefined;
     try {
+      const account = privateKeyToAccount(config.relayerPrivateKey);
+      const walletClient = createWalletClient({ account, chain, transport });
       txHash = await walletClient.writeContract({
         address: config.executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
         functionName: "execute",
         args: [validated.intent, validated.callData, validated.signature]
       });
-      reservation.markBroadcast(txHash);
+      await reservation.markBroadcast(txHash);
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
       if (receipt.status !== "success") {
-        reservation.release();
+        await reservation.release();
         throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
       }
-      reservation.markSubmitted(txHash);
+      await reservation.markSubmitted(txHash);
     } catch (error) {
       if (!txHash) {
-        reservation.release();
+        await reservation.release();
       }
       throw error;
     }
@@ -170,6 +178,7 @@ async function readResolvedAgent(
  */
 async function reconcileBroadcastReceipt(
   publicClient: ReturnType<typeof createPublicClient>,
+  reservationStore: IntentSubmissionStore,
   input: {
     agentNode: Hex;
     nonce: bigint;
@@ -179,10 +188,10 @@ async function reconcileBroadcastReceipt(
   try {
     const receipt = await publicClient.getTransactionReceipt({ hash: input.txHash });
     if (receipt.status === "success") {
-      markIntentSubmissionSubmitted(input);
+      await markIntentSubmissionSubmitted({ ...input, store: reservationStore });
       return "submitted";
     }
-    releaseIntentSubmission(input);
+    await releaseIntentSubmission({ ...input, store: reservationStore });
     return "reverted";
   } catch {
     return "pending";
