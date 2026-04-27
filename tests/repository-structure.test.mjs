@@ -42,7 +42,7 @@ async function collectFiles(directory, prefix = "") {
   for (const entry of entries) {
     const relativePath = path.join(prefix, entry.name);
 
-    if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "docs") {
+    if (entry.name === ".git" || entry.name === ".next" || entry.name === "node_modules" || entry.name === "docs") {
       continue;
     }
 
@@ -116,6 +116,8 @@ test("environment templates document required variables for Sepolia-first develo
     "NEXT_PUBLIC_EXECUTOR_ADDRESS",
     "NEXT_PUBLIC_TASK_LOG_ADDRESS",
     "RELAYER_PRIVATE_KEY",
+    "RELAYER_RESERVATION_REDIS_REST_TOKEN",
+    "RELAYER_RESERVATION_REDIS_REST_URL",
     "AGENT_PRIVATE_KEY",
   ]) {
     assert.match(rootEnv, new RegExp(`${name}=`), `${name} should be documented at the root`);
@@ -123,6 +125,8 @@ test("environment templates document required variables for Sepolia-first develo
 
   assert.match(webEnv, /NEXT_PUBLIC_CHAIN_ID=11155111/);
   assert.match(webEnv, /RELAYER_PRIVATE_KEY=/);
+  assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_URL=/);
+  assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_TOKEN=/);
   assert.match(runnerEnv, /RELAYER_URL=http:\/\/localhost:3000\/api\/relayer\/execute/);
   assert.match(runnerEnv, /CHAIN_ID=11155111/);
   assert.match(contractsEnv, /ENS_REGISTRY=0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e/);

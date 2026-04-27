@@ -13,6 +13,7 @@ out/
 dist/
 build/
 coverage/
+**/*.tsbuildinfo
 
 # Foundry build, test, and deployment artifacts.
 contracts/out/
