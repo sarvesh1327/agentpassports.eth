@@ -298,6 +298,14 @@ test("run page signs task intents and submits them to the relayer", async () => 
   );
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /currentUnixSeconds\(\)/);
+  assert.match(componentSource, /optimisticNextNonce/);
+  assert.match(componentSource, /setOptimisticNextNonce\(BigInt\(relayerPayload\.intent\.nonce\) \+ 1n\)/);
+  assert.match(componentSource, /nextNonceRead\.refetch\(\)/);
+  assert.ok(
+    componentSource.indexOf("setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n)") <
+      componentSource.indexOf('setStatus("submitted")'),
+    "run page must advance the next nonce before allowing another submission",
+  );
   assert.match(componentSource, /hashPolicyContractResult/);
   assert.match(componentSource, /policyHash={livePolicyHash}/);
   assert.doesNotMatch(componentSource, /policyHash={null}/);

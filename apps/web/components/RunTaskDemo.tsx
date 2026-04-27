@@ -72,6 +72,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const [submittedTxHash, setSubmittedTxHash] = useState<Hex | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [optimisticNextNonce, setOptimisticNextNonce] = useState<bigint | null>(null);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const normalizedAgentName = useMemo(() => normalizeEnsFormName(agentName), [agentName]);
   const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
@@ -113,11 +114,23 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
   });
+  const chainNextNonce = safeBigInt(nextNonceRead.data as bigint | undefined);
+  const effectiveNextNonce = optimisticNextNonce ?? chainNextNonce;
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setPreviewRefreshKey((key) => key + 1), 60_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    setOptimisticNextNonce(null);
+  }, [agentNode]);
+
+  useEffect(() => {
+    if (optimisticNextNonce !== null && nextNonceRead.isSuccess && chainNextNonce >= optimisticNextNonce) {
+      setOptimisticNextNonce(null);
+    }
+  }, [chainNextNonce, nextNonceRead.isSuccess, optimisticNextNonce]);
 
   /**
    * Builds a task draft from the latest wall-clock time so expiresAt cannot go stale before signing.
@@ -134,7 +147,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       chainId: props.chainId,
       executorAddress: props.executorAddress,
       metadataURI,
-      nonce: safeBigInt(nextNonceRead.data as bigint | undefined),
+      nonce: effectiveNextNonce,
       nowSeconds: currentUnixSeconds(),
       ownerName: normalizedOwnerName,
       taskDescription,
@@ -153,8 +166,8 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       return { draft: null, error: error instanceof Error ? error.message : "Task draft is invalid" };
     }
   }, [
+    effectiveNextNonce,
     metadataURI,
-    nextNonceRead.data,
     nextNonceRead.isSuccess,
     normalizedAgentName,
     normalizedOwnerName,
@@ -292,6 +305,8 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       }
 
       setSubmittedTxHash(body.txHash);
+      setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n);
+      void nextNonceRead.refetch().catch(() => undefined);
       setStatus("submitted");
       setStatusMessage("Transaction status: submitted");
       setHistoryRefreshKey((key) => key + 1);
@@ -339,7 +354,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
             <PreviewRow label="Owner node" title={ownerNode} value={shortenHex(ownerNode)} />
             <PreviewRow label="Resolver" title={resolverAddress ?? undefined} value={formatNullableHex(resolverAddress)} />
             <PreviewRow label="ENS addr(agent)" title={liveAgentAddress ?? undefined} value={formatNullableHex(liveAgentAddress)} />
-            <PreviewRow label="Next nonce" value={nextNonceRead.data?.toString() ?? "Unknown"} />
+            <PreviewRow label="Next nonce" value={nextNonceRead.isSuccess ? effectiveNextNonce.toString() : "Unknown"} />
             <PreviewRow label="Gas budget" value={formatWei(liveGasBudget)} />
             <PreviewRow label="Call data hash" title={draftState.draft?.intent.callDataHash} value={formatNullableHex(draftState.draft?.intent.callDataHash)} />
             <PreviewRow label="Recovered signer" title={recoveredSigner ?? undefined} value={formatNullableHex(recoveredSigner)} />
