@@ -178,7 +178,7 @@ contract AgentPolicyExecutor {
 
     /// @notice Adds ETH to an agent-specific gas reimbursement budget.
     /// @param agentNode ENS namehash for the funded agent.
-    function depositGasBudget(bytes32 agentNode) external payable {
+    function depositGasBudget(bytes32 agentNode) external payable nonReentrant {
         if (msg.value == 0) revert ZeroAmount();
         gasBudgetWei[agentNode] += msg.value;
         emit GasBudgetDeposited(agentNode, msg.sender, msg.value);
@@ -242,20 +242,22 @@ contract AgentPolicyExecutor {
         if (keccak256(callData) != intent.callDataHash) revert BadCalldataHash();
         if (intent.value > policy.maxValueWei) revert ValueTooHigh();
 
+        uint256 budgetBeforeCall = gasBudgetWei[intent.agentNode];
+        if (budgetBeforeCall < intent.value) revert InsufficientGasBudget();
+
         // ENS is the authorization source: this read happens during every execution.
         address resolvedAgent = _resolveAgentAddress(intent.agentNode);
         address recovered = _recover(_hashIntent(intent), signature);
         if (recovered != resolvedAgent) revert BadSignature();
 
-        // Advance the nonce before external execution; a revert rolls this back with the call.
-        nextNonce[intent.agentNode] = intent.nonce + 1;
-        (bool ok, bytes memory returndata) = intent.target.call{ value: intent.value }(callData);
-        if (!ok) revert TargetCallFailed(returndata);
-
-        result = returndata;
-        uint256 reimbursement = _cappedReimbursement(gasStart, policy.maxGasReimbursementWei);
-        if (gasBudgetWei[intent.agentNode] < reimbursement) revert InsufficientGasBudget();
-        gasBudgetWei[intent.agentNode] -= reimbursement;
+        result = _callTarget(intent, callData);
+        uint256 reimbursement = _debitBudget(
+            intent.agentNode,
+            intent.value,
+            gasStart,
+            policy.maxGasReimbursementWei,
+            budgetBeforeCall
+        );
 
         if (reimbursement > 0) {
             (bool reimbursed,) = payable(msg.sender).call{ value: reimbursement }("");
@@ -270,6 +272,42 @@ contract AgentPolicyExecutor {
             intent.nonce,
             reimbursement
         );
+    }
+
+    /// @notice Calls the policy target and consumes the intent nonce.
+    /// @dev The nonce write happens before the external call; a target revert rolls it back.
+    /// @param intent Authorized task intent.
+    /// @param callData Exact calldata to send to the target.
+    /// @return returndata Raw returndata from the target call.
+    function _callTarget(TaskIntent calldata intent, bytes calldata callData)
+        internal
+        returns (bytes memory returndata)
+    {
+        // Advance the nonce before external execution; a revert rolls this back with the call.
+        nextNonce[intent.agentNode] = intent.nonce + 1;
+        (bool ok, bytes memory result) = intent.target.call{ value: intent.value }(callData);
+        if (!ok) revert TargetCallFailed(result);
+        return result;
+    }
+
+    /// @notice Charges target call value and relayer reimbursement to one agent budget.
+    /// @param agentNode ENS namehash for the agent whose budget is charged.
+    /// @param intentValue ETH value sent to the target.
+    /// @param gasStart Gas left at the beginning of execution.
+    /// @param reimbursementCap Maximum reimbursement allowed by the policy.
+    /// @param budgetBeforeCall Agent budget snapshot taken before target execution.
+    /// @return reimbursement Capped reimbursement amount owed to the relayer.
+    function _debitBudget(
+        bytes32 agentNode,
+        uint256 intentValue,
+        uint256 gasStart,
+        uint96 reimbursementCap,
+        uint256 budgetBeforeCall
+    ) internal returns (uint256 reimbursement) {
+        reimbursement = _cappedReimbursement(gasStart, reimbursementCap);
+        uint256 totalDebit = intentValue + reimbursement;
+        if (budgetBeforeCall < totalDebit) revert InsufficientGasBudget();
+        gasBudgetWei[agentNode] = budgetBeforeCall - totalDebit;
     }
 
     /// @notice Returns the wallet currently allowed to manage an ENS node.

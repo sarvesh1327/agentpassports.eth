@@ -153,7 +153,16 @@ test("AgentPolicyExecutor implements EIP-712 signing, target execution, and capp
   assert.match(source, /intent\.target\.call\{ value: intent\.value \}\(callData\)/);
   assert.match(source, /maxGasReimbursementWei/);
   assert.match(source, /if \(reimbursement > cap\)/);
-  assert.match(source, /gasBudgetWei\[intent\.agentNode\] -= reimbursement/);
+  assert.match(source, /gasBudgetWei\[(?:intent\.agentNode|agentNode)\] = budgetBeforeCall - totalDebit/);
+});
+
+test("AgentPolicyExecutor charges both call value and reimbursement to the agent budget", async () => {
+  const source = await readText("contracts/src/AgentPolicyExecutor.sol");
+
+  assert.match(source, /uint256 totalDebit = intentValue \+ reimbursement/);
+  assert.match(source, /budgetBeforeCall < totalDebit/);
+  assert.match(source, /gasBudgetWei\[(?:intent\.agentNode|agentNode)\] = budgetBeforeCall - totalDebit/);
+  assert.doesNotMatch(source, /gasBudgetWei\[intent\.agentNode\] -= reimbursement/);
 });
 
 test("contract behavior tests and ENS mocks are present for Foundry", async () => {

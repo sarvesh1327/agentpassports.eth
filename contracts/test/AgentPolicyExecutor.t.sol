@@ -7,6 +7,7 @@ import {TestBase} from "./TestBase.sol";
 import {MockENSRegistry} from "./mocks/MockENSRegistry.sol";
 import {MockNameWrapper} from "./mocks/MockNameWrapper.sol";
 import {MockResolver} from "./mocks/MockResolver.sol";
+import {MockValueTarget} from "./mocks/MockValueTarget.sol";
 
 /// @title AgentPolicyExecutorTest
 /// @notice Behavior tests for ENS-gated policy execution and relayer reimbursement.
@@ -27,6 +28,7 @@ contract AgentPolicyExecutorTest is TestBase {
     MockENSRegistry private ens;
     MockNameWrapper private nameWrapper;
     MockResolver private resolver;
+    MockValueTarget private valueTarget;
     AgentPolicyExecutor private executor;
     TaskLog private taskLog;
 
@@ -40,6 +42,7 @@ contract AgentPolicyExecutorTest is TestBase {
         ens = new MockENSRegistry();
         nameWrapper = new MockNameWrapper();
         resolver = new MockResolver();
+        valueTarget = new MockValueTarget();
         executor = new AgentPolicyExecutor(address(ens), address(nameWrapper));
         taskLog = new TaskLog(address(executor));
 
@@ -67,7 +70,7 @@ contract AgentPolicyExecutorTest is TestBase {
         assertEq(storedOwnerNode, ownerNode, "owner node");
         assertEq(ownerWallet, owner, "owner wallet");
         assertEq(target, address(taskLog), "target");
-        assertEq(selector, TaskLog.recordTask.selector, "selector");
+        assertTrue(selector == TaskLog.recordTask.selector, "selector");
         assertEq(maxValueWei, 0, "max value");
         assertEq(maxGasReimbursementWei, 0.01 ether, "gas cap");
         assertEq(expiresAt, block.timestamp + 1 days, "expiry");
@@ -134,9 +137,10 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(wrongKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.BadSignature.selector);
-        executor.execute(intent, callData, _sign(wrongKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies changing addr(agentNode) revokes a previously valid agent signature.
@@ -158,9 +162,10 @@ contract AgentPolicyExecutorTest is TestBase {
         ens.setResolver(agentNode, address(0));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.ResolverNotSet.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies execution fails when the resolver returns a zero agent address.
@@ -169,9 +174,10 @@ contract AgentPolicyExecutorTest is TestBase {
         resolver.setAddr(agentNode, address(0));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.AgentAddressNotSet.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies an intent cannot execute after its own expiry timestamp.
@@ -179,11 +185,12 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.warp(block.timestamp + 2);
 
         vm.expectRevert(AgentPolicyExecutor.IntentExpired.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies an intent cannot execute after the policy expiry timestamp.
@@ -191,11 +198,12 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.warp(block.timestamp + 2);
 
         vm.expectRevert(AgentPolicyExecutor.PolicyExpired.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies target addresses outside the policy are rejected.
@@ -210,9 +218,10 @@ contract AgentPolicyExecutorTest is TestBase {
             0,
             uint64(block.timestamp + 1 hours)
         );
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.TargetNotAllowed.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies calldata selectors outside the policy are rejected.
@@ -220,9 +229,10 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = abi.encodeWithSelector(bytes4(0xdeadbeef), agentNode);
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.SelectorNotAllowed.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies calldata mutation is rejected through callDataHash validation.
@@ -237,9 +247,10 @@ contract AgentPolicyExecutorTest is TestBase {
             0,
             uint64(block.timestamp + 1 hours)
         );
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.BadCalldataHash.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies an intent cannot send more ETH value than the policy permits.
@@ -247,9 +258,10 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 1 wei, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.expectRevert(AgentPolicyExecutor.ValueTooHigh.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies a signed intent cannot be replayed after its nonce is consumed.
@@ -270,12 +282,13 @@ contract AgentPolicyExecutorTest is TestBase {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentPolicyExecutor.TaskIntent memory intent = _intent(callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
 
         vm.prank(owner);
         executor.revokePolicy(agentNode);
 
         vm.expectRevert(AgentPolicyExecutor.PolicyDisabled.selector);
-        executor.execute(intent, callData, _sign(agentKey, intent));
+        executor.execute(intent, callData, signature);
     }
 
     /// @notice Verifies relayer reimbursement cannot exceed the policy cap.
@@ -294,6 +307,36 @@ contract AgentPolicyExecutorTest is TestBase {
 
         assertLe(reimbursed, cap, "reimbursement cap");
         assertGt(reimbursed, 0, "relayer reimbursed");
+    }
+
+    /// @notice Verifies target call value is debited from the same agent budget as reimbursement.
+    function testCallValueIsChargedToAgentBudget() public {
+        uint256 value = 0.2 ether;
+        vm.prank(owner);
+        executor.setPolicy{ value: 1 ether }(
+            ownerNode,
+            agentLabel,
+            address(valueTarget),
+            MockValueTarget.recordValue.selector,
+            uint96(value),
+            0,
+            uint64(block.timestamp + 1 days)
+        );
+
+        bytes memory callData = abi.encodeCall(MockValueTarget.recordValue, (agentNode));
+        AgentPolicyExecutor.TaskIntent memory intent = AgentPolicyExecutor.TaskIntent(
+            agentNode,
+            address(valueTarget),
+            keccak256(callData),
+            value,
+            executor.nextNonce(agentNode),
+            uint64(block.timestamp + 1 hours)
+        );
+
+        executor.execute(intent, callData, _sign(agentKey, intent));
+
+        assertEq(valueTarget.received(agentNode), value, "target value");
+        assertEq(executor.gasBudgetWei(agentNode), 0.8 ether, "value debited");
     }
 
     /// @notice Creates a default task-log policy from the ENS owner account.
