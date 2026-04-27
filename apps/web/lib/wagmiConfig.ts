@@ -3,6 +3,7 @@ import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { sepolia } from "wagmi/chains";
 import { webEnv } from "./env";
+import { normalizePublicRpcUrl } from "./rpcUrl";
 
 const CHAIN_ID_ENV_NAME = "NEXT_PUBLIC_CHAIN_ID";
 
@@ -27,6 +28,6 @@ export const wagmiConfig = createConfig({
   connectors: [injected({ shimDisconnect: true })],
   ssr: true,
   transports: {
-    [appChain.id]: http(webEnv.publicRpcUrl)
+    [appChain.id]: http(normalizePublicRpcUrl(webEnv.publicRpcUrl))
   }
 });
