@@ -5,7 +5,6 @@ import { sepolia } from "wagmi/chains";
 import { webEnv } from "./env";
 
 const CHAIN_ID_ENV_NAME = "NEXT_PUBLIC_CHAIN_ID";
-const DEFAULT_SEPOLIA_RPC_URL = "https://sepolia.gateway.tenderly.co/2y8nChagzxtiz1Guzp11Cq";
 
 export const appChain = sepolia;
 
@@ -28,6 +27,6 @@ export const wagmiConfig = createConfig({
   connectors: [injected({ shimDisconnect: true })],
   ssr: true,
   transports: {
-    [appChain.id]: http(webEnv.publicRpcUrl || DEFAULT_SEPOLIA_RPC_URL)
+    [appChain.id]: http(webEnv.publicRpcUrl)
   }
 });
