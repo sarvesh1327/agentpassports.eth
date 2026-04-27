@@ -1,8 +1,13 @@
 import type { Hex } from "@agentpassport/config";
 
+/**
+ * Keeps a broadcast transaction hash retry-visible while receipt polling is inconclusive.
+ */
+export const BROADCAST_PENDING_TTL_MS = 30 * 60 * 1000;
 export const INTENT_SUBMISSION_TTL_MS = 5 * 60 * 1000;
 
 type IntentSubmissionRecord = {
+  broadcastExpiresAtMs?: number;
   status: "pending" | "submitted";
   submittedExpiresAtMs?: number;
   txHash?: Hex;
@@ -11,7 +16,7 @@ type IntentSubmissionRecord = {
 export type IntentSubmissionReservation =
   | {
       status: "acquired";
-      markBroadcast: (txHash: Hex) => void;
+      markBroadcast: (txHash: Hex, nowMs?: number) => void;
       markSubmitted: (txHash: Hex, nowMs?: number) => void;
       release: () => void;
     }
@@ -56,12 +61,14 @@ export function reserveIntentSubmission(input: {
 
   return {
     status: "acquired",
-    markBroadcast: (txHash: Hex) => {
+    markBroadcast: (txHash: Hex, broadcastAtMs = Date.now()) => {
       record.txHash = txHash;
+      record.broadcastExpiresAtMs = broadcastAtMs + BROADCAST_PENDING_TTL_MS;
     },
     markSubmitted: (txHash: Hex, submittedAtMs = Date.now()) => {
       record.status = "submitted";
       record.txHash = txHash;
+      record.broadcastExpiresAtMs = undefined;
       record.submittedExpiresAtMs = submittedAtMs + INTENT_SUBMISSION_TTL_MS;
     },
     release: () => {
@@ -70,6 +77,31 @@ export function reserveIntentSubmission(input: {
       }
     }
   };
+}
+
+/**
+ * Marks a previously broadcast transaction as successfully included.
+ */
+export function markIntentSubmissionSubmitted(input: {
+  agentNode: Hex;
+  nonce: bigint;
+  nowMs?: number;
+  txHash: Hex;
+}): void {
+  const key = intentSubmissionKey(input.agentNode, input.nonce);
+  const record = inFlightSubmissions.get(key) ?? { status: "pending" as const };
+  record.status = "submitted";
+  record.txHash = input.txHash;
+  record.broadcastExpiresAtMs = undefined;
+  record.submittedExpiresAtMs = (input.nowMs ?? Date.now()) + INTENT_SUBMISSION_TTL_MS;
+  inFlightSubmissions.set(key, record);
+}
+
+/**
+ * Releases a reservation when submission is known to have failed or reverted.
+ */
+export function releaseIntentSubmission(input: { agentNode: Hex; nonce: bigint }): void {
+  inFlightSubmissions.delete(intentSubmissionKey(input.agentNode, input.nonce));
 }
 
 /**
@@ -85,6 +117,15 @@ function intentSubmissionKey(agentNode: Hex, nonce: bigint): string {
 
 function pruneExpiredSubmissions(nowMs: number): void {
   for (const [key, record] of inFlightSubmissions.entries()) {
+    if (
+      record.status === "pending" &&
+      record.txHash &&
+      record.broadcastExpiresAtMs !== undefined &&
+      record.broadcastExpiresAtMs < nowMs
+    ) {
+      inFlightSubmissions.delete(key);
+      continue;
+    }
     if (
       record.status === "submitted" &&
       record.submittedExpiresAtMs !== undefined &&

@@ -11,7 +11,11 @@ import {
 } from "../../../../lib/relayer/contracts";
 import { loadRelayerConfig, type RelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
-import { reserveIntentSubmission } from "../../../../lib/relayer/inflight";
+import {
+  markIntentSubmissionSubmitted,
+  releaseIntentSubmission,
+  reserveIntentSubmission
+} from "../../../../lib/relayer/inflight";
 import {
   ZERO_ADDRESS,
   parseRelayerExecuteRequest,
@@ -79,6 +83,20 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
     }
     if (reservation.status === "pending") {
+      if (reservation.txHash) {
+        const reconciled = await reconcileBroadcastReceipt(publicClient, {
+          agentNode: validated.intent.agentNode,
+          nonce: validated.intent.nonce,
+          txHash: reservation.txHash
+        });
+        if (reconciled === "submitted") {
+          return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
+        }
+        if (reconciled === "reverted") {
+          throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
+        }
+      }
+
       const pendingDetails = reservation.txHash
         ? `A transaction for this agent nonce is already being relayed: ${reservation.txHash}`
         : "A transaction for this agent nonce is already being relayed";
@@ -145,6 +163,30 @@ async function readResolvedAgent(
     functionName: "addr",
     args: [agentNode]
   }) as Promise<Hex>;
+}
+
+/**
+ * Re-checks a previously broadcast transaction before rejecting a duplicate retry.
+ */
+async function reconcileBroadcastReceipt(
+  publicClient: ReturnType<typeof createPublicClient>,
+  input: {
+    agentNode: Hex;
+    nonce: bigint;
+    txHash: Hex;
+  }
+): Promise<"pending" | "reverted" | "submitted"> {
+  try {
+    const receipt = await publicClient.getTransactionReceipt({ hash: input.txHash });
+    if (receipt.status === "success") {
+      markIntentSubmissionSubmitted(input);
+      return "submitted";
+    }
+    releaseIntentSubmission(input);
+    return "reverted";
+  } catch {
+    return "pending";
+  }
 }
 
 function relayerChain(config: RelayerConfig) {

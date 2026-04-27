@@ -217,9 +217,14 @@ test("relayer contract adapters map executor reads into validation input", async
 });
 
 test("relayer in-flight guard prevents duplicate broadcasts for the same agent nonce", async () => {
-  const { INTENT_SUBMISSION_TTL_MS, reserveIntentSubmission, resetIntentSubmissionCache } = await import(
-    "../apps/web/lib/relayer/inflight.ts"
-  );
+  const {
+    BROADCAST_PENDING_TTL_MS,
+    INTENT_SUBMISSION_TTL_MS,
+    markIntentSubmissionSubmitted,
+    releaseIntentSubmission,
+    reserveIntentSubmission,
+    resetIntentSubmissionCache,
+  } = await import("../apps/web/lib/relayer/inflight.ts");
   resetIntentSubmissionCache();
 
   const first = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
@@ -235,14 +240,34 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   );
 
   assert.equal(first.status, "acquired");
-  first.markBroadcast(TX_HASH);
+  first.markBroadcast(TX_HASH, 1_200);
   assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_250 }), {
     status: "pending",
     txHash: TX_HASH,
   });
+  const staleBroadcast = reserveIntentSubmission({
+    agentNode: AGENT_NODE,
+    nonce: 0n,
+    nowMs: 1_200 + BROADCAST_PENDING_TTL_MS + 1,
+  });
+  assert.equal(staleBroadcast.status, "acquired");
 
-  assert.equal(first.status, "acquired");
-  first.markSubmitted(TX_HASH, 1_500);
+  resetIntentSubmissionCache();
+  const pending = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  assert.equal(pending.status, "acquired");
+  pending.markBroadcast(TX_HASH, 1_100);
+  markIntentSubmissionSubmitted({ agentNode: AGENT_NODE, nonce: 0n, txHash: TX_HASH, nowMs: 1_200 });
+  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_201 }), {
+    status: "submitted",
+    txHash: TX_HASH,
+  });
+  releaseIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n });
+  assert.equal(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_202 }).status, "acquired");
+
+  resetIntentSubmissionCache();
+  const firstAfterReset = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  assert.equal(firstAfterReset.status, "acquired");
+  firstAfterReset.markSubmitted(TX_HASH, 1_500);
   assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_501 }), {
     status: "submitted",
     txHash: TX_HASH,
@@ -270,6 +295,9 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /validateRelayerExecution/);
   assert.match(source, /reserveIntentSubmission/);
   assert.match(source, /markBroadcast/);
+  assert.match(source, /markIntentSubmissionSubmitted/);
+  assert.match(source, /releaseIntentSubmission/);
+  assert.match(source, /getTransactionReceipt/);
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
