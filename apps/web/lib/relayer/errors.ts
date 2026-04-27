@@ -6,6 +6,7 @@ export type RelayerErrorCode =
   | "PolicyExpired"
   | "IntentExpired"
   | "IntentAlreadyPending"
+  | "TransactionReverted"
   | "BadNonce"
   | "TargetNotAllowed"
   | "SelectorNotAllowed"

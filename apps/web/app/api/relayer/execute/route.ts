@@ -96,6 +96,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         functionName: "execute",
         args: [validated.intent, validated.callData, validated.signature]
       });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+      if (receipt.status !== "success") {
+        throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
+      }
       reservation.markSubmitted(txHash);
     } catch (error) {
       reservation.release();

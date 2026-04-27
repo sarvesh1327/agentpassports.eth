@@ -93,8 +93,12 @@ export function validateRelayerExecution(input: {
   if (!sameAddress(recoveredSigner, context.resolvedAgentAddress)) {
     throw new RelayerValidationError("BadSignature", "Recovered signer does not match ENS-resolved agent address");
   }
-  if (context.gasBudgetWei !== undefined && context.gasBudgetWei < payload.intent.value) {
-    throw new RelayerValidationError("InsufficientGasBudget", "Gas budget cannot cover the intent value");
+  const requiredBudgetWei = payload.intent.value + context.policy.maxGasReimbursementWei;
+  if (context.gasBudgetWei !== undefined && context.gasBudgetWei < requiredBudgetWei) {
+    throw new RelayerValidationError(
+      "InsufficientGasBudget",
+      "Gas budget cannot cover the intent value and reimbursement cap"
+    );
   }
 
   return {

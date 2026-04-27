@@ -121,6 +121,10 @@ test("relayer helpers reject requests before the relayer spends gas", async () =
     "BadNonce",
   );
   assertRelayerCode(
+    () => validateRelayerExecution({ context: precheckContext({ gasBudgetWei: 0n }), now: 1700000000n, payload }),
+    "InsufficientGasBudget",
+  );
+  assertRelayerCode(
     () => validateRelayerExecution({ context: precheckContext(), now: 1800000000n, payload }),
     "IntentExpired",
   );
@@ -255,6 +259,11 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
+  assert.match(source, /waitForTransactionReceipt/);
+  assert.ok(
+    source.indexOf("waitForTransactionReceipt") < source.indexOf("reservation.markSubmitted"),
+    "submitted cache entries should only be written after a successful receipt",
+  );
   assert.doesNotMatch(source, /NEXT_PUBLIC_RELAYER_PRIVATE_KEY/);
   assert.doesNotMatch(validationSource, /Date\.now/);
 });
