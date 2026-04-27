@@ -11,6 +11,7 @@ import {
 } from "../../../../lib/relayer/contracts";
 import { loadRelayerConfig, type RelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
+import { reserveIntentSubmission } from "../../../../lib/relayer/inflight";
 import {
   ZERO_ADDRESS,
   parseRelayerExecuteRequest,
@@ -70,14 +71,36 @@ export async function POST(request: Request): Promise<NextResponse> {
       now: latestBlock.timestamp,
       payload
     });
+    const reservation = reserveIntentSubmission({
+      agentNode: validated.intent.agentNode,
+      nonce: validated.intent.nonce
+    });
+    if (reservation.status === "submitted") {
+      return NextResponse.json({ status: "submitted", txHash: reservation.txHash });
+    }
+    if (reservation.status === "pending") {
+      throw new RelayerValidationError(
+        "IntentAlreadyPending",
+        "A transaction for this agent nonce is already being relayed",
+        409
+      );
+    }
+
     const account = privateKeyToAccount(config.relayerPrivateKey);
     const walletClient = createWalletClient({ account, chain, transport });
-    const txHash = await walletClient.writeContract({
-      address: config.executorAddress,
-      abi: AGENT_POLICY_EXECUTOR_ABI,
-      functionName: "execute",
-      args: [validated.intent, validated.callData, validated.signature]
-    });
+    let txHash: Hex;
+    try {
+      txHash = await walletClient.writeContract({
+        address: config.executorAddress,
+        abi: AGENT_POLICY_EXECUTOR_ABI,
+        functionName: "execute",
+        args: [validated.intent, validated.callData, validated.signature]
+      });
+      reservation.markSubmitted(txHash);
+    } catch (error) {
+      reservation.release();
+      throw error;
+    }
 
     return NextResponse.json({ status: "submitted", txHash });
   } catch (error) {

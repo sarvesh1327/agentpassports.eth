@@ -16,6 +16,7 @@ const CALL_DATA_HASH = "0x1d9a6570b4147a41f00c51af3f304ef8ed803c660c2ff922ef8304
 const SIGNATURE =
   "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069d533580f7728d00643630e708367046eab3ef2359d1e499f8e19e2b1df8d197411c";
 const RELAYER_PRIVATE_KEY = `0x${"22".repeat(32)}`;
+const TX_HASH = `0x${"33".repeat(32)}`;
 
 async function readText(relativePath) {
   return readFile(path.join(root, relativePath), "utf8");
@@ -211,16 +212,46 @@ test("relayer contract adapters map executor reads into validation input", async
   );
 });
 
+test("relayer in-flight guard prevents duplicate broadcasts for the same agent nonce", async () => {
+  const { INTENT_SUBMISSION_TTL_MS, reserveIntentSubmission, resetIntentSubmissionCache } = await import(
+    "../apps/web/lib/relayer/inflight.ts"
+  );
+  resetIntentSubmissionCache();
+
+  const first = reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  assert.equal(first.status, "acquired");
+  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_001 }), {
+    status: "pending",
+  });
+
+  assert.equal(first.status, "acquired");
+  first.markSubmitted(TX_HASH, 1_500);
+  assert.deepEqual(reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_501 }), {
+    status: "submitted",
+    txHash: TX_HASH,
+  });
+
+  const afterTtl = reserveIntentSubmission({
+    agentNode: AGENT_NODE,
+    nonce: 0n,
+    nowMs: 1_500 + INTENT_SUBMISSION_TTL_MS + 1,
+  });
+  assert.equal(afterTtl.status, "acquired");
+  resetIntentSubmissionCache();
+});
+
 test("relayer route submits validated executor transactions from a thin API handler", async () => {
   await assertFile("apps/web/app/api/relayer/execute/route.ts");
   await assertFile("apps/web/lib/relayer/config.ts");
   await assertFile("apps/web/lib/relayer/contracts.ts");
+  await assertFile("apps/web/lib/relayer/inflight.ts");
   await assertFile("apps/web/lib/relayer/validation.ts");
 
   const source = await readText("apps/web/app/api/relayer/execute/route.ts");
   const validationSource = await readText("apps/web/lib/relayer/validation.ts");
   assert.match(source, /export const runtime = "nodejs"/);
   assert.match(source, /validateRelayerExecution/);
+  assert.match(source, /reserveIntentSubmission/);
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
