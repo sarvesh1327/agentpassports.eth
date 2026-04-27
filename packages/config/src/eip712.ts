@@ -1,4 +1,4 @@
-import type { Hex, TaskIntentMessage, TaskIntentTypedData } from "./types";
+import type { Hex, TaskIntentMessage, TaskIntentTypedData } from "./types.ts";
 import {
   assertUint256,
   assertUint64,
@@ -10,8 +10,8 @@ import {
   normalizeAddress,
   normalizeBytes32,
   assertHex
-} from "./hex";
-import { keccak256Hex, keccak256Utf8 } from "./keccak";
+} from "./hex.ts";
+import { keccak256Hex, keccak256Utf8 } from "./keccak.ts";
 
 const TASK_LOG_RECORD_TASK_SIGNATURE = "recordTask(bytes32,bytes32,bytes32,string)";
 const TASK_INTENT_TYPE =

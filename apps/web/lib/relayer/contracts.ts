@@ -1,12 +1,12 @@
-import type { Hex } from "@agentpassport/config";
+import type { Hex } from "../../../../packages/config/src/index.ts";
 import {
   assertUint64,
   assertUint256,
   normalizeAddress,
   normalizeBytes32,
   normalizeSelector
-} from "@agentpassport/config";
-import type { RelayerPolicy } from "./types";
+} from "../../../../packages/config/src/hex.ts";
+import type { RelayerPolicy } from "./types.ts";
 
 export type PolicyContractResult = readonly [Hex, Hex, Hex, Hex, bigint, bigint, bigint, boolean];
 

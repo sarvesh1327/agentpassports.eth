@@ -1,6 +1,6 @@
-import type { Hex } from "./types";
-import { ZERO_BYTES32, concatBytes, hexToBytes, normalizeBytes32, utf8ToBytes } from "./hex";
-import { keccak256Hex } from "./keccak";
+import type { Hex } from "./types.ts";
+import { ZERO_BYTES32, concatBytes, hexToBytes, normalizeBytes32, utf8ToBytes } from "./hex.ts";
+import { keccak256Hex } from "./keccak.ts";
 
 /**
  * Computes the ENS namehash for a root or dot-separated ENS name.

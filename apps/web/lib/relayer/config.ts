@@ -1,6 +1,6 @@
-import type { Hex } from "@agentpassport/config";
-import { assertHex, normalizeAddress } from "@agentpassport/config";
-import { RelayerValidationError } from "./errors";
+import type { Hex } from "../../../../packages/config/src/index.ts";
+import { assertHex, normalizeAddress } from "../../../../packages/config/src/hex.ts";
+import { RelayerValidationError } from "./errors.ts";
 
 export type RelayerConfig = {
   chainId: bigint;

@@ -1,6 +1,6 @@
-import type { Hex, PolicyMetadata, PolicyMetadataInput } from "./types";
-import { normalizeAddress, normalizeBytes32, normalizeSelector } from "./hex";
-import { keccak256Utf8 } from "./keccak";
+import type { Hex, PolicyMetadata, PolicyMetadataInput } from "./types.ts";
+import { normalizeAddress, normalizeBytes32, normalizeSelector } from "./hex.ts";
+import { keccak256Utf8 } from "./keccak.ts";
 
 /**
  * Builds deterministic policy metadata suitable for ENS text records or IPFS JSON.

@@ -1,9 +1,9 @@
-import type { Hex, TaskIntentMessage } from "@agentpassport/config";
+import type { Hex, TaskIntentMessage } from "../../../../packages/config/src/index.ts";
 import {
   hashCallData,
   hashTaskIntent,
   recoverSignerAddress
-} from "@agentpassport/config";
+} from "../../../../packages/config/src/index.ts";
 import {
   assertHex,
   assertUint64,
@@ -11,14 +11,14 @@ import {
   normalizeAddress,
   normalizeBytes32,
   normalizeSelector
-} from "@agentpassport/config";
-import { RelayerValidationError } from "./errors";
+} from "../../../../packages/config/src/hex.ts";
+import { RelayerValidationError } from "./errors.ts";
 import type {
   RelayerExecuteBody,
   RelayerExecutePayload,
   RelayerPrecheckContext,
   ValidatedRelayerExecution
-} from "./types";
+} from "./types.ts";
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
