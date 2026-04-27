@@ -135,6 +135,35 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
     stateMutability: "payable",
     inputs: [{ name: "agentNode", type: "bytes32" }],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "revokePolicy",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "execute",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "intent",
+        type: "tuple",
+        components: [
+          { name: "agentNode", type: "bytes32" },
+          { name: "target", type: "address" },
+          { name: "callDataHash", type: "bytes32" },
+          { name: "value", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "expiresAt", type: "uint64" }
+        ]
+      },
+      { name: "callData", type: "bytes" },
+      { name: "signature", type: "bytes" }
+    ],
+    outputs: [{ name: "result", type: "bytes" }]
   }
 ] as const;
 
@@ -153,6 +182,18 @@ export const TASK_LOG_ABI = [
       { indexed: false, name: "metadataURI", type: "string" },
       { indexed: false, name: "timestamp", type: "uint256" }
     ]
+  },
+  {
+    type: "function",
+    name: "recordTask",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentNode", type: "bytes32" },
+      { name: "ownerNode", type: "bytes32" },
+      { name: "taskHash", type: "bytes32" },
+      { name: "metadataURI", type: "string" }
+    ],
+    outputs: [{ name: "taskId", type: "uint256" }]
   },
   {
     type: "function",

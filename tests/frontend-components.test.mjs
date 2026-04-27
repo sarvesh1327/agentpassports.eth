@@ -196,9 +196,33 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(formSource, /depositGasBudget/);
   assert.match(formSource, /validateRegistrationInput/);
   assert.match(formSource, /Agent label is required/);
+  assert.match(formSource, /normalizeAddressInput/);
+  assert.match(formSource, /normalizedAgentAddress/);
+  assert.doesNotMatch(
+    formSource,
+    /args: \[preview\.agentNode, agentAddress as Hex\]/,
+    "registration should not pass untrimmed address input to setAddr",
+  );
   assert.ok(
     formSource.indexOf("validateRegistrationInput") < formSource.indexOf("setAddr"),
     "registration input should be validated before resolver writes",
+  );
+  assert.match(formSource, /agentResolver\.isSuccess/);
+  assert.match(
+    formSource,
+    /const liveResolverAddress = agentResolver\.isSuccess \? registryResolverAddress : null/,
+    "registration resolver preview must wait for the live registry resolver read",
+  );
+  assert.match(formSource, /requireLiveResolverAddress/);
+  assert.match(
+    formSource,
+    /throw new Error\("Waiting for live resolver lookup"\)/,
+    "registration resolver writes must wait until the live registry resolver read settles",
+  );
+  assert.doesNotMatch(
+    formSource,
+    /nonZeroAddress\(agentResolver\.data as Hex \| undefined\) \?\? props\.resolverAddress \?\? null/,
+    "registration must not write records through a configured fallback resolver",
   );
   assert.match(formSource, /Registration submitted/);
   assert.match(contractsSource, /PUBLIC_RESOLVER_ABI/);
@@ -231,4 +255,196 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
     /nonZeroAddress\(agentAddress\.data as Hex \| undefined\) \?\? initialProfile\.agentAddress/,
     "live zero ENS addr reads must not fall back to stale demo signer addresses",
   );
+});
+
+test("run page signs task intents and submits them to the relayer", async () => {
+  await assertFile("apps/web/app/run/page.tsx");
+  await assertFile("apps/web/components/RunTaskDemo.tsx");
+  await assertFile("apps/web/lib/taskDemo.ts");
+
+  const pageSource = await readText("apps/web/app/run/page.tsx");
+  const componentSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const helperSource = await readText("apps/web/lib/taskDemo.ts");
+  const source = `${pageSource}\n${componentSource}\n${helperSource}`;
+  const requiredText = [
+    "RunTaskDemo",
+    "Agent ENS",
+    "Owner ENS",
+    "Task text",
+    "Metadata URI",
+    "Typed data",
+    "Sign and save for revocation",
+    "Submit to relayer",
+    "Transaction status",
+    "Task history"
+  ];
+
+  assert.match(componentSource, /useSignTypedData/);
+  assert.match(componentSource, /usePublicClient\(\{ chainId: Number\(props\.chainId\) \}\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /usePublicClient\(\{ chainId: SEPOLIA_CHAIN_ID \}\)/,
+    "run page public reads must use the same configured chain id as signed intents",
+  );
+  assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
+  assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
+  assert.match(componentSource, /persistForRevocation/);
+  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: true \}\)/);
+  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: false \}\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /const \{ relayerPayload \} = await signAndStoreDraft\(\)/,
+    "normal relayer submission must not overwrite the saved revocation retry payload",
+  );
+  assert.match(componentSource, /buildFreshTaskRunDraft/);
+  assert.match(componentSource, /chainNowSeconds/);
+  assert.match(componentSource, /readLatestBlockTimestamp/);
+  assert.match(componentSource, /publicClient\.getBlock\(\{ blockTag: "latest" \}\)/);
+  assert.match(componentSource, /const chainTimestamp = await readLatestBlockTimestamp\(\)/);
+  assert.match(componentSource, /const draft = buildCurrentDraft\(chainTimestamp\)/);
+  assert.doesNotMatch(
+    componentSource,
+    /currentUnixSeconds\(\)/,
+    "run page must derive signed intent expiry from chain time instead of the browser clock",
+  );
+  assert.match(componentSource, /optimisticNextNonce/);
+  assert.match(componentSource, /setOptimisticNextNonce\(BigInt\(relayerPayload\.intent\.nonce\) \+ 1n\)/);
+  assert.match(componentSource, /nextNonceRead\.refetch\(\)/);
+  assert.ok(
+    componentSource.indexOf("setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n)") <
+      componentSource.indexOf('setStatus("submitted")'),
+    "run page must advance the next nonce before allowing another submission",
+  );
+  assert.match(componentSource, /hashPolicyContractResult/);
+  assert.match(componentSource, /policyHash={livePolicyHash}/);
+  assert.doesNotMatch(componentSource, /policyHash={null}/);
+  assert.match(componentSource, /normalizedAgentName/);
+  assert.match(componentSource, /safeNamehash\(normalizedAgentName\)/);
+  assert.match(componentSource, /agentName: normalizedAgentName/);
+  assert.match(componentSource, /ownerName: normalizedOwnerName/);
+  assert.doesNotMatch(
+    componentSource,
+    /safeNamehash\(agentName\)/,
+    "run page must not query nonce, policy, or resolver data from a raw ENS input node",
+  );
+  assert.match(helperSource, /buildTaskRunDraft/);
+  assert.match(helperSource, /serializeRelayerExecutePayload/);
+  assert.match(source, /EnsProofPanel/);
+  assert.match(source, /TaskRecorded/);
+  for (const label of requiredText) {
+    assert.match(source, new RegExp(label), `${label} should be rendered`);
+  }
+});
+
+test("revoke page disables policy, updates ENS records, and retries the last payload", async () => {
+  await assertFile("apps/web/app/revoke/page.tsx");
+  await assertFile("apps/web/components/RevokeAgentPanel.tsx");
+
+  const pageSource = await readText("apps/web/app/revoke/page.tsx");
+  const panelSource = await readText("apps/web/components/RevokeAgentPanel.tsx");
+  const contractsSource = await readText("apps/web/lib/contracts.ts");
+  const source = `${pageSource}\n${panelSource}\n${contractsSource}`;
+  const requiredText = [
+    "RevokeAgentPanel",
+    "Current agent address",
+    "Revoke policy",
+    "Set status revoked",
+    "Update addr record",
+    "Retry last signed payload",
+    "Failure proof"
+  ];
+
+  assert.match(panelSource, /useWriteContract/);
+  assert.match(panelSource, /revokePolicy/);
+  assert.match(panelSource, /setText/);
+  assert.match(panelSource, /setAddr/);
+  assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
+  assert.match(panelSource, /revocationFailureProof/);
+  assert.match(panelSource, /Not a revocation proof/);
+  assert.doesNotMatch(
+    panelSource,
+    /setFailureProof\(details \|\| "Relayer rejected the old signed payload"\)/,
+    "revoke page must only capture failure proof for revocation-specific relayer errors",
+  );
+  assert.match(panelSource, /localStorage/);
+  assert.match(panelSource, /resolverRead\.isSuccess/);
+  assert.match(panelSource, /requireLiveResolverAddress/);
+  assert.match(panelSource, /return registryResolverAddress/);
+  assert.match(
+    panelSource,
+    /const resolverAddress = resolverRead\.isSuccess \? registryResolverAddress : null/,
+    "revoke proof reads must stay unknown until the live registry resolver read succeeds",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /const resolverAddress = resolverRead\.isSuccess \? registryResolverAddress : registryResolverAddress \?\? props\.resolverAddress \?\? null/,
+    "revoke proof reads must not fall back to configured resolver data while the live registry read is unsettled",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /requireAddress\(resolverAddress, "Resolver address is not configured"\)/,
+    "revoke resolver writes must wait for a live registry resolver read instead of using a fallback resolver",
+  );
+  assert.match(panelSource, /hashPolicyContractResult/);
+  assert.match(panelSource, /policyHash={livePolicyHash}/);
+  assert.doesNotMatch(panelSource, /policyHash={null}/);
+  assert.match(panelSource, /normalizeAddressInput/);
+  assert.match(panelSource, /normalizedReplacementAddress/);
+  assert.doesNotMatch(
+    panelSource,
+    /args: \[writeAgentNode, replacementAddress\]/,
+    "revoke page must not pass untrimmed address input to setAddr",
+  );
+  assert.match(panelSource, /storedPayloadMatchesAgentNode/);
+  assert.match(panelSource, /savedPayloadMatchesAgentNode/);
+  assert.match(panelSource, /proofRecoveredSigner/);
+  assert.match(panelSource, /recoveredSigner={proofRecoveredSigner}/);
+  assert.match(panelSource, /Saved payload belongs to a different agent/);
+  assert.match(panelSource, /displayRecoveredSigner/);
+  assert.match(panelSource, /storedRecoveredSigner\(lastPayload\)/);
+  assert.match(panelSource, /normalizeAddressInput\(recoveredSigner\)/);
+  assert.doesNotMatch(
+    panelSource,
+    /formatNullableHex\(lastPayload\?\.recoveredSigner\)/,
+    "revoke retry facts must validate stored signer data before formatting it as hex",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /title={lastPayload\?\.recoveredSigner/,
+    "revoke retry facts must not put arbitrary localStorage signer values into the DOM",
+  );
+  assert.match(panelSource, /lastPayload\?\.intent\?\.nonce/);
+  assert.doesNotMatch(
+    panelSource,
+    /lastPayload\?\.intent\.nonce/,
+    "revoke retry facts must not crash on malformed saved payloads without intent data",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /lastPayload\?\.recoveredSigner && liveAgentAddress && !sameAddress\(lastPayload\.recoveredSigner, liveAgentAddress\)/,
+    "revoke proof status must not compare recovered signers from mismatched saved payloads",
+  );
+  assert.ok(
+    panelSource.indexOf("storedPayloadMatchesAgentNode") < panelSource.indexOf('fetch("/api/relayer/execute"'),
+    "revoke page must verify the stored payload node before retrying the relayer call",
+  );
+  assert.match(panelSource, /normalizedAgentName/);
+  assert.match(panelSource, /safeNamehash\(normalizedAgentName\)/);
+  assert.match(panelSource, /requireAgentNode/);
+  assert.match(panelSource, /namehashEnsName\(normalizedAgentName\)/);
+  assert.doesNotMatch(
+    panelSource,
+    /safeNamehash\(agentName\)/,
+    "revoke page must not send policy or ENS record writes against a raw ENS input node",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /nonZeroAddress\(resolverRead\.data as Hex \| undefined\) \?\? props\.resolverAddress \?\? null/,
+    "revoke panel must not fall back to a configured resolver after a live zero resolver read",
+  );
+  assert.match(source, /EnsProofPanel/);
+  assert.match(contractsSource, /name: "revokePolicy"/);
+  for (const label of requiredText) {
+    assert.match(source, new RegExp(label), `${label} should be rendered`);
+  }
 });

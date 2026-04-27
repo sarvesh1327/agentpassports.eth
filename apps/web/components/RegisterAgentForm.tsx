@@ -18,6 +18,7 @@ import {
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
 } from "../lib/contracts";
+import { normalizeAddressInput } from "../lib/addressInput";
 import { buildAgentName, safeNamehash } from "../lib/ensPreview";
 import { shortenHex } from "./EnsProofPanel";
 
@@ -108,7 +109,18 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     args: [preview.agentNode],
     query: { enabled: Boolean(props.ensRegistryAddress) }
   });
-  const liveResolverAddress = nonZeroAddress(agentResolver.data as Hex | undefined) ?? props.resolverAddress ?? null;
+  const registryResolverAddress = nonZeroAddress(agentResolver.data as Hex | undefined);
+  const liveResolverAddress = agentResolver.isSuccess ? registryResolverAddress : null;
+
+  /**
+   * Returns the live ENS registry resolver so record writes are reachable through normal ENS resolution.
+   */
+  function requireLiveResolverAddress(): Hex {
+    if (!agentResolver.isSuccess) {
+      throw new Error("Waiting for live resolver lookup");
+    }
+    return requireAddress(registryResolverAddress, "Resolver is not configured for record writes");
+  }
 
   /**
    * Submits resolver and executor writes in the order required by the demo registration flow.
@@ -121,7 +133,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
     try {
       validateRegistrationInput({ agentLabel: normalizedAgentLabel, ownerNode: preview.ownerNode });
-      const resolverAddress = requireAddress(liveResolverAddress, "Resolver is not configured for record writes");
+      const resolverAddress = requireLiveResolverAddress();
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
       const taskLogAddress = requireAddress(props.taskLogAddress, "TaskLog address is not configured");
       const submitted: Hex[] = [];
@@ -129,7 +141,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       if (!isConnected || !connectedWallet) {
         throw new Error("Connect a wallet before submitting registration");
       }
-      if (!isAddress(agentAddress)) {
+      const normalizedAgentAddress = normalizeAddressInput(agentAddress);
+      if (!normalizedAgentAddress) {
         throw new Error("Enter a valid agent address before submitting registration");
       }
 
@@ -138,7 +151,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           address: resolverAddress,
           abi: PUBLIC_RESOLVER_ABI,
           functionName: "setAddr",
-          args: [preview.agentNode, agentAddress as Hex]
+          args: [preview.agentNode, normalizedAgentAddress]
         })
       );
       for (const record of preview.textRecords) {
@@ -368,7 +381,7 @@ function buildRegisterPreview(input: {
       { key: "agent.policy.uri", value: input.policyUri || "Pending metadata URI" },
       { key: "agent.policy.hash", value: policyHash ?? "Pending policy target" },
       { key: "agent.executor", value: input.executorAddress ?? "Pending executor" },
-      { key: "agent.status", value: isAddress(input.agentAddress) ? "active" : "draft" },
+      { key: "agent.status", value: normalizeAddressInput(input.agentAddress) ? "active" : "draft" },
       { key: "agent.description", value: normalizedOwnerName ? `${normalizedOwnerName} onchain assistant` : "Pending owner ENS" }
     ]
   };
@@ -400,13 +413,6 @@ function safeComputeSubnode(ownerNode: Hex, agentLabel: string): Hex {
  */
 function safeBigInt(value: string): bigint {
   return /^\d+$/u.test(value.trim()) ? BigInt(value.trim()) : 0n;
-}
-
-/**
- * Checks whether a form value is a complete EVM address.
- */
-function isAddress(value: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/u.test(value.trim());
 }
 
 /**
