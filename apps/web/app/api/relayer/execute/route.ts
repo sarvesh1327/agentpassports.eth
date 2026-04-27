@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import type { Hex } from "@agentpassport/config";
+import { ZERO_ADDRESS, chainNameForId, type Hex } from "@agentpassport/config";
 import {
   ADDR_RESOLVER_ABI,
   AGENT_POLICY_EXECUTOR_ABI,
@@ -17,7 +17,6 @@ import {
 } from "../../../../lib/relayer/inflight";
 import { reconcileBroadcastReceipt } from "../../../../lib/relayer/reconcile";
 import {
-  ZERO_ADDRESS,
   parseRelayerExecuteRequest,
   validateRelayerExecution
 } from "../../../../lib/relayer/validation";
@@ -175,7 +174,7 @@ function relayerChain(config: RelayerConfig) {
   const id = Number(config.chainId);
   return defineChain({
     id,
-    name: id === 11155111 ? "Sepolia" : `Chain ${id}`,
+    name: chainNameForId(config.chainId),
     nativeCurrency: {
       decimals: 18,
       name: "Ether",

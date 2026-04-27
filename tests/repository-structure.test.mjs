@@ -85,6 +85,18 @@ test("workspace metadata defines a strict pnpm monorepo", async () => {
   assert.match(gitignore, /\.env/);
 });
 
+test("web typecheck script generates Next.js route types before running tsc", async () => {
+  const webPackageJson = JSON.parse(await readText("apps/web/package.json"));
+  const typecheckScript = webPackageJson.scripts?.typecheck ?? "";
+
+  assert.match(typecheckScript, /next typegen/);
+  assert.match(typecheckScript, /tsc --noEmit/);
+  assert.ok(
+    typecheckScript.indexOf("next typegen") < typecheckScript.indexOf("tsc --noEmit"),
+    "typecheck must not depend on a previously built .next/types directory",
+  );
+});
+
 test("project scaffold includes the web app, contracts project, agent runner, and shared config package", async () => {
   await assertDirectory("apps/web/app");
   await assertDirectory("apps/web/lib");
@@ -159,6 +171,7 @@ test("shared config exposes Sepolia address constants and README setup instructi
   const readme = await readText("README.md");
 
   assert.match(constants, /SEPOLIA_CHAIN_ID = 11155111/);
+  assert.match(constants, /function chainNameForId/);
   assert.match(constants, /ENS_REGISTRY_ADDRESS/);
   assert.match(constants, /NAME_WRAPPER_ADDRESS/);
   assert.match(constants, /PUBLIC_RESOLVER_ADDRESS/);
@@ -169,6 +182,26 @@ test("shared config exposes Sepolia address constants and README setup instructi
   assert.match(readme, /pnpm test/);
   assert.match(readme, /forge test/);
   assert.match(readme, /pnpm --filter @agentpassport\/web dev/);
+});
+
+test("runtime chain labels are derived from shared constants instead of raw Sepolia literals", async () => {
+  const runnerSource = await readText("agent-runner/src/runTask.ts");
+  const relayerSource = await readText("apps/web/app/api/relayer/execute/route.ts");
+
+  for (const source of [runnerSource, relayerSource]) {
+    assert.match(source, /chainNameForId/);
+    assert.doesNotMatch(source, /11155111\s*\?\s*"Sepolia"/);
+  }
+});
+
+test("web runtime modules reuse the shared zero address constant", async () => {
+  const contractsSource = await readText("apps/web/lib/contracts.ts");
+  const validationSource = await readText("apps/web/lib/relayer/validation.ts");
+
+  for (const source of [contractsSource, validationSource]) {
+    assert.match(source, /ZERO_ADDRESS/);
+    assert.doesNotMatch(source, /export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"/);
+  }
 });
 
 test("shared config keeps utilities split by responsibility", async () => {

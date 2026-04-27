@@ -251,6 +251,7 @@ test("relayer contract adapters map executor reads into validation input", async
 
 test("relayer in-flight guard prevents duplicate broadcasts for the same agent nonce", async () => {
   const {
+    ACQUIRED_PENDING_TTL_MS,
     BROADCAST_PENDING_TTL_MS,
     INTENT_SUBMISSION_TTL_MS,
     markIntentSubmissionSubmitted,
@@ -265,6 +266,15 @@ test("relayer in-flight guard prevents duplicate broadcasts for the same agent n
   assert.deepEqual(await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_001 }), {
     status: "pending",
   });
+  assert.equal(
+    (await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 + ACQUIRED_PENDING_TTL_MS + 1 }))
+      .status,
+    "acquired",
+  );
+  resetIntentSubmissionCache();
+
+  const acquiredBeforeBroadcast = await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 });
+  assert.equal(acquiredBeforeBroadcast.status, "acquired");
   assert.deepEqual(
     await reserveIntentSubmission({ agentNode: AGENT_NODE, nonce: 0n, nowMs: 1_000 + INTENT_SUBMISSION_TTL_MS + 1 }),
     {

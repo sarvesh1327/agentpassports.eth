@@ -64,6 +64,11 @@ export type StoredSignedTaskPayload = SerializableRelayerExecutePayload & {
   typedData: ReturnType<typeof serializeTypedData>;
 };
 
+export type TaskAuthorizationResult = {
+  failureReason?: string;
+  status: "fail" | "pass" | "unknown";
+};
+
 type SignedTaskPayloadStorage = {
   setItem(key: string, value: string): void;
 };
@@ -207,6 +212,35 @@ export function recoverTaskSigner(digest: Hex, signature: Hex): Hex {
 }
 
 /**
+ * Computes the proof-panel authorization state from live ENS signer and policy facts.
+ */
+export function taskAuthorizationResult(input: {
+  liveAgentAddress?: Hex | null;
+  policyEnabled?: boolean;
+  recoveredSigner?: Hex | null;
+}): TaskAuthorizationResult {
+  if (!input.recoveredSigner || !input.liveAgentAddress) {
+    return { status: "unknown" };
+  }
+  if (!sameAddress(input.recoveredSigner, input.liveAgentAddress)) {
+    return {
+      failureReason: "Recovered signer does not match ENS addr(agent)",
+      status: "fail"
+    };
+  }
+  if (input.policyEnabled === undefined) {
+    return { status: "unknown" };
+  }
+  if (!input.policyEnabled) {
+    return {
+      failureReason: "Policy is disabled",
+      status: "fail"
+    };
+  }
+  return { status: "pass" };
+}
+
+/**
  * Converts typed data to a JSON-safe object for display and localStorage.
  */
 export function serializeTypedData(typedData: TaskIntentTypedData) {
@@ -254,6 +288,10 @@ function normalizeRequiredText(value: string, label: string): string {
     throw new Error(`${label} is required`);
   }
   return normalized;
+}
+
+function sameAddress(left: Hex, right: Hex): boolean {
+  return left.toLowerCase() === right.toLowerCase();
 }
 
 function browserStorage(): SignedTaskPayloadStorage | null {

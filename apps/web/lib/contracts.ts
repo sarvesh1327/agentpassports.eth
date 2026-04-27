@@ -1,6 +1,6 @@
-import type { Hex } from "@agentpassport/config";
+import { ZERO_ADDRESS, type Hex } from "@agentpassport/config";
 
-export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+export { ZERO_ADDRESS } from "@agentpassport/config";
 
 export const AGENT_TEXT_RECORD_KEYS = [
   "agent.v",

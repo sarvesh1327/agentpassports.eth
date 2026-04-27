@@ -72,6 +72,60 @@ test("task demo fresh draft derives expiry from the current signing time", async
   assert.equal(draft.intent.expiresAt, 1_800_000_600n);
 });
 
+test("task authorization proof requires matching signer and enabled policy", async () => {
+  const { taskAuthorizationResult } = await import("../apps/web/lib/taskDemo.ts");
+  const signer = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const sameSignerDifferentCase = "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const otherSigner = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  assert.deepEqual(
+    taskAuthorizationResult({
+      liveAgentAddress: sameSignerDifferentCase,
+      policyEnabled: true,
+      recoveredSigner: signer
+    }),
+    { status: "pass" }
+  );
+  assert.deepEqual(
+    taskAuthorizationResult({
+      liveAgentAddress: otherSigner,
+      policyEnabled: true,
+      recoveredSigner: signer
+    }),
+    {
+      failureReason: "Recovered signer does not match ENS addr(agent)",
+      status: "fail"
+    }
+  );
+  assert.deepEqual(
+    taskAuthorizationResult({
+      liveAgentAddress: signer,
+      policyEnabled: false,
+      recoveredSigner: signer
+    }),
+    {
+      failureReason: "Policy is disabled",
+      status: "fail"
+    }
+  );
+  assert.deepEqual(
+    taskAuthorizationResult({
+      liveAgentAddress: signer,
+      policyEnabled: undefined,
+      recoveredSigner: signer
+    }),
+    { status: "unknown" }
+  );
+  assert.deepEqual(
+    taskAuthorizationResult({
+      liveAgentAddress: null,
+      policyEnabled: true,
+      recoveredSigner: signer
+    }),
+    { status: "unknown" }
+  );
+});
+
 test("stored signed payload hashes the normalized owner ENS name", async () => {
   const { buildStoredSignedTaskPayload, buildTaskRunDraft } = await import("../apps/web/lib/taskDemo.ts");
   const { namehashEnsName } = await import("../packages/config/src/index.ts");

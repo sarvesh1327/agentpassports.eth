@@ -1,10 +1,11 @@
-import type { Hex } from "./types.ts";
+import type { Hex, LatestBlock } from "./types.ts";
 import { ZERO_BYTES32, concatBytes, hexToBytes, normalizeAddress, normalizeBytes32, utf8ToBytes } from "./hex.ts";
 import { keccak256Hex } from "./keccak.ts";
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
 export type ContractReadClient = {
+  getBlock?: (parameters: { blockTag: "latest" }) => Promise<LatestBlock>;
   readContract(parameters: ContractReadParameters): Promise<unknown>;
 };
 

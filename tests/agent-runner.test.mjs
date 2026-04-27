@@ -195,6 +195,54 @@ test("agent runner resolves ENS signer, reads nonce, submits intent, and saves p
   assert.equal(savedPayloads[0][1].signature, result.signed.signature);
 });
 
+test("agent runner derives intent expiry from the latest chain block when no clock override is provided", async () => {
+  const { createPrivateKeyAgentSigner, runAgentTask } = await import("../agent-runner/src/index.ts");
+  const signer = createPrivateKeyAgentSigner(AGENT_PRIVATE_KEY);
+  const client = {
+    async getBlock(parameters) {
+      assert.deepEqual(parameters, { blockTag: "latest" });
+      return { timestamp: 1_800_000_000n };
+    },
+    async readContract(call) {
+      if (call.functionName === "resolver") {
+        return RESOLVER_ADDRESS;
+      }
+      if (call.functionName === "addr") {
+        return signer.address;
+      }
+      if (call.functionName === "nextNonce") {
+        return 3n;
+      }
+      throw new Error(`Unexpected read ${call.functionName}`);
+    },
+  };
+
+  const result = await runAgentTask({
+    client,
+    config: {
+      agentName: "assistant.alice.eth",
+      agentPrivateKey: AGENT_PRIVATE_KEY,
+      chainId: 11155111n,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      executorAddress: EXECUTOR_ADDRESS,
+      intentTtlSeconds: 600n,
+      metadataURI: "ipfs://demo",
+      ownerName: "alice.eth",
+      relayerUrl: RELAYER_URL,
+      rpcUrl: "http://127.0.0.1:8545",
+      taskDescription: "Record wallet health check",
+      taskLogAddress: TASK_LOG_ADDRESS,
+    },
+    signer: {
+      address: AGENT_ADDRESS,
+      signTypedData: signer.signTypedData,
+    },
+    submitRelayer: async () => ({ status: "submitted", txHash: TX_HASH }),
+  });
+
+  assert.equal(result.plan.intent.expiresAt, 1_800_000_600n);
+});
+
 test("agent runner does not fail a submitted task when payload persistence fails", async () => {
   const { createPrivateKeyAgentSigner, runAgentTask } = await import("../agent-runner/src/index.ts");
   const signer = createPrivateKeyAgentSigner(AGENT_PRIVATE_KEY);

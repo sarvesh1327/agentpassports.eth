@@ -2,15 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
-import {
-  SEPOLIA_CHAIN_ID,
-  buildPolicyMetadata,
-  computeSubnode,
-  hashPolicyMetadata,
-  namehashEnsName,
-  taskLogRecordTaskSelector,
-  type Hex
-} from "@agentpassport/config";
+import { taskLogRecordTaskSelector, type Hex } from "@agentpassport/config";
 import { useAccount, useEnsAddress, useReadContract, useWriteContract } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -19,10 +11,16 @@ import {
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeAddressInput } from "../lib/addressInput";
-import { buildAgentName, safeNamehash } from "../lib/ensPreview";
+import {
+  buildRegisterPreview,
+  requireAddress,
+  safeBigInt,
+  validateRegistrationInput
+} from "../lib/registerAgent";
 import { shortenHex } from "./EnsProofPanel";
 
 export type RegisterAgentFormProps = {
+  chainId: bigint;
   defaultAgentAddress?: Hex | null;
   defaultAgentLabel: string;
   defaultGasBudgetWei: string;
@@ -33,17 +31,14 @@ export type RegisterAgentFormProps = {
   defaultPolicyUri: string;
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
-  resolverAddress?: Hex | null;
   taskLogAddress?: Hex | null;
 };
 
-type RegisterPreview = {
-  agentName: string;
-  agentNode: Hex;
-  gasBudgetWei: string;
-  ownerNode: Hex;
-  policyHash: Hex | null;
-  textRecords: readonly { key: string; value: string }[];
+type RegistrationTransactionInput = {
+  executorAddress: Hex;
+  normalizedAgentAddress: Hex;
+  resolverAddress: Hex;
+  taskLogAddress: Hex;
 };
 
 /**
@@ -91,7 +86,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const normalizedAgentLabel = agentLabel.trim().toLowerCase();
   const agentPageHref = `/agent/${encodeURIComponent(preview.agentName)}`;
   const ownerResolvedAddress = useEnsAddress({
-    chainId: SEPOLIA_CHAIN_ID,
+    chainId: Number(props.chainId),
     name: normalizedOwnerName || undefined,
     query: { enabled: Boolean(normalizedOwnerName) }
   });
@@ -123,7 +118,101 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   }
 
   /**
-   * Submits resolver and executor writes in the order required by the demo registration flow.
+   * Validates form and environment state before any wallet transaction is requested.
+   */
+  function readSubmissionInput(): RegistrationTransactionInput {
+    validateRegistrationInput({ agentLabel: normalizedAgentLabel, ownerNode: preview.ownerNode });
+
+    if (!isConnected || !connectedWallet) {
+      throw new Error("Connect a wallet before submitting registration");
+    }
+
+    const normalizedAgentAddress = normalizeAddressInput(agentAddress);
+    if (!normalizedAgentAddress) {
+      throw new Error("Enter a valid agent address before submitting registration");
+    }
+
+    return {
+      executorAddress: requireAddress(props.executorAddress, "Executor address is not configured"),
+      normalizedAgentAddress,
+      resolverAddress: requireLiveResolverAddress(),
+      taskLogAddress: requireAddress(props.taskLogAddress, "TaskLog address is not configured")
+    };
+  }
+
+  /**
+   * Submits every registration transaction in the order required by the demo flow.
+   */
+  async function submitRegistrationTransactions(input: RegistrationTransactionInput): Promise<Hex[]> {
+    return [
+      ...(await writeResolverRecords(input)),
+      await writeExecutorPolicy(input),
+      await writeGasBudgetDeposit(input)
+    ];
+  }
+
+  /**
+   * Writes the ENS addr record and metadata records through the live registry resolver.
+   */
+  async function writeResolverRecords(input: RegistrationTransactionInput): Promise<Hex[]> {
+    const submitted = [
+      await writeContractAsync({
+        address: input.resolverAddress,
+        abi: PUBLIC_RESOLVER_ABI,
+        functionName: "setAddr",
+        args: [preview.agentNode, input.normalizedAgentAddress]
+      })
+    ];
+
+    for (const record of preview.textRecords) {
+      submitted.push(
+        await writeContractAsync({
+          address: input.resolverAddress,
+          abi: PUBLIC_RESOLVER_ABI,
+          functionName: "setText",
+          args: [preview.agentNode, record.key, record.value]
+        })
+      );
+    }
+
+    return submitted;
+  }
+
+  /**
+   * Creates the executor policy that limits this agent to TaskLog.recordTask.
+   */
+  async function writeExecutorPolicy(input: RegistrationTransactionInput): Promise<Hex> {
+    return writeContractAsync({
+      address: input.executorAddress,
+      abi: AGENT_POLICY_EXECUTOR_ABI,
+      functionName: "setPolicy",
+      args: [
+        preview.ownerNode,
+        normalizedAgentLabel,
+        input.taskLogAddress,
+        taskLogRecordTaskSelector(),
+        safeBigInt(props.defaultMaxValueWei),
+        safeBigInt(props.defaultMaxGasReimbursementWei),
+        safeBigInt(props.defaultPolicyExpiresAt)
+      ]
+    });
+  }
+
+  /**
+   * Funds the policy budget after policy creation succeeds.
+   */
+  async function writeGasBudgetDeposit(input: RegistrationTransactionInput): Promise<Hex> {
+    return writeContractAsync({
+      address: input.executorAddress,
+      abi: AGENT_POLICY_EXECUTOR_ABI,
+      functionName: "depositGasBudget",
+      args: [preview.agentNode],
+      value: safeBigInt(preview.gasBudgetWei)
+    });
+  }
+
+  /**
+   * Validates input, requests wallet writes, and records submitted transaction hashes.
    */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -132,64 +221,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     setSubmittedTxHashes([]);
 
     try {
-      validateRegistrationInput({ agentLabel: normalizedAgentLabel, ownerNode: preview.ownerNode });
-      const resolverAddress = requireLiveResolverAddress();
-      const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
-      const taskLogAddress = requireAddress(props.taskLogAddress, "TaskLog address is not configured");
-      const submitted: Hex[] = [];
-
-      if (!isConnected || !connectedWallet) {
-        throw new Error("Connect a wallet before submitting registration");
-      }
-      const normalizedAgentAddress = normalizeAddressInput(agentAddress);
-      if (!normalizedAgentAddress) {
-        throw new Error("Enter a valid agent address before submitting registration");
-      }
-
-      submitted.push(
-        await writeContractAsync({
-          address: resolverAddress,
-          abi: PUBLIC_RESOLVER_ABI,
-          functionName: "setAddr",
-          args: [preview.agentNode, normalizedAgentAddress]
-        })
-      );
-      for (const record of preview.textRecords) {
-        submitted.push(
-          await writeContractAsync({
-            address: resolverAddress,
-            abi: PUBLIC_RESOLVER_ABI,
-            functionName: "setText",
-            args: [preview.agentNode, record.key, record.value]
-          })
-        );
-      }
-      submitted.push(
-        await writeContractAsync({
-          address: executorAddress,
-          abi: AGENT_POLICY_EXECUTOR_ABI,
-          functionName: "setPolicy",
-          args: [
-            preview.ownerNode,
-            normalizedAgentLabel,
-            taskLogAddress,
-            taskLogRecordTaskSelector(),
-            safeBigInt(props.defaultMaxValueWei),
-            safeBigInt(props.defaultMaxGasReimbursementWei),
-            safeBigInt(props.defaultPolicyExpiresAt)
-          ]
-        })
-      );
-      submitted.push(
-        await writeContractAsync({
-          address: executorAddress,
-          abi: AGENT_POLICY_EXECUTOR_ABI,
-          functionName: "depositGasBudget",
-          args: [preview.agentNode],
-          value: safeBigInt(preview.gasBudgetWei)
-        })
-      );
-
+      const submitted = await submitRegistrationTransactions(readSubmissionInput());
       setSubmittedTxHashes(submitted);
       setStatus("submitted");
       setStatusMessage("Registration submitted");
@@ -247,7 +279,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           </label>
           <label>
             <span>Gas budget</span>
-            <input name="gasBudgetWei" onChange={(event) => setGasBudgetWei(event.target.value)} value={gasBudgetWei} />
+            <input
+              name="gasBudgetWei"
+              onChange={(event) => setGasBudgetWei(event.target.value)}
+              value={gasBudgetWei}
+            />
           </label>
           <label>
             <span>Max reimbursement</span>
@@ -263,13 +299,29 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         </div>
         <dl className="fact-grid">
           <PreviewRow label="Agent ENS" value={preview.agentName} />
-          <PreviewRow label="Owner resolved address" title={ownerResolvedAddress.data ?? undefined} value={formatNullableHex(ownerResolvedAddress.data)} />
-          <PreviewRow label="Owner manager" title={(ownerManager.data as Hex | undefined) ?? undefined} value={formatNullableHex(ownerManager.data as Hex | undefined)} />
+          <PreviewRow
+            label="Owner resolved address"
+            title={ownerResolvedAddress.data ?? undefined}
+            value={formatNullableHex(ownerResolvedAddress.data)}
+          />
+          <PreviewRow
+            label="Owner manager"
+            title={(ownerManager.data as Hex | undefined) ?? undefined}
+            value={formatNullableHex(ownerManager.data as Hex | undefined)}
+          />
           <PreviewRow label="Connected wallet" title={connectedWallet} value={formatNullableHex(connectedWallet)} />
           <PreviewRow label="Owner node" title={preview.ownerNode} value={shortenHex(preview.ownerNode)} />
           <PreviewRow label="Agent node" title={preview.agentNode} value={shortenHex(preview.agentNode)} />
-          <PreviewRow label="Resolver" title={liveResolverAddress ?? undefined} value={formatNullableHex(liveResolverAddress)} />
-          <PreviewRow label="Policy hash" title={preview.policyHash ?? undefined} value={formatNullableHex(preview.policyHash)} />
+          <PreviewRow
+            label="Resolver"
+            title={liveResolverAddress ?? undefined}
+            value={formatNullableHex(liveResolverAddress)}
+          />
+          <PreviewRow
+            label="Policy hash"
+            title={preview.policyHash ?? undefined}
+            value={formatNullableHex(preview.policyHash)}
+          />
           <PreviewRow label="Gas budget" value={`${preview.gasBudgetWei} wei`} />
         </dl>
       </section>
@@ -334,100 +386,8 @@ function PreviewRow(props: { label: string; title?: string; value: string }) {
 }
 
 /**
- * Derives the node, policy hash, and text records from current form values.
- */
-function buildRegisterPreview(input: {
-  agentAddress: string;
-  agentLabel: string;
-  executorAddress?: Hex | null;
-  gasBudgetWei: string;
-  maxGasReimbursementWei: string;
-  maxValueWei: string;
-  ownerName: string;
-  policyExpiresAt: string;
-  policyUri: string;
-  taskLogAddress?: Hex | null;
-}): RegisterPreview {
-  const normalizedAgentLabel = input.agentLabel.trim().toLowerCase();
-  const normalizedOwnerName = input.ownerName.trim().toLowerCase();
-  const agentName = buildAgentName(normalizedAgentLabel, normalizedOwnerName);
-  const ownerNode = safeNamehash(normalizedOwnerName);
-  const agentNode = normalizedAgentLabel ? safeComputeSubnode(ownerNode, normalizedAgentLabel) : safeNamehash(agentName);
-  const policyHash = input.taskLogAddress
-    ? hashPolicyMetadata(
-        buildPolicyMetadata({
-          agentNode,
-          expiresAt: safeBigInt(input.policyExpiresAt),
-          maxGasReimbursementWei: safeBigInt(input.maxGasReimbursementWei),
-          maxValueWei: safeBigInt(input.maxValueWei),
-          ownerNode,
-          selector: taskLogRecordTaskSelector(),
-          target: input.taskLogAddress
-        })
-      )
-    : null;
-
-  return {
-    agentName,
-    agentNode,
-    gasBudgetWei: safeBigInt(input.gasBudgetWei).toString(),
-    ownerNode,
-    policyHash,
-    textRecords: [
-      { key: "agent.v", value: "1" },
-      { key: "agent.owner", value: normalizedOwnerName || "Pending owner ENS" },
-      { key: "agent.kind", value: "personal-assistant" },
-      { key: "agent.capabilities", value: "task-log,sponsored-execution" },
-      { key: "agent.policy.uri", value: input.policyUri || "Pending metadata URI" },
-      { key: "agent.policy.hash", value: policyHash ?? "Pending policy target" },
-      { key: "agent.executor", value: input.executorAddress ?? "Pending executor" },
-      { key: "agent.status", value: normalizeAddressInput(input.agentAddress) ? "active" : "draft" },
-      { key: "agent.description", value: normalizedOwnerName ? `${normalizedOwnerName} onchain assistant` : "Pending owner ENS" }
-    ]
-  };
-}
-
-/**
- * Rejects inputs that would make resolver writes and policy writes target different ENS nodes.
- */
-function validateRegistrationInput(input: { agentLabel: string; ownerNode: Hex }): void {
-  if (!input.agentLabel) {
-    throw new Error("Agent label is required");
-  }
-  computeSubnode(input.ownerNode, input.agentLabel);
-}
-
-/**
- * Computes a Solidity-compatible subnode while tolerating partially typed labels.
- */
-function safeComputeSubnode(ownerNode: Hex, agentLabel: string): Hex {
-  try {
-    return computeSubnode(ownerNode, agentLabel);
-  } catch {
-    return namehashEnsName("");
-  }
-}
-
-/**
- * Parses numeric form fields into bigint values without throwing during editing.
- */
-function safeBigInt(value: string): bigint {
-  return /^\d+$/u.test(value.trim()) ? BigInt(value.trim()) : 0n;
-}
-
-/**
  * Formats nullable hex values for the dense preview grid.
  */
 function formatNullableHex(value?: Hex | null): string {
   return value ? shortenHex(value) : "Unknown";
-}
-
-/**
- * Forces required contract addresses to be configured before wallet writes begin.
- */
-function requireAddress(value: Hex | null | undefined, message: string): Hex {
-  if (!value) {
-    throw new Error(message);
-  }
-  return value;
 }

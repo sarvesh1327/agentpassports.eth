@@ -8,12 +8,13 @@ import type {
   TaskIntentTypedData
 } from "../../packages/config/src/index.ts";
 import {
+  chainNameForId,
   ENS_REGISTRY_ADDRESS,
   getAgentAddress,
   getResolverAddress,
   namehashEnsName
 } from "../../packages/config/src/index.ts";
-import { assertHex, assertUint256, normalizeAddress } from "../../packages/config/src/hex.ts";
+import { assertHex, assertUint256, assertUint64, normalizeAddress } from "../../packages/config/src/hex.ts";
 import type { RunnerConfig } from "./config.ts";
 import { buildTaskPlan, type TaskPlan } from "./planTask.ts";
 import { signTaskIntent, type SignedTaskIntent, type TaskIntentSigner } from "./signIntent.ts";
@@ -85,7 +86,7 @@ const EXECUTOR_NONCE_ABI = [
 export function createRunnerPublicClient(config: RunnerConfig): ContractReadClient {
   const chain = defineChain({
     id: Number(config.chainId),
-    name: Number(config.chainId) === 11155111 ? "Sepolia" : `Chain ${config.chainId}`,
+    name: chainNameForId(config.chainId),
     nativeCurrency: {
       decimals: 18,
       name: "Ether",
@@ -151,7 +152,7 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
   }
 
   const nonce = await readExecutorNonce(client, config.executorAddress, agentNode);
-  const now = input.now ?? BigInt(Math.floor(Date.now() / 1000));
+  const now = await readSigningTimestamp(client, input.now);
   const plan = buildTaskPlan({
     agentNode,
     expiresAt: now + config.intentTtlSeconds,
@@ -285,6 +286,21 @@ async function readExecutorNonce(client: ContractReadClient, executorAddress: He
     throw new Error("nextNonce must return uint256");
   }
   return assertUint256(nonce);
+}
+
+async function readSigningTimestamp(client: ContractReadClient, nowOverride?: bigint): Promise<bigint> {
+  if (nowOverride !== undefined) {
+    return assertUint64(nowOverride);
+  }
+  if (!client.getBlock) {
+    throw new Error("Contract read client must support getBlock when no signing timestamp override is provided");
+  }
+
+  const block = await client.getBlock({ blockTag: "latest" });
+  if (typeof block.timestamp !== "bigint") {
+    throw new Error("latest block must include a bigint timestamp");
+  }
+  return assertUint64(block.timestamp);
 }
 
 function serializeRelayerPayload(payload: RelayerPayload) {

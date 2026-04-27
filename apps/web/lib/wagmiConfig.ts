@@ -1,11 +1,9 @@
-import { SEPOLIA_CHAIN_ID } from "@agentpassport/config";
 import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { sepolia } from "wagmi/chains";
 import { webEnv } from "./env";
+import { readConfiguredChainId } from "./publicChain";
 import { normalizePublicRpcUrl } from "./rpcUrl";
-
-const CHAIN_ID_ENV_NAME = "NEXT_PUBLIC_CHAIN_ID";
 
 export const appChain = sepolia;
 
@@ -13,11 +11,12 @@ export const appChain = sepolia;
  * Reads the public chain setting and fails loudly instead of silently switching away from Sepolia.
  */
 export function requireSepoliaChainId(): number {
-  const configuredChainId = Number(webEnv.chainId ?? SEPOLIA_CHAIN_ID);
-  if (configuredChainId !== SEPOLIA_CHAIN_ID) {
-    throw new Error(`${CHAIN_ID_ENV_NAME} must be ${SEPOLIA_CHAIN_ID} for the current MVP`);
-  }
-  return configuredChainId;
+  return readConfiguredChainId(webEnv.chainId);
+}
+
+const configuredChainId = requireSepoliaChainId();
+if (configuredChainId !== appChain.id) {
+  throw new Error("NEXT_PUBLIC_CHAIN_ID must match the configured wagmi chain");
 }
 
 /**

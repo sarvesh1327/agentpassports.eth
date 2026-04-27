@@ -1,5 +1,6 @@
 import type { Hex, TaskIntentMessage } from "../../../../packages/config/src/index.ts";
 import {
+  ZERO_ADDRESS,
   hashCallData,
   hashTaskIntent,
   recoverSignerAddress
@@ -19,8 +20,6 @@ import type {
   RelayerPrecheckContext,
   ValidatedRelayerExecution
 } from "./types.ts";
-
-export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 /**
  * Normalizes a JSON relayer request into the bigint and hex types used onchain.

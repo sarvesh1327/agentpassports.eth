@@ -98,6 +98,7 @@ test("register page renders the ENS registration workflow", async () => {
 
   const pageSource = await readText("apps/web/app/register/page.tsx");
   const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const helperSource = await readText("apps/web/lib/registerAgent.ts");
   const requiredText = [
     "Owner ENS",
     "Agent label",
@@ -119,9 +120,9 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(pageSource, /buildDemoAgentProfile/);
   assert.match(formSource, /export type RegisterAgentFormProps/);
   assert.match(formSource, /useState/);
-  assert.match(formSource, /namehashEnsName/);
-  assert.match(formSource, /computeSubnode/);
-  assert.match(formSource, /agent\.policy\.hash/);
+  assert.match(helperSource, /safeNamehash/);
+  assert.match(helperSource, /computeSubnode/);
+  assert.match(`${formSource}\n${helperSource}`, /agent\.policy\.hash/);
   assert.match(formSource, /setPolicy/);
   assert.match(formSource, /depositGasBudget/);
   for (const label of requiredText) {
@@ -131,6 +132,7 @@ test("register page renders the ENS registration workflow", async () => {
 
 test("agent passport page exposes route-level ENS profile sections", async () => {
   await assertFile("apps/web/app/agent/[name]/page.tsx");
+  await assertFile("apps/web/components/TaskHistoryPanel.tsx");
 
   const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
   const demoSource = await readText("apps/web/lib/demoProfile.ts");
@@ -181,10 +183,13 @@ test("web layout configures wallet providers for Sepolia", async () => {
 
 test("register form resolves ENS ownership and submits wallet transactions", async () => {
   const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const helperSource = await readText("apps/web/lib/registerAgent.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
 
   assert.match(formSource, /useAccount/);
   assert.match(formSource, /useEnsAddress/);
+  assert.match(formSource, /chainId: Number\(props\.chainId\)/);
+  assert.doesNotMatch(formSource, /chainId: SEPOLIA_CHAIN_ID/);
   assert.match(formSource, /useReadContract/);
   assert.match(formSource, /useWriteContract/);
   assert.match(formSource, /ownerResolvedAddress/);
@@ -194,17 +199,26 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(formSource, /setText/);
   assert.match(formSource, /setPolicy/);
   assert.match(formSource, /depositGasBudget/);
+  assert.match(formSource, /submitRegistrationTransactions/);
+  assert.match(formSource, /writeResolverRecords/);
+  assert.match(formSource, /writeExecutorPolicy/);
+  assert.match(formSource, /writeGasBudgetDeposit/);
+  assert.match(formSource, /from "\.\.\/lib\/registerAgent"/);
   assert.match(formSource, /validateRegistrationInput/);
-  assert.match(formSource, /Agent label is required/);
+  assert.match(helperSource, /export function buildRegisterPreview/);
+  assert.match(helperSource, /export function validateRegistrationInput/);
+  assert.match(helperSource, /Agent label is required/);
   assert.match(formSource, /normalizeAddressInput/);
   assert.match(formSource, /normalizedAgentAddress/);
+  assert.doesNotMatch(formSource, /buildPolicyMetadata/);
+  assert.doesNotMatch(formSource, /function buildRegisterPreview/);
   assert.doesNotMatch(
     formSource,
     /args: \[preview\.agentNode, agentAddress as Hex\]/,
     "registration should not pass untrimmed address input to setAddr",
   );
   assert.ok(
-    formSource.indexOf("validateRegistrationInput") < formSource.indexOf("setAddr"),
+    formSource.indexOf("validateRegistrationInput") < formSource.indexOf("submitRegistrationTransactions"),
     "registration input should be validated before resolver writes",
   );
   assert.match(formSource, /agentResolver\.isSuccess/);
@@ -231,19 +245,33 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
 
 test("agent page reads live ENS, policy, gas budget, and task history", async () => {
   await assertFile("apps/web/components/AgentProfileView.tsx");
+  await assertFile("apps/web/lib/agentProfileDisplay.ts");
 
   const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
   const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
+  const displaySource = await readText("apps/web/lib/agentProfileDisplay.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
-  const source = `${pageSource}\n${viewSource}\n${contractsSource}`;
+  const source = `${pageSource}\n${viewSource}\n${historyPanelSource}\n${displaySource}\n${contractsSource}`;
 
   assert.match(pageSource, /serializeAgentProfile/);
   assert.match(viewSource, /useReadContract/);
   assert.match(viewSource, /useReadContracts/);
   assert.match(viewSource, /usePublicClient/);
+  assert.match(viewSource, /usePublicClient\(\{ chainId: Number\(initialProfile\.chainId\) \}\)/);
+  assert.doesNotMatch(viewSource, /usePublicClient\(\{ chainId: SEPOLIA_CHAIN_ID \}\)/);
   assert.match(viewSource, /getLogs/);
   assert.match(viewSource, /TaskRecorded/);
+  assert.match(viewSource, /from "\.\.\/lib\/taskHistory"/);
+  assert.match(viewSource, /from "\.\/TaskHistoryPanel"/);
+  assert.match(viewSource, /TASK_HISTORY_FROM_BLOCK/);
+  assert.match(viewSource, /taskFromLog/);
+  assert.doesNotMatch(viewSource, /fromBlock: 0n/);
+  assert.doesNotMatch(viewSource, /function taskFromLog/);
+  assert.doesNotMatch(viewSource, /function TaskHistoryPanel/);
   assert.match(viewSource, /AGENT_TEXT_RECORD_KEYS/);
+  assert.match(historyPanelSource, /export function TaskHistoryPanel/);
+  assert.match(historyPanelSource, /emptyDescription/);
   assert.match(source, /ENS_REGISTRY_ABI/);
   assert.match(source, /PUBLIC_RESOLVER_ABI/);
   assert.match(source, /TASK_LOG_ABI/);
@@ -255,17 +283,25 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
     /nonZeroAddress\(agentAddress\.data as Hex \| undefined\) \?\? initialProfile\.agentAddress/,
     "live zero ENS addr reads must not fall back to stale demo signer addresses",
   );
+  assert.match(viewSource, /resolveVisibleAgentAddress/);
+  assert.match(viewSource, /parseCapabilities/);
+  assert.match(viewSource, /readPassportStatus/);
+  assert.match(displaySource, /export function resolveVisibleAgentAddress/);
+  assert.match(displaySource, /export function parseCapabilities/);
+  assert.match(displaySource, /export function readPassportStatus/);
 });
 
 test("run page signs task intents and submits them to the relayer", async () => {
   await assertFile("apps/web/app/run/page.tsx");
   await assertFile("apps/web/components/RunTaskDemo.tsx");
+  await assertFile("apps/web/components/TaskHistoryPanel.tsx");
   await assertFile("apps/web/lib/taskDemo.ts");
 
   const pageSource = await readText("apps/web/app/run/page.tsx");
   const componentSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
   const helperSource = await readText("apps/web/lib/taskDemo.ts");
-  const source = `${pageSource}\n${componentSource}\n${helperSource}`;
+  const source = `${pageSource}\n${componentSource}\n${historyPanelSource}\n${helperSource}`;
   const requiredText = [
     "RunTaskDemo",
     "Agent ENS",
@@ -331,6 +367,13 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(helperSource, /serializeRelayerExecutePayload/);
   assert.match(source, /EnsProofPanel/);
   assert.match(source, /TaskRecorded/);
+  assert.match(componentSource, /from "\.\.\/lib\/taskHistory"/);
+  assert.match(componentSource, /from "\.\/TaskHistoryPanel"/);
+  assert.match(componentSource, /TASK_HISTORY_FROM_BLOCK/);
+  assert.match(componentSource, /taskFromLog/);
+  assert.doesNotMatch(componentSource, /fromBlock: 0n/);
+  assert.doesNotMatch(componentSource, /function taskFromLog/);
+  assert.doesNotMatch(componentSource, /function TaskHistoryPanel/);
   for (const label of requiredText) {
     assert.match(source, new RegExp(label), `${label} should be rendered`);
   }

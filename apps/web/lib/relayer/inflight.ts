@@ -6,11 +6,12 @@ import type { RelayerReservationStoreConfig } from "./config";
  */
 export const BROADCAST_PENDING_TTL_MS = 30 * 60 * 1000;
 export const INTENT_SUBMISSION_TTL_MS = 5 * 60 * 1000;
+export const ACQUIRED_PENDING_TTL_MS = 30 * 60 * 1000;
 
-const ACQUIRED_PENDING_TTL_MS = 30 * 60 * 1000;
 const REDIS_REST_AUTH_HEADER_PREFIX = "Bearer ";
 
 type IntentSubmissionRecord = {
+  acquiredExpiresAtMs?: number;
   broadcastExpiresAtMs?: number;
   status: "pending" | "submitted";
   submittedExpiresAtMs?: number;
@@ -163,6 +164,7 @@ export function createMemoryIntentSubmissionStore(): IntentSubmissionStore {
       const record = inFlightSubmissions.get(key) ?? { status: "pending" };
       record.status = "pending";
       record.txHash = txHash;
+      record.acquiredExpiresAtMs = undefined;
       record.broadcastExpiresAtMs = broadcastAtMs + BROADCAST_PENDING_TTL_MS;
       record.submittedExpiresAtMs = undefined;
       inFlightSubmissions.set(key, record);
@@ -171,6 +173,7 @@ export function createMemoryIntentSubmissionStore(): IntentSubmissionStore {
       const record = inFlightSubmissions.get(key) ?? { status: "pending" };
       record.status = "submitted";
       record.txHash = txHash;
+      record.acquiredExpiresAtMs = undefined;
       record.broadcastExpiresAtMs = undefined;
       record.submittedExpiresAtMs = submittedAtMs + INTENT_SUBMISSION_TTL_MS;
       inFlightSubmissions.set(key, record);
@@ -186,7 +189,7 @@ export function createMemoryIntentSubmissionStore(): IntentSubmissionStore {
         return reservationFromRecord(existing);
       }
 
-      inFlightSubmissions.set(key, { status: "pending" });
+      inFlightSubmissions.set(key, { acquiredExpiresAtMs: nowMs + ACQUIRED_PENDING_TTL_MS, status: "pending" });
       return { status: "acquired" };
     },
     reset: () => {
@@ -282,6 +285,15 @@ function parseRecord(value: unknown): IntentSubmissionRecord {
 
 function pruneExpiredSubmissions(records: Map<string, IntentSubmissionRecord>, nowMs: number): void {
   for (const [key, record] of records.entries()) {
+    if (
+      record.status === "pending" &&
+      !record.txHash &&
+      record.acquiredExpiresAtMs !== undefined &&
+      record.acquiredExpiresAtMs < nowMs
+    ) {
+      records.delete(key);
+      continue;
+    }
     if (
       record.status === "pending" &&
       record.txHash &&

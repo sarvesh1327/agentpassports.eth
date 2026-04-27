@@ -5,6 +5,7 @@ import type { Hex } from "@agentpassport/config";
 import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import { AgentPassportCard } from "./AgentPassportCard";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
+import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
@@ -14,16 +15,14 @@ import {
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
+import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
-import { SEPOLIA_CHAIN_ID } from "@agentpassport/config";
-
-type TaskHistoryItem = {
-  id: string;
-  metadataURI: string;
-  taskHash: Hex;
-  timestamp: string;
-  txHash: Hex;
-};
+import {
+  TASK_HISTORY_FROM_BLOCK,
+  taskFromLog,
+  type TaskHistoryItem,
+  type TaskRecordedLog
+} from "../lib/taskHistory";
 
 type TextReadResult = {
   result?: unknown;
@@ -34,7 +33,7 @@ type TextReadResult = {
  * Hydrates the agent passport with live ENS, executor, and TaskLog reads.
  */
 export function AgentProfileView({ initialProfile }: { initialProfile: SerializableAgentProfile }) {
-  const publicClient = usePublicClient({ chainId: SEPOLIA_CHAIN_ID });
+  const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const registryResolver = useReadContract({
     address: initialProfile.ensRegistryAddress ?? undefined,
@@ -92,18 +91,20 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const resolvedAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined);
   const agentAddressReadSettled = Boolean(resolverAddress) && agentAddress.isSuccess;
-  const liveAgentAddress = agentAddressReadSettled
-    ? resolvedAgentAddress
-    : resolverReadSettled && !resolverAddress
-      ? null
-      : initialProfile.agentAddress;
+  const liveAgentAddress = resolveVisibleAgentAddress({
+    agentAddressReadSettled,
+    initialAgentAddress: initialProfile.agentAddress,
+    resolverAddress,
+    resolverReadSettled,
+    resolvedAgentAddress
+  });
   const liveGasBudget = (gasBudgetRead.data as bigint | undefined) ?? safeBigInt(initialProfile.gasBudgetWei);
   const liveNextNonce = (nextNonceRead.data as bigint | undefined)?.toString() ?? initialProfile.nextNonce ?? "Unknown";
   const policyEnabled = livePolicy?.[7] ?? initialProfile.policyEnabled;
   const capabilityText = textRecords.find((record) => record.key === "agent.capabilities")?.value;
-  const capabilities = capabilityText ? capabilityText.split(",").map((value) => value.trim()).filter(Boolean) : initialProfile.capabilities;
+  const capabilities = parseCapabilities(capabilityText, initialProfile.capabilities);
   const statusText = textRecords.find((record) => record.key === "agent.status")?.value;
-  const passportStatus = statusText === "active" || statusText === "revoked" ? statusText : liveAgentAddress ? "active" : "unknown";
+  const passportStatus = readPassportStatus(statusText, liveAgentAddress);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +121,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
         address: initialProfile.taskLogAddress,
         event: TASK_RECORDED_EVENT,
         args: { agentNode: initialProfile.agentNode },
-        fromBlock: 0n,
+        fromBlock: TASK_HISTORY_FROM_BLOCK,
         toBlock: "latest"
       });
       if (!cancelled) {
@@ -178,7 +179,14 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           policyHash={initialProfile.policyHash}
           taskLogAddress={initialProfile.taskLogAddress}
         />
-        <TaskHistoryPanel tasks={taskHistory} />
+        <TaskHistoryPanel
+          cardClassName="app-card app-card--wide"
+          emptyDescription="TaskLog events will appear here after the relayer submits executor transactions."
+          eyebrow="TaskLog"
+          headingId="agent-history-title"
+          tasks={taskHistory}
+          title="Task history"
+        />
       </div>
     </>
   );
@@ -219,11 +227,27 @@ function PolicyStatePanel(props: {
 }) {
   const rows = [
     { label: "Policy state", value: props.policy?.[7] ? "Enabled" : "Unknown" },
-    { label: "Policy hash", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash) : "Unknown" },
-    { label: "Executor", title: props.executorAddress ?? undefined, value: props.executorAddress ? shortenHex(props.executorAddress) : "Unknown" },
-    { label: "TaskLog", title: props.taskLogAddress ?? undefined, value: props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
+    {
+      label: "Policy hash",
+      title: props.policyHash ?? undefined,
+      value: props.policyHash ? shortenHex(props.policyHash) : "Unknown"
+    },
+    {
+      label: "Executor",
+      title: props.executorAddress ?? undefined,
+      value: props.executorAddress ? shortenHex(props.executorAddress) : "Unknown"
+    },
+    {
+      label: "TaskLog",
+      title: props.taskLogAddress ?? undefined,
+      value: props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown"
+    },
     { label: "Policy target", title: props.policy?.[2], value: props.policy?.[2] ? shortenHex(props.policy[2]) : "Unknown" },
-    { label: "Policy selector", title: props.policy?.[3], value: props.policy?.[3] ? shortenHex(props.policy[3]) : "Unknown" },
+    {
+      label: "Policy selector",
+      title: props.policy?.[3],
+      value: props.policy?.[3] ? shortenHex(props.policy[3]) : "Unknown"
+    },
     { label: "Gas budget", value: formatWei(props.gasBudgetWei) },
     { label: "Next nonce", value: props.nextNonce }
   ];
@@ -244,62 +268,6 @@ function PolicyStatePanel(props: {
       </dl>
     </section>
   );
-}
-
-/**
- * Displays TaskLog event history for the agent.
- */
-function TaskHistoryPanel({ tasks }: { tasks: readonly TaskHistoryItem[] }) {
-  return (
-    <section className="app-card app-card--wide" aria-labelledby="agent-history-title">
-      <div className="section-heading">
-        <p>TaskLog</p>
-        <h2 id="agent-history-title">Task history</h2>
-      </div>
-      {tasks.length > 0 ? (
-        <div className="record-table" role="table" aria-label="Task history">
-          {tasks.map((task) => (
-            <div className="record-table__row" role="row" key={task.id}>
-              <span role="cell">{task.timestamp}</span>
-              <strong role="cell">
-                {shortenHex(task.taskHash)} {task.metadataURI}
-              </strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <strong>No task proofs recorded</strong>
-          <span>TaskLog events will appear here after the relayer submits executor transactions.</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-type TaskRecordedLog = {
-  args: {
-    metadataURI?: string;
-    taskHash?: Hex;
-    taskId?: bigint;
-    timestamp?: bigint;
-  };
-  transactionHash: Hex;
-};
-
-/**
- * Converts one TaskRecorded log into a compact row for the history table.
- */
-function taskFromLog(log: TaskRecordedLog): TaskHistoryItem {
-  const taskId = log.args.taskId?.toString() ?? log.transactionHash;
-  const timestamp = log.args.timestamp ? new Date(Number(log.args.timestamp) * 1000).toISOString() : "Unknown time";
-  return {
-    id: `${log.transactionHash}-${taskId}`,
-    metadataURI: log.args.metadataURI ?? "",
-    taskHash: log.args.taskHash ?? "0x",
-    timestamp,
-    txHash: log.transactionHash
-  };
 }
 
 /**
