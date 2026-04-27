@@ -43,10 +43,11 @@ test("ENS proof panel exposes the authorization facts required by the demo", asy
 
 test("home page includes an ENS proof panel preview", async () => {
   const source = await readText("apps/web/app/page.tsx");
+  const previewSource = await readText("apps/web/lib/ensPreview.ts");
 
   assert.match(source, /EnsProofPanel/);
-  assert.match(source, /namehashEnsName/);
-  assert.match(source, /webEnv/);
+  assert.match(`${source}\n${previewSource}`, /namehashEnsName/);
+  assert.match(source, /buildDemoAgentProfile/);
   assert.doesNotMatch(source, /alice\.eth/);
   assert.doesNotMatch(source, /0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512/);
   assert.doesNotMatch(source, /0xFCAd0B19bB29D4674531d6f115237E16AfCE377c/);
@@ -69,21 +70,85 @@ test("agent passport card exposes public profile and policy metadata", async () 
 
 test("home page includes a configurable agent passport preview", async () => {
   const pageSource = await readText("apps/web/app/page.tsx");
+  const demoSource = await readText("apps/web/lib/demoProfile.ts");
   const envSource = await readText("apps/web/lib/env.ts");
   const rootEnv = await readText(".env.example");
   const webEnv = await readText("apps/web/.env.example");
+  const previewSource = `${pageSource}\n${demoSource}`;
 
   assert.match(pageSource, /AgentPassportCard/);
-  assert.match(pageSource, /NEXT_PUBLIC_DEMO_OWNER_ENS/);
-  assert.match(pageSource, /agentpassports\.eth/);
-  assert.match(pageSource, /assistant/);
-  assert.doesNotMatch(pageSource, /Configure NEXT_PUBLIC_DEMO_OWNER_ENS/);
-  assert.doesNotMatch(pageSource, /Configure NEXT_PUBLIC_DEMO_AGENT_ADDRESS/);
+  assert.match(pageSource, /buildDemoAgentProfile/);
+  assert.match(previewSource, /demoOwnerEns/);
+  assert.match(previewSource, /agentpassports\.eth/);
+  assert.match(previewSource, /assistant/);
+  assert.doesNotMatch(previewSource, /Configure NEXT_PUBLIC_DEMO_OWNER_ENS/);
+  assert.doesNotMatch(previewSource, /Configure NEXT_PUBLIC_DEMO_AGENT_ADDRESS/);
   assert.match(envSource, /demoOwnerEns/);
   assert.match(envSource, /demoAgentLabel/);
   assert.match(envSource, /demoAgentAddress/);
   for (const name of ["NEXT_PUBLIC_DEMO_OWNER_ENS", "NEXT_PUBLIC_DEMO_AGENT_LABEL", "NEXT_PUBLIC_DEMO_AGENT_ADDRESS"]) {
     assert.match(rootEnv, new RegExp(`${name}=`));
     assert.match(webEnv, new RegExp(`${name}=`));
+  }
+});
+
+test("register page renders the ENS registration workflow", async () => {
+  await assertFile("apps/web/app/register/page.tsx");
+  await assertFile("apps/web/components/RegisterAgentForm.tsx");
+
+  const pageSource = await readText("apps/web/app/register/page.tsx");
+  const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const requiredText = [
+    "Owner ENS",
+    "Agent label",
+    "Agent address",
+    "Agent ENS",
+    "Owner node",
+    "Agent node",
+    "Resolver",
+    "Policy target",
+    "TaskLog",
+    "Policy hash",
+    "Gas budget",
+    "Metadata URI",
+    "ENS text records",
+    "Prepared transactions"
+  ];
+
+  assert.match(pageSource, /RegisterAgentForm/);
+  assert.match(pageSource, /buildDemoAgentProfile/);
+  assert.match(formSource, /export type RegisterAgentFormProps/);
+  assert.match(formSource, /useState/);
+  assert.match(formSource, /namehashEnsName/);
+  assert.match(formSource, /computeSubnode/);
+  assert.match(formSource, /agent\.policy\.hash/);
+  assert.match(formSource, /setPolicy/);
+  assert.match(formSource, /depositGasBudget/);
+  for (const label of requiredText) {
+    assert.match(formSource, new RegExp(label), `${label} should be rendered`);
+  }
+});
+
+test("agent passport page exposes route-level ENS profile sections", async () => {
+  await assertFile("apps/web/app/agent/[name]/page.tsx");
+
+  const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
+  const demoSource = await readText("apps/web/lib/demoProfile.ts");
+  const source = `${pageSource}\n${demoSource}`;
+  const requiredText = [
+    "AgentPassportCard",
+    "EnsProofPanel",
+    "decodeURIComponent",
+    "ENS text records",
+    "Policy state",
+    "Gas budget",
+    "Next nonce",
+    "Task history",
+    "agent.policy.hash",
+    "agent.executor"
+  ];
+
+  for (const label of requiredText) {
+    assert.match(source, new RegExp(label.replace(/[()]/g, "\\$&")), `${label} should be rendered`);
   }
 });
