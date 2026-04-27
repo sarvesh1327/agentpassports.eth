@@ -175,6 +175,7 @@ test("web layout configures wallet providers for Sepolia", async () => {
   assert.match(configSource, /createConfig/);
   assert.match(configSource, /injected/);
   assert.match(configSource, /NEXT_PUBLIC_CHAIN_ID/);
+  assert.doesNotMatch(configSource, /sepolia\.gateway\.tenderly\.co/);
   assert.match(packageSource, /@tanstack\/react-query/);
 });
 
@@ -193,6 +194,12 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(formSource, /setText/);
   assert.match(formSource, /setPolicy/);
   assert.match(formSource, /depositGasBudget/);
+  assert.match(formSource, /validateRegistrationInput/);
+  assert.match(formSource, /Agent label is required/);
+  assert.ok(
+    formSource.indexOf("validateRegistrationInput") < formSource.indexOf("setAddr"),
+    "registration input should be validated before resolver writes",
+  );
   assert.match(formSource, /Registration submitted/);
   assert.match(contractsSource, /PUBLIC_RESOLVER_ABI/);
   assert.match(contractsSource, /AGENT_POLICY_EXECUTOR_ABI/);
@@ -218,4 +225,10 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(source, /TASK_LOG_ABI/);
   assert.match(source, /gasBudgetWei/);
   assert.match(source, /nextNonce/);
+  assert.match(viewSource, /agentAddressReadSettled/);
+  assert.doesNotMatch(
+    viewSource,
+    /nonZeroAddress\(agentAddress\.data as Hex \| undefined\) \?\? initialProfile\.agentAddress/,
+    "live zero ENS addr reads must not fall back to stale demo signer addresses",
+  );
 });

@@ -43,7 +43,9 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     args: [initialProfile.agentNode],
     query: { enabled: Boolean(initialProfile.ensRegistryAddress) }
   });
-  const resolverAddress = nonZeroAddress(registryResolver.data as Hex | undefined) ?? initialProfile.resolverAddress ?? null;
+  const registryResolverAddress = nonZeroAddress(registryResolver.data as Hex | undefined);
+  const resolverReadSettled = registryResolver.isSuccess;
+  const resolverAddress = resolverReadSettled ? registryResolverAddress : registryResolverAddress ?? initialProfile.resolverAddress ?? null;
   const agentAddress = useReadContract({
     address: resolverAddress ?? undefined,
     abi: PUBLIC_RESOLVER_ABI,
@@ -88,7 +90,13 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     [initialProfile.textRecords, textRecordReads.data]
   );
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
-  const liveAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined) ?? initialProfile.agentAddress;
+  const resolvedAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined);
+  const agentAddressReadSettled = Boolean(resolverAddress) && agentAddress.isSuccess;
+  const liveAgentAddress = agentAddressReadSettled
+    ? resolvedAgentAddress
+    : resolverReadSettled && !resolverAddress
+      ? null
+      : initialProfile.agentAddress;
   const liveGasBudget = (gasBudgetRead.data as bigint | undefined) ?? safeBigInt(initialProfile.gasBudgetWei);
   const liveNextNonce = (nextNonceRead.data as bigint | undefined)?.toString() ?? initialProfile.nextNonce ?? "Unknown";
   const policyEnabled = livePolicy?.[7] ?? initialProfile.policyEnabled;
