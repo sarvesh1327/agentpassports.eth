@@ -52,6 +52,7 @@ test("TypeScript helpers build task intent typed data and Solidity-compatible ha
       chainId: 11155111n,
       verifyingContract: EXECUTOR_ADDRESS,
     },
+    primaryType: "TaskIntent",
     types: {
       TaskIntent: [
         { name: "agentNode", type: "bytes32" },

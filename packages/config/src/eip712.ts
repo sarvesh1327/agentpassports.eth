@@ -58,6 +58,7 @@ export function buildTaskIntentTypedData(
       chainId,
       verifyingContract: normalizeAddress(executorAddress, "preserve")
     },
+    primaryType: "TaskIntent",
     types: {
       TaskIntent: TASK_INTENT_TYPES
     },

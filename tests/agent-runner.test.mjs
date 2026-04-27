@@ -88,6 +88,8 @@ test("agent runner signs typed data through an injected signer and verifies the 
   assert.equal(signed.recoveredSigner, "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c");
   assert.equal(signed.signature, signature);
   assert.deepEqual(seenTypedData.message, intent);
+  assert.equal(seenTypedData.primaryType, "TaskIntent");
+  assert.equal(signed.typedData.primaryType, "TaskIntent");
   await assert.rejects(
     () =>
       signTaskIntent({
