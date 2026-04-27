@@ -20,7 +20,6 @@ export default function RevokePage() {
           defaultOwnerName={profile.ownerName}
           ensRegistryAddress={profile.ensRegistryAddress}
           executorAddress={profile.executorAddress}
-          resolverAddress={profile.resolverAddress}
         />
       </div>
     </main>

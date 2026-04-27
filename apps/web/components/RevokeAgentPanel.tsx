@@ -28,7 +28,6 @@ export type RevokeAgentPanelProps = {
   defaultOwnerName: string;
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
-  resolverAddress?: Hex | null;
 };
 
 type RelayerRetryResponse = {
@@ -62,7 +61,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     query: { enabled: Boolean(props.ensRegistryAddress) }
   });
   const registryResolverAddress = nonZeroAddress(resolverRead.data as Hex | undefined);
-  const resolverAddress = resolverRead.isSuccess ? registryResolverAddress : registryResolverAddress ?? props.resolverAddress ?? null;
+  const resolverAddress = resolverRead.isSuccess ? registryResolverAddress : null;
   const currentAgentAddress = useReadContract({
     address: resolverAddress ?? undefined,
     abi: PUBLIC_RESOLVER_ABI,
@@ -88,8 +87,14 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = typeof gasBudgetRead.data === "bigint" ? gasBudgetRead.data : 0n;
+  /**
+   * Keeps stale localStorage payloads from driving the active revocation proof surface.
+   */
+  const savedPayloadMatchesAgentNode = lastPayload ? storedPayloadMatchesAgentNode(lastPayload, agentNode) : false;
+  const proofRecoveredSigner = savedPayloadMatchesAgentNode ? lastPayload?.recoveredSigner ?? null : null;
+  const activeFailureProof = savedPayloadMatchesAgentNode ? failureProof : null;
   const proofStatus =
-    failureProof || (lastPayload?.recoveredSigner && liveAgentAddress && !sameAddress(lastPayload.recoveredSigner, liveAgentAddress))
+    activeFailureProof || (proofRecoveredSigner && liveAgentAddress && !sameAddress(proofRecoveredSigner, liveAgentAddress))
       ? "fail"
       : "unknown";
 
@@ -291,7 +296,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
             <PreviewRow label="Saved agent" value={lastPayload?.agentName ?? "No saved payload"} />
             <PreviewRow label="Saved nonce" value={lastPayload?.intent.nonce ?? "Unknown"} />
             <PreviewRow label="Recovered signer" title={lastPayload?.recoveredSigner ?? undefined} value={formatNullableHex(lastPayload?.recoveredSigner)} />
-            <PreviewRow label="Failure proof" value={failureProof ?? "Not retried"} />
+            <PreviewRow label="Failure proof" value={activeFailureProof ?? "Not retried"} />
           </dl>
           <div className="register-form__actions register-form__actions--flush">
             <button onClick={handleRetryLastPayload} type="button">Retry last signed payload</button>
@@ -314,13 +319,13 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         agentNode={agentNode}
         authorizationStatus={proofStatus}
         ensAgentAddress={liveAgentAddress}
-        failureReason={failureProof ?? undefined}
+        failureReason={activeFailureProof ?? undefined}
         gasBudgetWei={liveGasBudget}
         ownerName={ownerName}
         ownerNode={ownerNode}
         policyEnabled={livePolicy?.[7]}
         policyHash={livePolicyHash}
-        recoveredSigner={lastPayload?.recoveredSigner ?? null}
+        recoveredSigner={proofRecoveredSigner}
         resolverAddress={resolverAddress}
       />
     </>

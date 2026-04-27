@@ -315,6 +315,16 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /resolverRead\.isSuccess/);
   assert.match(panelSource, /requireLiveResolverAddress/);
   assert.match(panelSource, /return registryResolverAddress/);
+  assert.match(
+    panelSource,
+    /const resolverAddress = resolverRead\.isSuccess \? registryResolverAddress : null/,
+    "revoke proof reads must stay unknown until the live registry resolver read succeeds",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /const resolverAddress = resolverRead\.isSuccess \? registryResolverAddress : registryResolverAddress \?\? props\.resolverAddress \?\? null/,
+    "revoke proof reads must not fall back to configured resolver data while the live registry read is unsettled",
+  );
   assert.doesNotMatch(
     panelSource,
     /requireAddress\(resolverAddress, "Resolver address is not configured"\)/,
@@ -331,7 +341,15 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     "revoke page must not pass untrimmed address input to setAddr",
   );
   assert.match(panelSource, /storedPayloadMatchesAgentNode/);
+  assert.match(panelSource, /savedPayloadMatchesAgentNode/);
+  assert.match(panelSource, /proofRecoveredSigner/);
+  assert.match(panelSource, /recoveredSigner={proofRecoveredSigner}/);
   assert.match(panelSource, /Saved payload belongs to a different agent/);
+  assert.doesNotMatch(
+    panelSource,
+    /lastPayload\?\.recoveredSigner && liveAgentAddress && !sameAddress\(lastPayload\.recoveredSigner, liveAgentAddress\)/,
+    "revoke proof status must not compare recovered signers from mismatched saved payloads",
+  );
   assert.ok(
     panelSource.indexOf("storedPayloadMatchesAgentNode") < panelSource.indexOf('fetch("/api/relayer/execute"'),
     "revoke page must verify the stored payload node before retrying the relayer call",
