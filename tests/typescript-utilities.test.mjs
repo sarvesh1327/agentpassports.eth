@@ -8,6 +8,9 @@ const AGENT_NODE = "0xdd6fbcc964c82b43fdd8e204adf97622963b719d8fe12ebf48264a4677
 const EXECUTOR_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const TASK_LOG_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const CALL_DATA_HASH = "0x1d9a6570b4147a41f00c51af3f304ef8ed803c660c2ff922ef8304b1373c9fd2";
+const ENS_REGISTRY_ADDRESS = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
+const RESOLVER_ADDRESS = "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5";
+const AGENT_ADDRESS = "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c";
 
 test("ENS utilities compute Solidity-compatible namehashes and subnodes", () => {
   assert.equal(
@@ -139,5 +142,113 @@ test("ENS and hex validation rejects malformed inputs before they reach clients"
         "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069dacca7f088d72ff9bc9cf18f7c98fb91406bfb98cdd640642de34336ed764aa001b",
       ),
     /Invalid ECDSA signature/,
+  );
+});
+
+test("ENS network utilities read and write agent resolver records", async () => {
+  const textRecords = new Map([
+    ["agent.owner", "alice.eth"],
+    ["agent.status", "active"],
+  ]);
+  const writes = [];
+  const readClient = {
+    async readContract(call) {
+      if (call.address === ENS_REGISTRY_ADDRESS && call.functionName === "resolver") {
+        assert.deepEqual(call.args, [AGENT_NODE]);
+        return RESOLVER_ADDRESS;
+      }
+      if (call.address === RESOLVER_ADDRESS && call.functionName === "addr") {
+        assert.deepEqual(call.args, [AGENT_NODE]);
+        return AGENT_ADDRESS;
+      }
+      if (call.address === RESOLVER_ADDRESS && call.functionName === "text") {
+        return textRecords.get(call.args[1]) ?? "";
+      }
+      throw new Error(`Unexpected read ${call.functionName}`);
+    },
+  };
+  const writeClient = {
+    async writeContract(call) {
+      writes.push(call);
+      return `0x${writes.length.toString(16).padStart(64, "0")}`;
+    },
+  };
+
+  assert.equal(
+    await utilities.getResolverAddress({
+      client: readClient,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      node: AGENT_NODE,
+    }),
+    RESOLVER_ADDRESS,
+  );
+  assert.equal(
+    await utilities.getAgentAddress({
+      agentNode: AGENT_NODE,
+      client: readClient,
+      resolverAddress: RESOLVER_ADDRESS,
+    }),
+    AGENT_ADDRESS,
+  );
+  assert.deepEqual(
+    await utilities.getAgentTextRecords({
+      agentNode: AGENT_NODE,
+      client: readClient,
+      keys: ["agent.owner", "agent.status", "agent.missing"],
+      resolverAddress: RESOLVER_ADDRESS,
+    }),
+    {
+      "agent.missing": "",
+      "agent.owner": "alice.eth",
+      "agent.status": "active",
+    },
+  );
+  assert.deepEqual(
+    await utilities.resolveAgentProfile({
+      client: readClient,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      name: "assistant.alice.eth",
+      textKeys: ["agent.owner", "agent.status"],
+    }),
+    {
+      address: AGENT_ADDRESS,
+      name: "assistant.alice.eth",
+      node: AGENT_NODE,
+      resolverAddress: RESOLVER_ADDRESS,
+      textRecords: {
+        "agent.owner": "alice.eth",
+        "agent.status": "active",
+      },
+    },
+  );
+
+  assert.equal(
+    await utilities.setAgentAddress({
+      agentAddress: AGENT_ADDRESS,
+      agentNode: AGENT_NODE,
+      client: writeClient,
+      resolverAddress: RESOLVER_ADDRESS,
+    }),
+    `0x${"1".padStart(64, "0")}`,
+  );
+  assert.deepEqual(
+    await utilities.setAgentTextRecords({
+      agentNode: AGENT_NODE,
+      client: writeClient,
+      records: [
+        { key: "agent.owner", value: "alice.eth" },
+        { key: "agent.status", value: "active" },
+      ],
+      resolverAddress: RESOLVER_ADDRESS,
+    }),
+    [`0x${"2".padStart(64, "0")}`, `0x${"3".padStart(64, "0")}`],
+  );
+  assert.deepEqual(
+    writes.map((call) => [call.functionName, call.args]),
+    [
+      ["setAddr", [AGENT_NODE, AGENT_ADDRESS]],
+      ["setText", [AGENT_NODE, "agent.owner", "alice.eth"]],
+      ["setText", [AGENT_NODE, "agent.status", "active"]],
+    ],
   );
 });

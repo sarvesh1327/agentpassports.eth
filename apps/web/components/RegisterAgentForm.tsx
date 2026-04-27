@@ -120,6 +120,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     setSubmittedTxHashes([]);
 
     try {
+      validateRegistrationInput({ agentLabel: normalizedAgentLabel, ownerNode: preview.ownerNode });
       const resolverAddress = requireAddress(liveResolverAddress, "Resolver is not configured for record writes");
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
       const taskLogAddress = requireAddress(props.taskLogAddress, "TaskLog address is not configured");
@@ -371,6 +372,16 @@ function buildRegisterPreview(input: {
       { key: "agent.description", value: normalizedOwnerName ? `${normalizedOwnerName} onchain assistant` : "Pending owner ENS" }
     ]
   };
+}
+
+/**
+ * Rejects inputs that would make resolver writes and policy writes target different ENS nodes.
+ */
+function validateRegistrationInput(input: { agentLabel: string; ownerNode: Hex }): void {
+  if (!input.agentLabel) {
+    throw new Error("Agent label is required");
+  }
+  computeSubnode(input.ownerNode, input.agentLabel);
 }
 
 /**

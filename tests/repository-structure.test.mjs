@@ -46,6 +46,8 @@ async function collectFiles(directory, prefix = "") {
       entry.name === ".git" ||
       entry.name === ".next" ||
       entry.name === ".pnpm-store" ||
+      entry.name === ".env" ||
+      entry.name === ".env.local" ||
       entry.name === "node_modules" ||
       entry.name === "docs"
     ) {
@@ -125,18 +127,31 @@ test("environment templates document required variables for Sepolia-first develo
     "RELAYER_RESERVATION_REDIS_REST_TOKEN",
     "RELAYER_RESERVATION_REDIS_REST_URL",
     "AGENT_PRIVATE_KEY",
+    "RPC_URL",
+    "SEPOLIA_RPC_URL",
   ]) {
     assert.match(rootEnv, new RegExp(`${name}=`), `${name} should be documented at the root`);
   }
 
   assert.match(webEnv, /NEXT_PUBLIC_CHAIN_ID=11155111/);
+  assert.match(rootEnv, /^RPC_URL=$/m);
+  assert.match(rootEnv, /^SEPOLIA_RPC_URL=$/m);
+  assert.match(webEnv, /^RPC_URL=$/m);
   assert.match(webEnv, /RELAYER_PRIVATE_KEY=/);
   assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_URL=/);
   assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_TOKEN=/);
+  assert.match(runnerEnv, /^RPC_URL=$/m);
+  assert.match(runnerEnv, /AGENT_ENS_NAME=assistant\.agentpassports\.eth/);
+  assert.match(runnerEnv, /OWNER_ENS_NAME=agentpassports\.eth/);
   assert.match(runnerEnv, /RELAYER_URL=http:\/\/localhost:3000\/api\/relayer\/execute/);
   assert.match(runnerEnv, /CHAIN_ID=11155111/);
+  assert.match(contractsEnv, /^SEPOLIA_RPC_URL=$/m);
   assert.match(contractsEnv, /ENS_REGISTRY=0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e/);
   assert.match(contractsEnv, /NAME_WRAPPER=0x0635513f179D50A207757E05759CbD106d7dFcE8/);
+
+  for (const template of [rootEnv, webEnv, runnerEnv, contractsEnv]) {
+    assert.doesNotMatch(template, /sepolia\.gateway\.tenderly\.co/);
+  }
 });
 
 test("shared config exposes Sepolia address constants and README setup instructions", async () => {
