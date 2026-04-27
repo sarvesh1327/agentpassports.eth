@@ -13,6 +13,7 @@ import {
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
+import { hashPolicyContractResult } from "../lib/policyProof";
 import {
   buildFreshTaskRunDraft,
   buildStoredSignedTaskPayload,
@@ -161,6 +162,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   ]);
   const liveAgentAddress = nonZeroAddress(agentAddressRead.data as Hex | undefined);
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
+  const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = safeBigInt(gasBudgetRead.data as bigint | undefined);
   const authorizationStatus =
     recoveredSigner && liveAgentAddress
@@ -369,7 +371,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           ownerName={ownerName}
           ownerNode={ownerNode}
           policyEnabled={livePolicy?.[7]}
-          policyHash={null}
+          policyHash={livePolicyHash}
           recoveredSigner={recoveredSigner}
           resolverAddress={resolverAddress}
         />

@@ -260,6 +260,9 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /currentUnixSeconds\(\)/);
+  assert.match(componentSource, /hashPolicyContractResult/);
+  assert.match(componentSource, /policyHash={livePolicyHash}/);
+  assert.doesNotMatch(componentSource, /policyHash={null}/);
   assert.match(componentSource, /normalizedAgentName/);
   assert.match(componentSource, /safeNamehash\(normalizedAgentName\)/);
   assert.match(componentSource, /agentName: normalizedAgentName/);
@@ -303,6 +306,9 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
   assert.match(panelSource, /localStorage/);
   assert.match(panelSource, /resolverRead\.isSuccess/);
+  assert.match(panelSource, /hashPolicyContractResult/);
+  assert.match(panelSource, /policyHash={livePolicyHash}/);
+  assert.doesNotMatch(panelSource, /policyHash={null}/);
   assert.match(panelSource, /normalizedAgentName/);
   assert.match(panelSource, /safeNamehash\(normalizedAgentName\)/);
   assert.match(panelSource, /requireAgentNode/);

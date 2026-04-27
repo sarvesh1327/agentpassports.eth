@@ -13,6 +13,7 @@ import {
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
+import { hashPolicyContractResult } from "../lib/policyProof";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
   type StoredSignedTaskPayload,
@@ -83,6 +84,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   });
   const liveAgentAddress = nonZeroAddress(currentAgentAddress.data as Hex | undefined);
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
+  const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = typeof gasBudgetRead.data === "bigint" ? gasBudgetRead.data : 0n;
   const proofStatus =
     failureProof || (lastPayload?.recoveredSigner && liveAgentAddress && !sameAddress(lastPayload.recoveredSigner, liveAgentAddress))
@@ -296,7 +298,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         ownerName={ownerName}
         ownerNode={ownerNode}
         policyEnabled={livePolicy?.[7]}
-        policyHash={null}
+        policyHash={livePolicyHash}
         recoveredSigner={lastPayload?.recoveredSigner ?? null}
         resolverAddress={resolverAddress}
       />
