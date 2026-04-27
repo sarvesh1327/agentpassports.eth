@@ -176,21 +176,25 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
   const relayerResponse = await (input.submitRelayer ?? submitRelayerPayload)(config.relayerUrl, relayerPayload);
 
   if (config.lastPayloadPath) {
-    await (input.savePayload ?? writeSignedPayload)(config.lastPayloadPath, {
-      agentName: config.agentName,
-      agentNode,
-      callData: plan.callData,
-      digest: signed.digest,
-      intent: serializeIntent(signed.intent),
-      ownerName,
-      ownerNode,
-      recoveredSigner: signed.recoveredSigner,
-      resolverAddress,
-      resolvedAgentAddress,
-      signature: signed.signature,
-      taskHash: plan.taskHash,
-      typedData: signed.typedData
-    });
+    try {
+      await (input.savePayload ?? writeSignedPayload)(config.lastPayloadPath, {
+        agentName: config.agentName,
+        agentNode,
+        callData: plan.callData,
+        digest: signed.digest,
+        intent: serializeIntent(signed.intent),
+        ownerName,
+        ownerNode,
+        recoveredSigner: signed.recoveredSigner,
+        resolverAddress,
+        resolvedAgentAddress,
+        signature: signed.signature,
+        taskHash: plan.taskHash,
+        typedData: signed.typedData
+      });
+    } catch {
+      // The relayer has already accepted the intent, so local demo persistence must not mask success.
+    }
   }
 
   return {

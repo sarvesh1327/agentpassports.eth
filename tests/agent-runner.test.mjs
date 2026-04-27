@@ -195,6 +195,55 @@ test("agent runner resolves ENS signer, reads nonce, submits intent, and saves p
   assert.equal(savedPayloads[0][1].signature, result.signed.signature);
 });
 
+test("agent runner does not fail a submitted task when payload persistence fails", async () => {
+  const { createPrivateKeyAgentSigner, runAgentTask } = await import("../agent-runner/src/index.ts");
+  const signer = createPrivateKeyAgentSigner(AGENT_PRIVATE_KEY);
+  const client = {
+    async readContract(call) {
+      if (call.functionName === "resolver") {
+        return RESOLVER_ADDRESS;
+      }
+      if (call.functionName === "addr") {
+        return signer.address;
+      }
+      if (call.functionName === "nextNonce") {
+        return 3n;
+      }
+      throw new Error(`Unexpected read ${call.functionName}`);
+    },
+  };
+
+  const result = await runAgentTask({
+    client,
+    config: {
+      agentName: "assistant.alice.eth",
+      agentPrivateKey: AGENT_PRIVATE_KEY,
+      chainId: 11155111n,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      executorAddress: EXECUTOR_ADDRESS,
+      intentTtlSeconds: 600n,
+      lastPayloadPath: ".agentpassports/last-intent.json",
+      metadataURI: "ipfs://demo",
+      ownerName: "alice.eth",
+      relayerUrl: RELAYER_URL,
+      rpcUrl: "http://127.0.0.1:8545",
+      taskDescription: "Record wallet health check",
+      taskLogAddress: TASK_LOG_ADDRESS,
+    },
+    now: 1_700_000_000n,
+    savePayload: async () => {
+      throw new Error("read-only filesystem");
+    },
+    signer: {
+      address: AGENT_ADDRESS,
+      signTypedData: signer.signTypedData,
+    },
+    submitRelayer: async () => ({ status: "submitted", txHash: TX_HASH }),
+  });
+
+  assert.equal(result.relayerResponse.txHash, TX_HASH);
+});
+
 test("agent runner rejects owner ENS names that do not contain the agent", async () => {
   const { createPrivateKeyAgentSigner, runAgentTask } = await import("../agent-runner/src/index.ts");
   const signer = createPrivateKeyAgentSigner(AGENT_PRIVATE_KEY);
