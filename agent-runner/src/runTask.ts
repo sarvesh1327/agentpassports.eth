@@ -13,7 +13,7 @@ import {
   getResolverAddress,
   namehashEnsName
 } from "../../packages/config/src/index.ts";
-import { assertUint256, normalizeAddress } from "../../packages/config/src/hex.ts";
+import { assertHex, assertUint256, normalizeAddress } from "../../packages/config/src/hex.ts";
 import type { RunnerConfig } from "./config.ts";
 import { buildTaskPlan, type TaskPlan } from "./planTask.ts";
 import { signTaskIntent, type SignedTaskIntent, type TaskIntentSigner } from "./signIntent.ts";
@@ -24,8 +24,8 @@ export type AgentTaskSigner = {
 };
 
 export type RelayerSubmissionResponse = {
-  status: string;
-  txHash?: Hex;
+  status: "submitted";
+  txHash: Hex;
 };
 
 export type SavedSignedPayload = {
@@ -219,12 +219,12 @@ export async function submitRelayerPayload(
     },
     method: "POST"
   });
-  const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
     const details = typeof body?.details === "string" ? body.details : response.statusText;
     throw new Error(`Relayer request failed: ${details}`);
   }
-  return body as RelayerSubmissionResponse;
+  return readRelayerSubmissionResponse(await readSuccessJson(response));
 }
 
 /**
@@ -241,10 +241,33 @@ export async function writeSignedPayload(filePath: string, payload: SavedSignedP
 function validateAgentOwnerName(agentName: string, ownerName: string): string {
   const normalizedAgentName = agentName.trim().toLowerCase();
   const normalizedOwnerName = ownerName.trim().toLowerCase();
-  if (!normalizedAgentName.endsWith(`.${normalizedOwnerName}`)) {
-    throw new Error("OWNER_ENS_NAME must match the parent name of AGENT_ENS_NAME");
+  const immediateParentName = normalizedAgentName.split(".").slice(1).join(".");
+  if (immediateParentName !== normalizedOwnerName) {
+    throw new Error("OWNER_ENS_NAME must match the immediate parent of AGENT_ENS_NAME");
   }
   return normalizedOwnerName;
+}
+
+async function readSuccessJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error("Invalid relayer response");
+  }
+}
+
+function readRelayerSubmissionResponse(body: unknown): RelayerSubmissionResponse {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid relayer response");
+  }
+  const response = body as Record<string, unknown>;
+  if (response.status !== "submitted" || typeof response.txHash !== "string") {
+    throw new Error("Invalid relayer response");
+  }
+  return {
+    status: "submitted",
+    txHash: assertHex(response.txHash as Hex, 32)
+  };
 }
 
 async function readExecutorNonce(client: ContractReadClient, executorAddress: Hex, agentNode: Hex): Promise<bigint> {

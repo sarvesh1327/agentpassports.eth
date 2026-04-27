@@ -238,7 +238,71 @@ test("agent runner rejects owner ENS names that do not contain the agent", async
         },
         submitRelayer: async () => ({ status: "submitted", txHash: TX_HASH }),
       }),
-    /OWNER_ENS_NAME must match the parent name of AGENT_ENS_NAME/,
+    /OWNER_ENS_NAME must match the immediate parent of AGENT_ENS_NAME/,
+  );
+  await assert.rejects(
+    () =>
+      runAgentTask({
+        client,
+        config: {
+          agentName: "assistant.team.alice.eth",
+          agentPrivateKey: AGENT_PRIVATE_KEY,
+          chainId: 11155111n,
+          ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+          executorAddress: EXECUTOR_ADDRESS,
+          intentTtlSeconds: 600n,
+          metadataURI: "ipfs://demo",
+          ownerName: "alice.eth",
+          relayerUrl: RELAYER_URL,
+          rpcUrl: "http://127.0.0.1:8545",
+          taskDescription: "Record wallet health check",
+          taskLogAddress: TASK_LOG_ADDRESS,
+        },
+        now: 1_700_000_000n,
+        signer: {
+          address: AGENT_ADDRESS,
+          signTypedData: signer.signTypedData,
+        },
+        submitRelayer: async () => ({ status: "submitted", txHash: TX_HASH }),
+      }),
+    /OWNER_ENS_NAME must match the immediate parent of AGENT_ENS_NAME/,
+  );
+});
+
+test("agent runner rejects malformed relayer success responses", async () => {
+  const { submitRelayerPayload } = await import("../agent-runner/src/index.ts");
+  const payload = {
+    callData: "0x36736d1e",
+    intent: {
+      agentNode: AGENT_NODE,
+      callDataHash: `0x${"34".repeat(32)}`,
+      expiresAt: 1700000600n,
+      nonce: 3n,
+      target: TASK_LOG_ADDRESS,
+      value: 0n,
+    },
+    signature: `0x${"56".repeat(65)}`,
+  };
+
+  await assert.rejects(
+    () =>
+      submitRelayerPayload(RELAYER_URL, payload, async () => ({
+        json: async () => {
+          throw new Error("not json");
+        },
+        ok: true,
+        statusText: "OK",
+      })),
+    /Invalid relayer response/,
+  );
+  await assert.rejects(
+    () =>
+      submitRelayerPayload(RELAYER_URL, payload, async () => ({
+        json: async () => ({}),
+        ok: true,
+        statusText: "OK",
+      })),
+    /Invalid relayer response/,
   );
 });
 
