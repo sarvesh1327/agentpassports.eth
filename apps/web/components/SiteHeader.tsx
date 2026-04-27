@@ -17,6 +17,8 @@ export function SiteHeader() {
       <nav className="site-header__nav" aria-label="Primary navigation">
         <Link href="/register">Register</Link>
         <Link href={demoAgentHref}>Agent</Link>
+        <Link href="/run">Run</Link>
+        <Link href="/revoke">Revoke</Link>
       </nav>
       <WalletConnection />
     </header>

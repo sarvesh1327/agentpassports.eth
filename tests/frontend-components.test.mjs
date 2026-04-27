@@ -232,3 +232,68 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
     "live zero ENS addr reads must not fall back to stale demo signer addresses",
   );
 });
+
+test("run page signs task intents and submits them to the relayer", async () => {
+  await assertFile("apps/web/app/run/page.tsx");
+  await assertFile("apps/web/components/RunTaskDemo.tsx");
+  await assertFile("apps/web/lib/taskDemo.ts");
+
+  const pageSource = await readText("apps/web/app/run/page.tsx");
+  const componentSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const helperSource = await readText("apps/web/lib/taskDemo.ts");
+  const source = `${pageSource}\n${componentSource}\n${helperSource}`;
+  const requiredText = [
+    "RunTaskDemo",
+    "Agent ENS",
+    "Owner ENS",
+    "Task text",
+    "Metadata URI",
+    "Typed data",
+    "Sign and save for revocation",
+    "Submit to relayer",
+    "Transaction status",
+    "Task history"
+  ];
+
+  assert.match(componentSource, /useSignTypedData/);
+  assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
+  assert.match(componentSource, /localStorage/);
+  assert.match(helperSource, /buildTaskRunDraft/);
+  assert.match(helperSource, /serializeRelayerExecutePayload/);
+  assert.match(source, /EnsProofPanel/);
+  assert.match(source, /TaskRecorded/);
+  for (const label of requiredText) {
+    assert.match(source, new RegExp(label), `${label} should be rendered`);
+  }
+});
+
+test("revoke page disables policy, updates ENS records, and retries the last payload", async () => {
+  await assertFile("apps/web/app/revoke/page.tsx");
+  await assertFile("apps/web/components/RevokeAgentPanel.tsx");
+
+  const pageSource = await readText("apps/web/app/revoke/page.tsx");
+  const panelSource = await readText("apps/web/components/RevokeAgentPanel.tsx");
+  const contractsSource = await readText("apps/web/lib/contracts.ts");
+  const source = `${pageSource}\n${panelSource}\n${contractsSource}`;
+  const requiredText = [
+    "RevokeAgentPanel",
+    "Current agent address",
+    "Revoke policy",
+    "Set status revoked",
+    "Update addr record",
+    "Retry last signed payload",
+    "Failure proof"
+  ];
+
+  assert.match(panelSource, /useWriteContract/);
+  assert.match(panelSource, /revokePolicy/);
+  assert.match(panelSource, /setText/);
+  assert.match(panelSource, /setAddr/);
+  assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
+  assert.match(panelSource, /localStorage/);
+  assert.match(source, /EnsProofPanel/);
+  assert.match(contractsSource, /name: "revokePolicy"/);
+  for (const label of requiredText) {
+    assert.match(source, new RegExp(label), `${label} should be rendered`);
+  }
+});

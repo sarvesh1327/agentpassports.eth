@@ -513,6 +513,10 @@ input {
   padding: 20px 24px;
 }
 
+.register-form__actions--flush {
+  padding: 0;
+}
+
 .register-form__actions button,
 .register-form__actions a {
   border-radius: 8px;
@@ -555,6 +559,20 @@ input {
   color: #0f172a;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   overflow-wrap: anywhere;
+}
+
+.json-panel {
+  background: #0f172a;
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 16px;
+  white-space: pre-wrap;
 }
 
 .empty-state {
