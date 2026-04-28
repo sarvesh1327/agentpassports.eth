@@ -6,7 +6,7 @@ type AgentPageProps = {
 };
 
 /**
- * Renders the public ENS passport for a route-selected agent name.
+ * Renders the owner-management detail surface for a route-selected agent name.
  */
 export default async function AgentPage({ params }: AgentPageProps) {
   const { name } = await params;
@@ -14,11 +14,6 @@ export default async function AgentPage({ params }: AgentPageProps) {
 
   return (
     <main className="page-shell">
-      <section className="page-heading" aria-labelledby="agent-title">
-        <p>Agent</p>
-        <h1 id="agent-title">{profile.agentName}</h1>
-      </section>
-
       <AgentProfileView initialProfile={serializeAgentProfile(profile)} />
     </main>
   );
