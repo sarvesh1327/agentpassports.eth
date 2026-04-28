@@ -35,7 +35,9 @@ import {
   type TaskHistoryItem
 } from "../lib/taskHistory";
 import { AgentLiveDataPanel } from "./AgentLiveDataPanel";
+import { DemoReadinessPanel } from "./DemoReadinessPanel";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
+import { StatusBanner } from "./StatusBanner";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 
 const INTENT_TTL_SECONDS = 600n;
@@ -49,6 +51,7 @@ export type RunTaskDemoProps = {
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
   taskLogAddress?: Hex | null;
+  taskLogStartBlock?: bigint | null;
 };
 
 type RelayerResponse = {
@@ -372,6 +375,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       }
       const tasks = await loadTaskHistory({
         agentNode,
+        fromBlock: props.taskLogStartBlock,
         publicClient,
         taskLogAddress: props.taskLogAddress ?? null
       });
@@ -389,7 +393,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     return () => {
       cancelled = true;
     };
-  }, [agentNode, historyRefreshKey, normalizedAgentName, props.taskLogAddress, publicClient]);
+  }, [agentNode, historyRefreshKey, normalizedAgentName, props.taskLogAddress, props.taskLogStartBlock, publicClient]);
 
   /**
    * Signs the prepared EIP-712 payload and returns the relayer request body.
@@ -542,7 +546,15 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           </button>
           <a href={`/agent/${encodeURIComponent(agentName)}`}>View task history</a>
           {runSubmitBlocker ? <small className="field-help field-help--warning">{runSubmitBlocker}</small> : null}
-          <strong>{statusMessage}</strong>
+        </div>
+
+        <div className="register-form__section">
+          <StatusBanner
+            details={runSubmitBlocker ?? "Waiting for live agent data, policy state, nonce, and gas budget."}
+            message={statusMessage}
+            title="Run status"
+            variant={status === "signing" ? "loading" : status === "submitted" ? "success" : status}
+          />
         </div>
 
         {submittedTxHash || signature ? (
@@ -588,6 +600,14 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           headingId="run-history-title"
           tasks={taskHistory}
           title="Task history"
+        />
+        <DemoReadinessPanel
+          agentAddress={liveAgentAddress}
+          gasBudgetWei={liveGasBudget}
+          policyEnabled={livePolicy?.[7]}
+          relayerReady={Boolean(props.executorAddress)}
+          resolverAddress={resolverAddress}
+          taskLogAddress={props.taskLogAddress}
         />
       </div>
     </>

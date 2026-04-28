@@ -45,12 +45,19 @@ export type AgentProfilePreview = {
   policyUri: string;
   resolverAddress: Hex | null;
   taskLogAddress: Hex | null;
+  taskLogStartBlock: bigint | null;
   textRecords: readonly TextRecordPreview[];
 };
 
 export type SerializableAgentProfile = Omit<
   AgentProfilePreview,
-  "chainId" | "gasBudgetWei" | "maxGasReimbursementWei" | "maxValueWei" | "nextNonce" | "policyExpiresAt"
+  | "chainId"
+  | "gasBudgetWei"
+  | "maxGasReimbursementWei"
+  | "maxValueWei"
+  | "nextNonce"
+  | "policyExpiresAt"
+  | "taskLogStartBlock"
 > & {
   chainId: string;
   gasBudgetWei: string;
@@ -58,6 +65,7 @@ export type SerializableAgentProfile = Omit<
   maxValueWei: string;
   nextNonce: string | null;
   policyExpiresAt: string;
+  taskLogStartBlock: string | null;
 };
 
 /**
@@ -80,6 +88,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
   const nameWrapperAddress = readAddressEnv(webEnv.nameWrapper);
   const resolverAddress = readAddressEnv(webEnv.publicResolver);
   const taskLogAddress = readAddressEnv(webEnv.taskLogAddress);
+  const taskLogStartBlock = readBlockEnv(webEnv.taskLogStartBlock);
   const policyUri = readTextEnv(webEnv.demoPolicyUri) ?? DEFAULT_DEMO_POLICY_URI;
   const policyHash = taskLogAddress
     ? hashPolicyMetadata(
@@ -117,6 +126,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
     policyUri,
     resolverAddress,
     taskLogAddress,
+    taskLogStartBlock,
     textRecords: buildAgentTextRecords({
       agentAddress,
       capabilities: AGENT_CAPABILITIES,
@@ -126,6 +136,14 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
       policyUri
     })
   };
+}
+
+/**
+ * Reads optional deployment block hints used to keep event scans inside provider limits.
+ */
+function readBlockEnv(value?: string): bigint | null {
+  const normalized = readTextEnv(value);
+  return normalized && /^\d+$/u.test(normalized) ? BigInt(normalized) : null;
 }
 
 /**
@@ -139,7 +157,8 @@ export function serializeAgentProfile(profile: AgentProfilePreview): Serializabl
     maxGasReimbursementWei: profile.maxGasReimbursementWei.toString(),
     maxValueWei: profile.maxValueWei.toString(),
     nextNonce: profile.nextNonce?.toString() ?? null,
-    policyExpiresAt: profile.policyExpiresAt.toString()
+    policyExpiresAt: profile.policyExpiresAt.toString(),
+    taskLogStartBlock: profile.taskLogStartBlock?.toString() ?? null
   };
 }
 

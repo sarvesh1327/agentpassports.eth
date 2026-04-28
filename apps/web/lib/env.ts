@@ -8,6 +8,7 @@ export const webEnv = {
   publicRpcUrl: process.env.NEXT_PUBLIC_RPC_URL,
   executorAddress: process.env.NEXT_PUBLIC_EXECUTOR_ADDRESS,
   taskLogAddress: process.env.NEXT_PUBLIC_TASK_LOG_ADDRESS,
+  taskLogStartBlock: process.env.NEXT_PUBLIC_TASK_LOG_START_BLOCK,
   demoOwnerEns: process.env.NEXT_PUBLIC_DEMO_OWNER_ENS,
   demoAgentLabel: process.env.NEXT_PUBLIC_DEMO_AGENT_LABEL,
   demoAgentAddress: process.env.NEXT_PUBLIC_DEMO_AGENT_ADDRESS,

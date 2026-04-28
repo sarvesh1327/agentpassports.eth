@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
 import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import { AgentPassportCard } from "./AgentPassportCard";
+import { DemoReadinessPanel } from "./DemoReadinessPanel";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
@@ -112,6 +113,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     async function refreshTaskHistory() {
       const tasks = await loadTaskHistory({
         agentNode: initialProfile.agentNode,
+        fromBlock: parseOptionalBigInt(initialProfile.taskLogStartBlock),
         publicClient,
         taskLogAddress: initialProfile.taskLogAddress
       });
@@ -129,7 +131,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     return () => {
       cancelled = true;
     };
-  }, [initialProfile.agentNode, initialProfile.taskLogAddress, publicClient]);
+  }, [initialProfile.agentNode, initialProfile.taskLogAddress, initialProfile.taskLogStartBlock, publicClient]);
 
   return (
     <>
@@ -177,6 +179,13 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           headingId="agent-history-title"
           tasks={taskHistory}
           title="Task history"
+        />
+        <DemoReadinessPanel
+          agentAddress={liveAgentAddress}
+          gasBudgetWei={liveGasBudget}
+          policyEnabled={policyEnabled}
+          resolverAddress={resolverAddress}
+          taskLogAddress={initialProfile.taskLogAddress}
         />
       </div>
     </>
@@ -280,4 +289,11 @@ function mergeTextRecords(
  */
 function safeBigInt(value: string): bigint {
   return /^\d+$/u.test(value) ? BigInt(value) : 0n;
+}
+
+/**
+ * Converts serialized optional block numbers into bigint values for bounded event reads.
+ */
+function parseOptionalBigInt(value: string | null): bigint | null {
+  return value && /^\d+$/u.test(value) ? BigInt(value) : null;
 }

@@ -35,6 +35,7 @@ import {
   type RegistrationSubmissionResult
 } from "../lib/registrationSubmission";
 import { shortenHex } from "./EnsProofPanel";
+import { StatusBanner } from "./StatusBanner";
 
 export type RegisterAgentFormProps = {
   chainId: bigint;
@@ -597,13 +598,21 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         )}
       </section>
 
+      <div className="register-form__section">
+        <StatusBanner
+          details={submitBlocker ?? "Waiting for ENS and wallet state to become ready."}
+          message={statusMessage}
+          title="Registration status"
+          variant={status === "submitting" ? "loading" : status === "submitted" ? "success" : status}
+        />
+      </div>
+
       <div className="register-form__actions">
         <button disabled={status === "submitting" || Boolean(submitBlocker)} type="submit">
           {status === "submitting" ? "Submitting..." : "Submit registration"}
         </button>
         <a href={agentPageHref}>View agent passport</a>
         {submitBlocker ? <small className="field-help field-help--warning">{submitBlocker}</small> : null}
-        <strong>{statusMessage}</strong>
       </div>
       {submittedTxHashes.length > 0 ? (
         <div className="transaction-result" aria-label="Registration submitted transactions">

@@ -32,6 +32,7 @@ import {
 } from "../lib/taskDemo";
 import { AgentLiveDataPanel } from "./AgentLiveDataPanel";
 import { EnsProofPanel, shortenHex } from "./EnsProofPanel";
+import { StatusBanner } from "./StatusBanner";
 
 export type RevokeAgentPanelProps = {
   chainId: bigint;
@@ -505,8 +506,13 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           </dl>
           <div className="register-form__actions register-form__actions--flush">
             <button onClick={handleRetryLastPayload} type="button">Retry last signed payload</button>
-            <strong>{statusMessage}</strong>
           </div>
+          <StatusBanner
+            details={activeFailureProof ?? "Waiting for revocation data, saved payload, and live resolver reads."}
+            message={statusMessage}
+            title="Revocation status"
+            variant={statusMessage.startsWith("Revocation proof") ? "success" : statusMessage.includes("failed") ? "error" : "idle"}
+          />
         </div>
 
         {txHashes.length > 0 ? (

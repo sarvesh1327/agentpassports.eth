@@ -1,4 +1,5 @@
 import type { TaskHistoryItem } from "../lib/taskHistory";
+import { CopyableValue } from "./CopyableValue";
 import { shortenHex } from "./EnsProofPanel";
 
 export type TaskHistoryPanelProps = {
@@ -29,7 +30,10 @@ export function TaskHistoryPanel(props: TaskHistoryPanelProps) {
             <div className="record-table__row" role="row" key={task.id}>
               <span role="cell">{task.timestamp}</span>
               <strong role="cell">
-                {shortenHex(task.taskHash)} {task.metadataURI}
+                <CopyableValue explorerKind="tx" fullValue={task.txHash} label="transaction hash" value={shortenHex(task.txHash)} />
+                <span className="record-table__meta">
+                  {shortenHex(task.taskHash)} {task.metadataURI}
+                </span>
               </strong>
             </div>
           ))}

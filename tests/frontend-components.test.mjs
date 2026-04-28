@@ -16,8 +16,10 @@ async function assertFile(relativePath) {
 
 test("ENS proof panel exposes the authorization facts required by the demo", async () => {
   await assertFile("apps/web/components/EnsProofPanel.tsx");
+  await assertFile("apps/web/components/CopyableValue.tsx");
 
   const source = await readText("apps/web/components/EnsProofPanel.tsx");
+  const copyableSource = await readText("apps/web/components/CopyableValue.tsx");
   const requiredText = [
     "Owner ENS",
     "Owner node",
@@ -36,9 +38,80 @@ test("ENS proof panel exposes the authorization facts required by the demo", asy
   assert.match(source, /authorizationStatus\?: "pass" \| "fail" \| "unknown"/);
   assert.match(source, /formatWei/);
   assert.match(source, /shortenHex/);
+  assert.match(source, /CopyableValue/);
+  assert.match(source, /explorerKind/);
+  assert.match(copyableSource, /navigator\.clipboard\.writeText/);
+  assert.match(copyableSource, /sepolia\.etherscan\.io/);
   for (const label of requiredText) {
     assert.match(source, new RegExp(label.replace(/[()]/g, "\\$&")), `${label} should be rendered`);
   }
+});
+
+test("demo readiness panel summarizes live MVP prerequisites", async () => {
+  await assertFile("apps/web/components/DemoReadinessPanel.tsx");
+
+  const panelSource = await readText("apps/web/components/DemoReadinessPanel.tsx");
+  const agentViewSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const runSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const styles = await readText("apps/web/app/globals.css");
+
+  for (const label of ["Resolver", "Agent addr", "Policy", "Gas budget", "TaskLog", "Relayer"]) {
+    assert.match(panelSource, new RegExp(label), `${label} should be shown in readiness summary`);
+  }
+  assert.match(panelSource, /readiness-panel__item--ready/);
+  assert.match(panelSource, /readiness-panel__item--blocked/);
+  assert.match(agentViewSource, /DemoReadinessPanel/);
+  assert.match(runSource, /DemoReadinessPanel/);
+  assert.match(styles, /\.readiness-panel/);
+});
+
+test("forms expose consistent loading and error states", async () => {
+  await assertFile("apps/web/components/StatusBanner.tsx");
+
+  const statusSource = await readText("apps/web/components/StatusBanner.tsx");
+  const registerSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const runSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const revokeSource = await readText("apps/web/components/RevokeAgentPanel.tsx");
+  const styles = await readText("apps/web/app/globals.css");
+
+  assert.match(statusSource, /variant: "idle" \| "loading" \| "success" \| "error"/);
+  assert.match(statusSource, /role={props\.variant === "error" \? "alert" : "status"}/);
+  assert.match(registerSource, /StatusBanner/);
+  assert.match(registerSource, /variant={status === "submitting" \? "loading" : status === "submitted" \? "success" : status}/);
+  assert.match(registerSource, /Waiting for ENS and wallet state/);
+  assert.match(runSource, /StatusBanner/);
+  assert.match(runSource, /variant={status === "signing" \? "loading" : status === "submitted" \? "success" : status}/);
+  assert.match(runSource, /Waiting for live agent data/);
+  assert.match(revokeSource, /StatusBanner/);
+  assert.match(revokeSource, /variant={statusMessage\.startsWith\("Revocation proof"/);
+  assert.match(revokeSource, /Waiting for revocation data/);
+  assert.match(styles, /\.status-banner--loading/);
+  assert.match(styles, /\.status-banner--error/);
+});
+
+test("README documents release demo, architecture, env, and limitations", async () => {
+  const source = await readText("README.md");
+
+  for (const heading of [
+    "## Architecture",
+    "```mermaid",
+    "## Environment variables",
+    "## Deployed addresses",
+    "## Reproduce the Sepolia demo",
+    "## Known limitations",
+    "## Test commands"
+  ]) {
+    assert.match(source, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(source, /AgentPolicyExecutor/);
+  assert.match(source, /ENS public resolver/);
+  assert.match(source, /TaskLog\.recordTask/);
+  assert.match(source, /TaskLog/);
+  assert.match(source, /NEXT_PUBLIC_EXECUTOR_ADDRESS/);
+  assert.match(source, /RELAYER_PRIVATE_KEY/);
+  assert.match(source, /AGENT_PRIVATE_KEY/);
+  assert.match(source, /ENS name -> agent metadata -> signed task -> live ENS verification -> task execution -> revocation failure/);
+  assert.match(source, /Pinata\/IPFS metadata generation is planned/);
 });
 
 test("home page renders a landing page with workflow navigation", async () => {
@@ -362,6 +435,7 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(viewSource, /useReadContracts/);
   assert.match(viewSource, /usePublicClient\(\{ chainId: Number\(initialProfile\.chainId\) \}\)/);
   assert.match(viewSource, /loadTaskHistory/);
+  assert.match(viewSource, /fromBlock: parseOptionalBigInt\(initialProfile\.taskLogStartBlock\)/);
   assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
   assert.match(taskHistorySource, /getLogs/);
   assert.match(source, /TaskRecorded/);
@@ -373,6 +447,8 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(viewSource, /AGENT_TEXT_RECORD_KEYS/);
   assert.match(historyPanelSource, /export function TaskHistoryPanel/);
   assert.match(historyPanelSource, /emptyDescription/);
+  assert.match(historyPanelSource, /CopyableValue/);
+  assert.match(historyPanelSource, /explorerKind="tx"/);
   assert.match(source, /ENS_REGISTRY_ABI/);
   assert.match(source, /PUBLIC_RESOLVER_ABI/);
   assert.match(source, /TASK_LOG_ABI/);
@@ -493,6 +569,7 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(source, /EnsProofPanel/);
   assert.match(source, /TaskRecorded/);
   assert.match(componentSource, /loadTaskHistory/);
+  assert.match(componentSource, /fromBlock: props\.taskLogStartBlock/);
   assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
   assert.match(taskHistorySource, /getLogs/);
   assert.match(componentSource, /from "\.\.\/lib\/taskHistory"/);

@@ -82,6 +82,7 @@ test("task history merges backend rows with onchain TaskLog events", async () =>
       ok: true,
       json: async () => ({ tasks: [dbTask] })
     }),
+    fromBlock: 5_000_000n,
     publicClient,
     taskLogAddress
   });
@@ -96,4 +97,51 @@ test("task history merges backend rows with onchain TaskLog events", async () =>
     },
     dbTask
   ]);
+});
+
+test("task history requires a configured onchain start block before reading logs", async () => {
+  const { loadTaskHistory } = await import("../apps/web/lib/taskHistory.ts");
+  let readLogs = false;
+
+  const tasks = await loadTaskHistory({
+    agentNode: `0x${"66".repeat(32)}`,
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({ tasks: [] })
+    }),
+    publicClient: {
+      getLogs: async () => {
+        readLogs = true;
+        return [];
+      }
+    },
+    taskLogAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  });
+
+  assert.deepEqual(tasks, []);
+  assert.equal(readLogs, false);
+});
+
+test("task history uses the configured start block for onchain logs", async () => {
+  const { loadTaskHistory } = await import("../apps/web/lib/taskHistory.ts");
+  const fromBlock = 5_999_999n;
+  let requestedFromBlock = 0n;
+
+  await loadTaskHistory({
+    agentNode: `0x${"77".repeat(32)}`,
+    fetcher: async () => ({
+      ok: true,
+      json: async () => ({ tasks: [] })
+    }),
+    fromBlock,
+    publicClient: {
+      getLogs: async (request) => {
+        requestedFromBlock = request.fromBlock;
+        return [];
+      }
+    },
+    taskLogAddress: "0xcccccccccccccccccccccccccccccccccccccccc"
+  });
+
+  assert.equal(requestedFromBlock, fromBlock);
 });

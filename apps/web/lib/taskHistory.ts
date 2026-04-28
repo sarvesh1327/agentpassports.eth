@@ -1,8 +1,6 @@
 import type { Hex } from "@agentpassport/config";
 import { TASK_RECORDED_EVENT } from "./contracts.ts";
 
-export const TASK_HISTORY_FROM_BLOCK = 0n;
-
 export type TaskHistoryItem = {
   id: string;
   metadataURI: string;
@@ -74,7 +72,7 @@ export async function fetchTaskHistory(agentNode: Hex, fetcher: TaskHistoryFetch
 export async function loadTaskHistory(input: {
   agentNode: Hex;
   fetcher?: TaskHistoryFetcher;
-  fromBlock?: bigint;
+  fromBlock?: bigint | null;
   publicClient?: TaskHistoryPublicClient | null;
   taskLogAddress?: Hex | null;
 }): Promise<TaskHistoryItem[]> {
@@ -91,11 +89,11 @@ export async function loadTaskHistory(input: {
  */
 async function fetchChainTaskHistory(input: {
   agentNode: Hex;
-  fromBlock?: bigint;
+  fromBlock?: bigint | null;
   publicClient?: TaskHistoryPublicClient | null;
   taskLogAddress?: Hex | null;
 }): Promise<TaskHistoryItem[]> {
-  if (!input.publicClient || !input.taskLogAddress) {
+  if (!input.publicClient || !input.taskLogAddress || input.fromBlock === undefined || input.fromBlock === null) {
     return [];
   }
 
@@ -103,7 +101,7 @@ async function fetchChainTaskHistory(input: {
     address: input.taskLogAddress,
     args: { agentNode: input.agentNode },
     event: TASK_RECORDED_EVENT,
-    fromBlock: input.fromBlock ?? TASK_HISTORY_FROM_BLOCK,
+    fromBlock: input.fromBlock,
     toBlock: "latest"
   });
 

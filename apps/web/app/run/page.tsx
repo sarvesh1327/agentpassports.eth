@@ -23,6 +23,7 @@ export default function RunPage() {
         ensRegistryAddress={profile.ensRegistryAddress}
         executorAddress={profile.executorAddress}
         taskLogAddress={profile.taskLogAddress}
+        taskLogStartBlock={profile.taskLogStartBlock}
       />
     </main>
   );

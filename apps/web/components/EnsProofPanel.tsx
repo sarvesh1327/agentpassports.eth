@@ -1,5 +1,6 @@
 import type { Hex } from "@agentpassport/config";
 import { formatWeiAsEth } from "../lib/ethAmount";
+import { CopyableValue, type ExplorerKind } from "./CopyableValue";
 
 export type EnsProofPanelProps = {
   ownerName?: string;
@@ -17,6 +18,8 @@ export type EnsProofPanelProps = {
 };
 
 type ProofRow = {
+  explorerKind?: ExplorerKind;
+  fullValue?: string | null;
   label: string;
   title?: string;
   value: string;
@@ -28,13 +31,31 @@ type ProofRow = {
 export function EnsProofPanel(props: EnsProofPanelProps) {
   const rows: ProofRow[] = [
     { label: "Owner ENS", value: props.ownerName ?? "Not connected" },
-    { label: "Owner node", title: props.ownerNode, value: shortenHex(props.ownerNode) },
+    { label: "Owner node", fullValue: props.ownerNode, title: props.ownerNode, value: shortenHex(props.ownerNode) },
     { label: "Agent ENS", value: props.agentName },
-    { label: "Agent node", title: props.agentNode, value: shortenHex(props.agentNode) },
-    { label: "Resolver", title: props.resolverAddress ?? undefined, value: formatNullableHex(props.resolverAddress) },
-    { label: "ENS addr(agent)", title: props.ensAgentAddress ?? undefined, value: formatNullableHex(props.ensAgentAddress) },
-    { label: "Recovered signer", title: props.recoveredSigner ?? undefined, value: formatNullableHex(props.recoveredSigner) },
-    { label: "Policy hash", title: props.policyHash ?? undefined, value: formatNullableHex(props.policyHash) },
+    { label: "Agent node", fullValue: props.agentNode, title: props.agentNode, value: shortenHex(props.agentNode) },
+    {
+      explorerKind: "address",
+      fullValue: props.resolverAddress,
+      label: "Resolver",
+      title: props.resolverAddress ?? undefined,
+      value: formatNullableHex(props.resolverAddress)
+    },
+    {
+      explorerKind: "address",
+      fullValue: props.ensAgentAddress,
+      label: "ENS addr(agent)",
+      title: props.ensAgentAddress ?? undefined,
+      value: formatNullableHex(props.ensAgentAddress)
+    },
+    {
+      explorerKind: "address",
+      fullValue: props.recoveredSigner,
+      label: "Recovered signer",
+      title: props.recoveredSigner ?? undefined,
+      value: formatNullableHex(props.recoveredSigner)
+    },
+    { label: "Policy hash", fullValue: props.policyHash, title: props.policyHash ?? undefined, value: formatNullableHex(props.policyHash) },
     { label: "Policy enabled", value: formatBoolean(props.policyEnabled) },
     { label: "Gas budget", value: formatWei(props.gasBudgetWei) }
   ];
@@ -54,7 +75,14 @@ export function EnsProofPanel(props: EnsProofPanelProps) {
         {rows.map((row) => (
           <div className="proof-panel__row" key={row.label}>
             <dt>{row.label}</dt>
-            <dd title={row.title}>{row.value}</dd>
+            <dd title={row.title}>
+              <CopyableValue
+                explorerKind={row.explorerKind}
+                fullValue={row.fullValue}
+                label={row.label}
+                value={row.value}
+              />
+            </dd>
           </div>
         ))}
       </dl>
