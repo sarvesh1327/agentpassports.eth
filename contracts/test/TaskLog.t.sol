@@ -15,6 +15,12 @@ contract TaskLogTest is TestBase {
         taskLog = new TaskLog(executor);
     }
 
+    /// @notice Verifies deployment fails without a concrete executor writer.
+    function testConstructorRejectsZeroExecutor() public {
+        vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
+        new TaskLog(address(0));
+    }
+
     /// @notice Verifies the configured executor can record a task proof.
     function testExecutorCanRecordTaskProof() public {
         bytes32 agentNode = keccak256("assistant.alice.eth");

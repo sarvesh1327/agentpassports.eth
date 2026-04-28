@@ -6,6 +6,7 @@ import {
 } from "@agentpassport/config";
 import { webEnv } from "./env";
 import { buildAgentName, safeNamehash, splitAgentName } from "./ensPreview";
+import { readConfiguredChainId } from "./publicChain";
 
 export const DEFAULT_DEMO_OWNER_ENS = "agentpassports.eth";
 export const DEFAULT_DEMO_AGENT_LABEL = "assistant";
@@ -28,6 +29,7 @@ export type AgentProfilePreview = {
   agentName: string;
   agentNode: Hex;
   capabilities: readonly string[];
+  chainId: bigint;
   ensRegistryAddress: Hex | null;
   executorAddress: Hex | null;
   gasBudgetWei: bigint;
@@ -47,8 +49,9 @@ export type AgentProfilePreview = {
 
 export type SerializableAgentProfile = Omit<
   AgentProfilePreview,
-  "gasBudgetWei" | "maxGasReimbursementWei" | "maxValueWei" | "nextNonce" | "policyExpiresAt"
+  "chainId" | "gasBudgetWei" | "maxGasReimbursementWei" | "maxValueWei" | "nextNonce" | "policyExpiresAt"
 > & {
+  chainId: string;
   gasBudgetWei: string;
   maxGasReimbursementWei: string;
   maxValueWei: string;
@@ -69,6 +72,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
   const agentName = buildAgentName(agentLabel, ownerName);
   const ownerNode = safeNamehash(ownerName);
   const agentNode = safeNamehash(agentName);
+  const chainId = BigInt(readConfiguredChainId(webEnv.chainId));
   const agentAddress = readAddressEnv(webEnv.demoAgentAddress);
   const ensRegistryAddress = readAddressEnv(webEnv.ensRegistry);
   const executorAddress = readAddressEnv(webEnv.executorAddress);
@@ -95,6 +99,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
     agentName,
     agentNode,
     capabilities: AGENT_CAPABILITIES,
+    chainId,
     ensRegistryAddress,
     executorAddress,
     gasBudgetWei: DEFAULT_GAS_BUDGET_WEI,
@@ -126,6 +131,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
 export function serializeAgentProfile(profile: AgentProfilePreview): SerializableAgentProfile {
   return {
     ...profile,
+    chainId: profile.chainId.toString(),
     gasBudgetWei: profile.gasBudgetWei.toString(),
     maxGasReimbursementWei: profile.maxGasReimbursementWei.toString(),
     maxValueWei: profile.maxValueWei.toString(),

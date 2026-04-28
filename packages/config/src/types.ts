@@ -49,3 +49,7 @@ export type PolicyMetadata = {
   selector: Hex;
   target: Hex;
 };
+
+export type LatestBlock = {
+  timestamp: bigint;
+};

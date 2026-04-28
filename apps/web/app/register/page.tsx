@@ -15,6 +15,7 @@ export default function RegisterPage() {
       </section>
 
       <RegisterAgentForm
+        chainId={profile.chainId}
         defaultAgentAddress={profile.agentAddress}
         defaultAgentLabel={profile.agentLabel}
         defaultGasBudgetWei={profile.gasBudgetWei.toString()}
@@ -25,7 +26,6 @@ export default function RegisterPage() {
         defaultPolicyUri={profile.policyUri}
         ensRegistryAddress={profile.ensRegistryAddress}
         executorAddress={profile.executorAddress}
-        resolverAddress={profile.resolverAddress}
         taskLogAddress={profile.taskLogAddress}
       />
     </main>

@@ -5,6 +5,7 @@ pragma solidity ^0.8.24;
 /// @notice Stores task proof records written only by the policy executor.
 contract TaskLog {
     error NotExecutor();
+    error ZeroAddress();
 
     event TaskRecorded(
         uint256 indexed taskId,
@@ -30,6 +31,8 @@ contract TaskLog {
     /// @notice Creates a task log bound to one executor contract.
     /// @param executor_ Address allowed to write task records.
     constructor(address executor_) {
+        if (executor_ == address(0)) revert ZeroAddress();
+
         executor = executor_;
     }
 

@@ -56,6 +56,18 @@ contract AgentPolicyExecutorTest is TestBase {
         vm.deal(owner, 10 ether);
     }
 
+    /// @notice Verifies deployments cannot omit the ENS registry authorization source.
+    function testConstructorRejectsZeroEnsRegistry() public {
+        vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
+        new AgentPolicyExecutor(address(0), address(nameWrapper));
+    }
+
+    /// @notice Verifies deployments cannot omit the NameWrapper used for wrapped-name managers.
+    function testConstructorRejectsZeroNameWrapper() public {
+        vm.expectRevert(bytes4(keccak256("ZeroAddress()")));
+        new AgentPolicyExecutor(address(ens), address(0));
+    }
+
     /// @notice Verifies an ENS owner can create a policy and seed its gas budget.
     function testOwnerCanSetPolicyAndFundGasBudget() public {
         _setPolicy(1 ether, 0, 0.01 ether, uint64(block.timestamp + 1 days));

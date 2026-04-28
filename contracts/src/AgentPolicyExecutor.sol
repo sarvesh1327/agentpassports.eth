@@ -51,6 +51,7 @@ contract AgentPolicyExecutor {
     error ReentrantCall();
     error ZeroAmount();
     error PolicyNotFound();
+    error ZeroAddress();
 
     event PolicySet(
         bytes32 indexed ownerNode,
@@ -124,6 +125,8 @@ contract AgentPolicyExecutor {
     /// @param ensRegistry ENS registry address used for owner and resolver lookups.
     /// @param nameWrapperAddress ENS NameWrapper address used for wrapped-name ownership checks.
     constructor(address ensRegistry, address nameWrapperAddress) {
+        if (ensRegistry == address(0) || nameWrapperAddress == address(0)) revert ZeroAddress();
+
         ens = IENSRegistry(ensRegistry);
         nameWrapper = INameWrapper(nameWrapperAddress);
     }
@@ -273,6 +276,14 @@ contract AgentPolicyExecutor {
             if (!reimbursed) revert ReimbursementFailed();
         }
 
+        _emitTaskExecuted(intent, resolvedAgent, reimbursement);
+    }
+
+    /// @notice Emits the execution proof from a separate frame to keep execute below stack limits.
+    /// @param intent Authorized intent whose identity and calldata commitment were executed.
+    /// @param resolvedAgent ENS-resolved signer that matched the recovered signature.
+    /// @param reimbursement Amount reimbursed to the relayer for this execution.
+    function _emitTaskExecuted(TaskIntent calldata intent, address resolvedAgent, uint256 reimbursement) internal {
         emit TaskExecuted(
             intent.agentNode,
             resolvedAgent,

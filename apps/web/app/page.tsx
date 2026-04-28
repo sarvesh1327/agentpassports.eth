@@ -1,6 +1,4 @@
-import {
-  SEPOLIA_CHAIN_ID
-} from "@agentpassport/config";
+import { chainNameForId } from "@agentpassport/config";
 import { AgentPassportCard } from "../components/AgentPassportCard";
 import { EnsProofPanel } from "../components/EnsProofPanel";
 import { buildDemoAgentProfile } from "../lib/demoProfile";
@@ -14,7 +12,9 @@ export default function HomePage() {
   return (
     <main className="home-shell">
       <section className="home-intro" aria-labelledby="home-title">
-        <p className="home-intro__eyebrow">Sepolia ({SEPOLIA_CHAIN_ID})</p>
+        <p className="home-intro__eyebrow">
+          {chainNameForId(preview.chainId)} ({preview.chainId.toString()})
+        </p>
         <h1 id="home-title">AgentPassport.eth</h1>
         <p>ENS-native identity and sponsored execution for onchain agents.</p>
       </section>

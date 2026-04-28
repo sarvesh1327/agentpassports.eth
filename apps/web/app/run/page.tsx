@@ -1,4 +1,3 @@
-import { SEPOLIA_CHAIN_ID } from "@agentpassport/config";
 import { RunTaskDemo } from "../../components/RunTaskDemo";
 import { buildDemoAgentProfile } from "../../lib/demoProfile";
 
@@ -16,7 +15,7 @@ export default function RunPage() {
       </section>
 
       <RunTaskDemo
-        chainId={BigInt(SEPOLIA_CHAIN_ID)}
+        chainId={profile.chainId}
         defaultAgentName={profile.agentName}
         defaultMetadataURI="ipfs://agentpassports-demo-task"
         defaultOwnerName={profile.ownerName}

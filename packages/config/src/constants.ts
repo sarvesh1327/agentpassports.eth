@@ -12,3 +12,11 @@ export const DEFAULT_SEPOLIA_ADDRESSES = {
   nameWrapper: NAME_WRAPPER_ADDRESS,
   publicResolver: PUBLIC_RESOLVER_ADDRESS
 } as const;
+
+/**
+ * Returns a stable display name for configured chains without scattering raw ids through apps.
+ */
+export function chainNameForId(chainId: bigint | number): string {
+  const normalizedChainId = BigInt(chainId);
+  return normalizedChainId === BigInt(SEPOLIA_CHAIN_ID) ? "Sepolia" : `Chain ${normalizedChainId}`;
+}

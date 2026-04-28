@@ -20,9 +20,17 @@ import {
   recoverTaskSigner,
   serializeRelayerExecutePayload,
   serializeTypedData,
-  storeSignedTaskPayload
+  storeSignedTaskPayload,
+  taskAuthorizationResult
 } from "../lib/taskDemo";
+import {
+  TASK_HISTORY_FROM_BLOCK,
+  taskFromLog,
+  type TaskHistoryItem,
+  type TaskRecordedLog
+} from "../lib/taskHistory";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
+import { TaskHistoryPanel } from "./TaskHistoryPanel";
 
 const INTENT_TTL_SECONDS = 600n;
 
@@ -35,14 +43,6 @@ export type RunTaskDemoProps = {
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
   taskLogAddress?: Hex | null;
-};
-
-type TaskHistoryItem = {
-  id: string;
-  metadataURI: string;
-  taskHash: Hex;
-  timestamp: string;
-  txHash: Hex;
 };
 
 type RelayerResponse = {
@@ -223,12 +223,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = safeBigInt(gasBudgetRead.data as bigint | undefined);
-  const authorizationStatus =
-    recoveredSigner && liveAgentAddress
-      ? sameAddress(recoveredSigner, liveAgentAddress)
-        ? "pass"
-        : "fail"
-      : "unknown";
+  const authorization = taskAuthorizationResult({
+    liveAgentAddress,
+    policyEnabled: livePolicy?.[7],
+    recoveredSigner
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -245,7 +244,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
         address: props.taskLogAddress,
         event: TASK_RECORDED_EVENT,
         args: { agentNode },
-        fromBlock: 0n,
+        fromBlock: TASK_HISTORY_FROM_BLOCK,
         toBlock: "latest"
       });
       if (!cancelled) {
@@ -318,7 +317,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     try {
       const { stored } = await signAndStoreDraft({ persistForRevocation: true });
       setStatus("signed");
-      setStatusMessage(stored ? "Signed payload saved for revocation retry" : "Signed payload created; browser storage unavailable");
+      setStatusMessage(
+        stored
+          ? "Signed payload saved for revocation retry"
+          : "Signed payload created; browser storage unavailable"
+      );
     } catch (error) {
       setStatus("error");
       setStatusMessage(error instanceof Error ? error.message : "Task signing failed");
@@ -379,7 +382,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
             </label>
             <label>
               <span>Task text</span>
-              <input name="taskDescription" onChange={(event) => setTaskDescription(event.target.value)} value={taskDescription} />
+              <input
+                name="taskDescription"
+                onChange={(event) => setTaskDescription(event.target.value)}
+                value={taskDescription}
+              />
             </label>
             <label>
               <span>Metadata URI</span>
@@ -397,13 +404,31 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
             <PreviewRow label="Agent node" title={agentNode} value={shortenHex(agentNode)} />
             <PreviewRow label="Owner node" title={ownerNode} value={shortenHex(ownerNode)} />
             <PreviewRow label="Resolver" title={resolverAddress ?? undefined} value={formatNullableHex(resolverAddress)} />
-            <PreviewRow label="ENS addr(agent)" title={liveAgentAddress ?? undefined} value={formatNullableHex(liveAgentAddress)} />
+            <PreviewRow
+              label="ENS addr(agent)"
+              title={liveAgentAddress ?? undefined}
+              value={formatNullableHex(liveAgentAddress)}
+            />
             <PreviewRow label="Next nonce" value={nextNonceRead.isSuccess ? effectiveNextNonce.toString() : "Unknown"} />
             <PreviewRow label="Gas budget" value={formatWei(liveGasBudget)} />
-            <PreviewRow label="Call data hash" title={draftState.draft?.intent.callDataHash} value={formatNullableHex(draftState.draft?.intent.callDataHash)} />
-            <PreviewRow label="Recovered signer" title={recoveredSigner ?? undefined} value={formatNullableHex(recoveredSigner)} />
+            <PreviewRow
+              label="Call data hash"
+              title={draftState.draft?.intent.callDataHash}
+              value={formatNullableHex(draftState.draft?.intent.callDataHash)}
+            />
+            <PreviewRow
+              label="Recovered signer"
+              title={recoveredSigner ?? undefined}
+              value={formatNullableHex(recoveredSigner)}
+            />
           </dl>
-          <pre className="json-panel">{JSON.stringify(draftState.draft ? serializeTypedData(draftState.draft.typedData) : { error: draftState.error }, null, 2)}</pre>
+          <pre className="json-panel">
+            {JSON.stringify(
+              draftState.draft ? serializeTypedData(draftState.draft.typedData) : { error: draftState.error },
+              null,
+              2
+            )}
+          </pre>
         </section>
 
         <div className="register-form__actions">
@@ -430,9 +455,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
         <EnsProofPanel
           agentName={agentName}
           agentNode={agentNode}
-          authorizationStatus={authorizationStatus}
+          authorizationStatus={authorization.status}
           ensAgentAddress={liveAgentAddress}
-          failureReason={authorizationStatus === "fail" ? "Recovered signer does not match ENS addr(agent)" : draftState.error ?? undefined}
+          failureReason={authorization.failureReason ?? draftState.error ?? undefined}
           gasBudgetWei={liveGasBudget}
           ownerName={ownerName}
           ownerNode={ownerNode}
@@ -441,7 +466,13 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           recoveredSigner={recoveredSigner}
           resolverAddress={resolverAddress}
         />
-        <TaskHistoryPanel tasks={taskHistory} />
+        <TaskHistoryPanel
+          emptyDescription="Task history refreshes after the relayer submits a TaskRecorded event."
+          eyebrow="TaskRecorded events"
+          headingId="run-history-title"
+          tasks={taskHistory}
+          title="Task history"
+        />
       </div>
     </>
   );
@@ -459,69 +490,10 @@ function PreviewRow(props: { label: string; title?: string; value: string }) {
   );
 }
 
-/**
- * Displays TaskRecorded events for the selected agent.
- */
-function TaskHistoryPanel({ tasks }: { tasks: readonly TaskHistoryItem[] }) {
-  return (
-    <section className="app-card" aria-labelledby="run-history-title">
-      <div className="section-heading">
-        <p>TaskRecorded events</p>
-        <h2 id="run-history-title">Task history</h2>
-      </div>
-      {tasks.length > 0 ? (
-        <div className="record-table" role="table" aria-label="Task history">
-          {tasks.map((task) => (
-            <div className="record-table__row" role="row" key={task.id}>
-              <span role="cell">{task.timestamp}</span>
-              <strong role="cell">
-                {shortenHex(task.taskHash)} {task.metadataURI}
-              </strong>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <strong>No task proofs recorded</strong>
-          <span>Task history refreshes after the relayer submits a TaskRecorded event.</span>
-        </div>
-      )}
-    </section>
-  );
-}
-
-type TaskRecordedLog = {
-  args: {
-    metadataURI?: string;
-    taskHash?: Hex;
-    taskId?: bigint;
-    timestamp?: bigint;
-  };
-  transactionHash: Hex;
-};
-
-/**
- * Converts one TaskRecorded log into a display row.
- */
-function taskFromLog(log: TaskRecordedLog): TaskHistoryItem {
-  const taskId = log.args.taskId?.toString() ?? log.transactionHash;
-  return {
-    id: `${log.transactionHash}-${taskId}`,
-    metadataURI: log.args.metadataURI ?? "",
-    taskHash: log.args.taskHash ?? "0x",
-    timestamp: log.args.timestamp ? new Date(Number(log.args.timestamp) * 1000).toISOString() : "Unknown time",
-    txHash: log.transactionHash
-  };
-}
-
 function formatNullableHex(value?: Hex | null): string {
   return value ? shortenHex(value) : "Unknown";
 }
 
 function safeBigInt(value?: bigint): bigint {
   return typeof value === "bigint" ? value : 0n;
-}
-
-function sameAddress(left: Hex, right: Hex): boolean {
-  return left.toLowerCase() === right.toLowerCase();
 }
