@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
-import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
+import { encodeFunctionData } from "viem";
+import { usePublicClient, useReadContract, useReadContracts, useSendTransaction } from "wagmi";
 import { AgentManagementPanel } from "./AgentManagementPanel";
+import { StatusBanner } from "./StatusBanner";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -15,7 +17,7 @@ import {
 } from "../lib/contracts";
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
-import { formatWeiAsEth } from "../lib/ethAmount";
+import { formatWeiAsEth, formatWeiInputAsEth, parseEthInputToWei } from "../lib/ethAmount";
 import { AgentBotIcon, UiIcon } from "./icons/UiIcons";
 import {
   loadTaskHistory,
@@ -32,7 +34,10 @@ type TextReadResult = {
  */
 export function AgentProfileView({ initialProfile }: { initialProfile: SerializableAgentProfile }) {
   const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
+  const { sendTransactionAsync } = useSendTransaction();
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
+  const [managementStatus, setManagementStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [managementMessage, setManagementMessage] = useState("Owner actions are ready.");
   const registryResolver = useReadContract({
     address: initialProfile.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -105,6 +110,75 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const policyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value || initialProfile.policyUri;
   const policyHash = textRecords.find((record) => record.key === "agent.policy.hash")?.value || initialProfile.policyHash;
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
+  const nextStatusAction = passportStatus === "disabled" ? "active" : "disabled";
+
+  async function sendAgentManagementCall(input: { data: Hex; label: string; to?: Hex | null; value?: bigint }) {
+    if (!input.to) {
+      setManagementStatus("error");
+      setManagementMessage(`${input.label} target is not configured.`);
+      return;
+    }
+
+    setManagementStatus("loading");
+    setManagementMessage(`Awaiting wallet approval for ${input.label}.`);
+    try {
+      await sendTransactionAsync({ data: input.data, to: input.to, value: input.value });
+      setManagementStatus("success");
+      setManagementMessage(`${input.label} transaction submitted.`);
+    } catch (error) {
+      setManagementStatus("error");
+      setManagementMessage(error instanceof Error ? error.message : `${input.label} failed.`);
+    }
+  }
+
+  async function writeAgentStatus(nextStatus: "active" | "disabled") {
+    await sendAgentManagementCall({
+      data: encodeFunctionData({
+        abi: PUBLIC_RESOLVER_ABI,
+        functionName: "setText",
+        args: [initialProfile.agentNode, "agent.status", nextStatus]
+      }),
+      label: nextStatus === "active" ? "Enable agent" : "Disable agent",
+      to: resolverAddress
+    });
+  }
+
+  async function promptPolicyUriUpdate() {
+    const nextPolicyUri = window.prompt("Policy URI", policyUri || "");
+    if (nextPolicyUri === null) {
+      return;
+    }
+
+    await sendAgentManagementCall({
+      data: encodeFunctionData({
+        abi: PUBLIC_RESOLVER_ABI,
+        functionName: "setText",
+        args: [initialProfile.agentNode, "agent.policy.uri", nextPolicyUri.trim()]
+      }),
+      label: "Edit policy",
+      to: resolverAddress
+    });
+  }
+
+  async function submitGasBudgetChange(mode: "deposit" | "withdraw", amountEth: string) {
+    const amountWei = parseEthInputToWei(amountEth);
+    if (amountWei === 0n) {
+      setManagementStatus("error");
+      setManagementMessage("Enter a nonzero ETH amount before changing gas.");
+      return;
+    }
+
+    await sendAgentManagementCall({
+      data: encodeFunctionData({
+        abi: AGENT_POLICY_EXECUTOR_ABI,
+        functionName: mode === "deposit" ? "depositGasBudget" : "withdrawGasBudget",
+        args: mode === "deposit" ? [initialProfile.agentNode] : [initialProfile.agentNode, amountWei]
+      }),
+      label: mode === "deposit" ? "Add gas" : "Withdraw gas",
+      to: initialProfile.executorAddress,
+      value: mode === "deposit" ? amountWei : undefined
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -164,13 +238,21 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
             </div>
           </div>
           <div className="agent-detail__actions" aria-label="Agent quick actions">
-            <a href="#agent-management-status-title"><UiIcon name="shield" size={16} /> Disable</a>
-            <a href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
-            <a href="#agent-management-gas-title"><UiIcon name="plus" size={16} /> Add gas</a>
-            <a href="#agent-management-withdraw-title"><UiIcon name="download" size={16} /> Withdraw gas</a>
+            <button type="button" onClick={() => void writeAgentStatus(nextStatusAction)}>
+              <UiIcon name={nextStatusAction === "active" ? "check" : "shield"} size={16} /> {nextStatusAction === "active" ? "Enable" : "Disable"}
+            </button>
+            <button type="button" onClick={() => void promptPolicyUriUpdate()}><UiIcon name="edit" size={16} /> Edit policy</button>
+            <a href="#agent-gas-add-input"><UiIcon name="plus" size={16} /> Add gas</a>
+            <a href="#agent-gas-withdraw-input"><UiIcon name="download" size={16} /> Withdraw gas</a>
             <a className="agent-detail__delete-link" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
           </div>
         </div>
+        <StatusBanner
+          details={`Resolver ${resolverAddress ? shortenHex(resolverAddress) : "not configured"}`}
+          message={managementMessage}
+          title="Owner action status"
+          variant={managementStatus}
+        />
       </section>
 
       <div className="agent-detail__grid">
@@ -195,7 +277,11 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           policyUri={policyUri}
           taskLogAddress={initialProfile.taskLogAddress}
         />
-        <GasBudgetPanel gasBudgetWei={liveGasBudget} />
+        <GasBudgetPanel
+          gasBudgetWei={liveGasBudget}
+          onAddGas={(amountEth) => void submitGasBudgetChange("deposit", amountEth)}
+          onWithdrawGas={(amountEth) => void submitGasBudgetChange("withdraw", amountEth)}
+        />
         <TaskHistoryPanel
           cardClassName="agent-panel agent-history-card"
           emptyDescription="TaskLog events remain visible here after disable or delete."
@@ -316,26 +402,56 @@ function PolicyStatePanel(props: {
   );
 }
 
-function GasBudgetPanel(props: { gasBudgetWei: bigint }) {
+function GasBudgetPanel(props: {
+  gasBudgetWei: bigint;
+  onAddGas: (amountEth: string) => void;
+  onWithdrawGas: (amountEth: string) => void;
+}) {
+  const [addAmountEth, setAddAmountEth] = useState("");
+  const [withdrawAmountEth, setWithdrawAmountEth] = useState("");
+
   return (
     <section className="agent-panel agent-gas-card" aria-labelledby="agent-gas-title">
       <h2 id="agent-gas-title"><UiIcon name="gas" size={18} /> Gas Budget</h2>
       <span>Balance</span>
       <strong>{formatWei(props.gasBudgetWei)}</strong>
       <div className="agent-gas-card__inputs">
-        <label>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          props.onAddGas(addAmountEth);
+        }}>
+          <label>
           <span>Add amount (ETH)</span>
-          <input readOnly value="0.0" />
-        </label>
-        <label>
+            <input
+              id="agent-gas-add-input"
+              inputMode="decimal"
+              onChange={(event) => setAddAmountEth(event.target.value)}
+              placeholder="0.0"
+              value={addAmountEth}
+            />
+          </label>
+          <button type="submit"><UiIcon name="plus" size={16} /> Add gas</button>
+        </form>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          props.onWithdrawGas(withdrawAmountEth);
+        }}>
+          <label>
           <span>Withdraw amount (ETH)</span>
           <span className="agent-gas-card__input-row">
-            <input readOnly value="0.0" />
-            <button type="button">Max</button>
+              <input
+                id="agent-gas-withdraw-input"
+                inputMode="decimal"
+                onChange={(event) => setWithdrawAmountEth(event.target.value)}
+                placeholder="0.0"
+                value={withdrawAmountEth}
+              />
+              <button type="button" onClick={() => setWithdrawAmountEth(formatWeiInputAsEth(props.gasBudgetWei.toString()))}>Max</button>
           </span>
-        </label>
+          </label>
+          <button type="submit"><UiIcon name="download" size={16} /> Withdraw gas</button>
+        </form>
       </div>
-      <a href="#agent-management-gas-title">Manage gas</a>
     </section>
   );
 }

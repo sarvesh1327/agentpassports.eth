@@ -710,12 +710,14 @@ input {
   justify-content: flex-end;
 }
 
-.agent-detail__actions a {
+.agent-detail__actions a,
+.agent-detail__actions button {
   align-items: center;
   background: #ffffff;
   border: 1px solid #93c5fd;
   border-radius: 7px;
   color: #075de8;
+  cursor: pointer;
   display: inline-flex;
   font-size: 0.9rem;
   font-weight: 800;
@@ -831,6 +833,11 @@ input {
   margin-top: 10px;
 }
 
+.agent-gas-card__inputs form {
+  display: grid;
+  gap: 8px;
+}
+
 .agent-gas-card__inputs label {
   display: grid;
   gap: 6px;
@@ -866,16 +873,16 @@ input {
   padding: 0 11px;
 }
 
-.agent-gas-card a {
+.agent-gas-card__inputs form > button {
   align-items: center;
   border: 1px solid #cbd5e1;
   border-radius: 7px;
   color: #0f172a;
+  cursor: pointer;
   display: inline-flex;
   font-weight: 800;
   gap: 7px;
   justify-content: center;
-  margin-top: auto;
   padding: 10px 12px;
   text-align: center;
   text-decoration: none;
@@ -1035,6 +1042,23 @@ input {
   height: 36px;
   justify-content: center;
   width: 36px;
+}
+
+.owner-agents-panel__toggles button[aria-pressed="true"] {
+  border-color: #075de8;
+  color: #075de8;
+}
+
+.owner-agents-panel[data-view="list"] .owner-agent-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.owner-agents-panel[data-view="list"] .owner-agent-row__meta {
+  border-left: 0;
+  border-top: 1px solid #e2e8f0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding-left: 0;
+  padding-top: 16px;
 }
 
 .owner-agent-row {
@@ -1997,7 +2021,6 @@ label.register-field-stack {
   .detail-grid,
   .field-grid,
   .fact-grid,
-  .management-panel__grid,
   .readiness-panel__grid {
     grid-template-columns: 1fr;
   }
