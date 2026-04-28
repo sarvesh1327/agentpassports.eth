@@ -24,6 +24,7 @@ export type RegistrationSubmissionResult = {
 export type RegistrationSubmissionInput = {
   account: Hex;
   batch: RegistrationBatch;
+  call?: (request: RegistrationSendTransactionRequest) => Promise<unknown>;
   chainId: number;
   sendCalls: (request: RegistrationSendCallsRequest) => Promise<{ id: string }>;
   sendTransaction: (request: RegistrationSendTransactionRequest) => Promise<Hex>;
@@ -36,6 +37,7 @@ export type RegistrationSubmissionInput = {
 export async function submitRegistrationBatch(input: RegistrationSubmissionInput): Promise<RegistrationSubmissionResult> {
   const calls = input.batch.calls.map((call) => ({
     data: call.data,
+    label: call.label,
     to: call.to,
     value: call.value
   }));
@@ -60,6 +62,14 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
 
   const transactionIds: string[] = [];
   for (const call of calls) {
+    await preflightRegistrationCall(input.call, {
+      account: input.account,
+      chainId: input.chainId,
+      data: call.data,
+      to: call.to,
+      value: call.value
+    }, call.label);
+
     const hash = await input.sendTransaction({
       account: input.account,
       chainId: input.chainId,
@@ -76,6 +86,39 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
     mode: "sequential",
     transactionIds
   };
+}
+
+/**
+ * Simulates a fallback transaction immediately before wallet signing so contract reverts become form errors.
+ */
+async function preflightRegistrationCall(
+  call: RegistrationSubmissionInput["call"],
+  request: RegistrationSendTransactionRequest,
+  label: string
+): Promise<void> {
+  if (!call) {
+    return;
+  }
+
+  try {
+    await call(request);
+  } catch (error) {
+    throw new Error(readRegistrationPreflightMessage(error, label, request.data));
+  }
+}
+
+/**
+ * Converts low-level revert selectors into registration messages users can act on.
+ */
+function readRegistrationPreflightMessage(error: unknown, label: string, data: Hex): string {
+  const message = readNestedErrorMessage(error);
+  if (label === "setPolicy" || data.startsWith("0xd879609b")) {
+    if (message.includes("0x42f058b4") || message.toLowerCase().includes("execution reverted")) {
+      return "Connected wallet cannot set policy for this owner ENS. Make sure the connected wallet manages the owner ENS name, then try again.";
+    }
+  }
+
+  return `Registration transaction "${label}" would fail before wallet signing: ${message || "Unexpected contract error"}`;
 }
 
 /**

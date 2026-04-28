@@ -365,6 +365,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     return submitRegistrationBatch({
       account: input.connectedWallet,
       batch,
+      call: (request) => publicClient.call(request),
       chainId: Number(props.chainId),
       sendCalls: (request) => sendCallsAsync(request),
       sendTransaction: (request) => sendTransactionAsync(request),

@@ -563,6 +563,46 @@ test("registration fallback waits for each transaction before sending the depend
   ]);
 });
 
+test("registration fallback preflights each transaction before wallet signing", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+  const batch = {
+    calls: [
+      { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
+      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 1n }
+    ],
+    summary: []
+  };
+  const sentTransactions = [];
+
+  await assert.rejects(
+    submitRegistrationBatch({
+      account: OWNER_WALLET,
+      batch,
+      call: async (request) => {
+        if (request.to === EXECUTOR_ADDRESS) {
+          throw new Error("execution reverted: 0x42f058b4");
+        }
+      },
+      chainId: 11155111,
+      sendCalls: async () => {
+        throw new Error('The method "wallet_sendCalls" does not exist / is not available.');
+      },
+      sendTransaction: async (request) => {
+        sentTransactions.push(request);
+        return `0x${sentTransactions.length.toString(16).padStart(64, "0")}`;
+      },
+      waitForTransactionReceipt: async () => {
+      }
+    }),
+    /Connected wallet cannot set policy for this owner ENS/
+  );
+
+  assert.deepEqual(
+    sentTransactions.map((request) => request.to),
+    [PUBLIC_RESOLVER_ADDRESS]
+  );
+});
+
 test("register preview keeps policy hash pending until owner and agent label are entered", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
 
