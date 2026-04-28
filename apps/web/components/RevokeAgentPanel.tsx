@@ -313,6 +313,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     const policy = requireLivePolicy();
     const agentAddress = requireAddress(liveAgentAddress, "Agent ENS address is not configured");
     const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+    const expectedPolicyHash = hashPolicyContractResult({ agentNode, policy });
     const response = await fetch("/api/policy-metadata", {
       body: JSON.stringify({
         agentAddress,
@@ -325,7 +326,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         maxGasReimbursementWei: policy[5].toString(),
         maxValueWei: policy[4].toString(),
         ownerName: normalizedOwnerName,
-        ownerNode,
+        ownerNode: policy[0],
         status,
         target: policy[2]
       }),
@@ -336,6 +337,9 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
 
     if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
       throw new Error("Policy metadata Pinata upload failed");
+    }
+    if (!expectedPolicyHash || body.policyHash.toLowerCase() !== expectedPolicyHash.toLowerCase()) {
+      throw new Error("Generated policy metadata does not match the live executor policy");
     }
 
     return {

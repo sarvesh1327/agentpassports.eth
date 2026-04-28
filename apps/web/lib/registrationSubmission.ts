@@ -18,8 +18,14 @@ export type RegistrationSendTransactionRequest = {
 };
 
 export type RegistrationSubmissionResult = {
+  finalized: boolean;
   mode: "batch" | "sequential";
   transactionIds: string[];
+};
+
+export type RegistrationCallsStatus = {
+  receipts?: readonly { transactionHash?: Hex }[];
+  status?: string;
 };
 
 export type RegistrationSubmissionInput = {
@@ -30,6 +36,7 @@ export type RegistrationSubmissionInput = {
   estimateGas?: (request: RegistrationSendTransactionRequest) => Promise<bigint>;
   sendCalls: (request: RegistrationSendCallsRequest) => Promise<{ id: string }>;
   sendTransaction: (request: RegistrationSendTransactionRequest) => Promise<Hex>;
+  waitForCallsStatus?: (request: { id: string }) => Promise<RegistrationCallsStatus>;
   waitForTransactionReceipt: (request: { hash: Hex }) => Promise<unknown>;
 };
 
@@ -56,10 +63,7 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       forceAtomic: true
     });
 
-    return {
-      mode: "batch",
-      transactionIds: [result.id]
-    };
+    return finalizeCallBatch(input.waitForCallsStatus, result.id);
   } catch (error) {
     if (!isWalletSendCallsUnavailable(error)) {
       throw error;
@@ -93,8 +97,40 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
   }
 
   return {
+    finalized: true,
     mode: "sequential",
     transactionIds
+  };
+}
+
+/**
+ * Waits for EIP-5792 wallet batches when the wallet exposes status tracking.
+ */
+async function finalizeCallBatch(
+  waitForCallsStatus: RegistrationSubmissionInput["waitForCallsStatus"],
+  id: string
+): Promise<RegistrationSubmissionResult> {
+  if (!waitForCallsStatus) {
+    return {
+      finalized: false,
+      mode: "batch",
+      transactionIds: [id]
+    };
+  }
+
+  const result = await waitForCallsStatus({ id });
+  if (result.status !== "success") {
+    throw new Error("Registration batch did not finalize successfully");
+  }
+
+  const receiptHashes = (result.receipts ?? [])
+    .map((receipt) => receipt.transactionHash)
+    .filter((hash): hash is Hex => typeof hash === "string" && hash.startsWith("0x"));
+
+  return {
+    finalized: true,
+    mode: "batch",
+    transactionIds: receiptHashes.length > 0 ? receiptHashes : [id]
   };
 }
 

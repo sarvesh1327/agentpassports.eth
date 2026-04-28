@@ -675,6 +675,7 @@ test("registration submission falls back when the wallet does not support sendCa
   });
 
   assert.equal(result.mode, "sequential");
+  assert.equal(result.finalized, true);
   assert.deepEqual(
     sentTransactions.map((request) => request.to),
     batch.calls.map((call) => call.to)
@@ -688,6 +689,89 @@ test("registration submission falls back when the wallet does not support sendCa
     "0x0000000000000000000000000000000000000000000000000000000000000002",
     "0x0000000000000000000000000000000000000000000000000000000000000003"
   ]);
+});
+
+test("registration submission waits for wallet call batches before treating them as finalized", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+  const batch = {
+    calls: [
+      { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
+      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+    ],
+    summary: []
+  };
+  const events = [];
+
+  const result = await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch,
+    chainId: 11155111,
+    sendCalls: async () => {
+      events.push("sendCalls");
+      return { id: "0xbatch" };
+    },
+    sendTransaction: async () => {
+      throw new Error("fallback should not run");
+    },
+    waitForCallsStatus: async ({ id }) => {
+      events.push(`wait:${id}`);
+      return {
+        receipts: [{ transactionHash: "0x00000000000000000000000000000000000000000000000000000000000000aa" }],
+        status: "success"
+      };
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.deepEqual(events, ["sendCalls", "wait:0xbatch"]);
+  assert.equal(result.finalized, true);
+  assert.deepEqual(result.transactionIds, ["0x00000000000000000000000000000000000000000000000000000000000000aa"]);
+});
+
+test("registration submission reports untracked wallet batches as unfinalized", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+
+  const result = await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch: {
+      calls: [{ data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS }],
+      summary: []
+    },
+    chainId: 11155111,
+    sendCalls: async () => ({ id: "0xbatch" }),
+    sendTransaction: async () => {
+      throw new Error("fallback should not run");
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.equal(result.finalized, false);
+  assert.deepEqual(result.transactionIds, ["0xbatch"]);
+});
+
+test("registration submission rejects failed wallet call batches", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+
+  await assert.rejects(
+    submitRegistrationBatch({
+      account: OWNER_WALLET,
+      batch: {
+        calls: [{ data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS }],
+        summary: []
+      },
+      chainId: 11155111,
+      sendCalls: async () => ({ id: "0xbatch" }),
+      sendTransaction: async () => {
+        throw new Error("fallback should not run");
+      },
+      waitForCallsStatus: async () => ({ receipts: [], status: "failure" }),
+      waitForTransactionReceipt: async () => {
+      }
+    }),
+    /Registration batch did not finalize successfully/
+  );
 });
 
 test("registration fallback waits for each transaction before sending the dependent next call", async () => {

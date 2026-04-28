@@ -240,6 +240,7 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /generatePolicyMetadata/);
   assert.match(formSource, /\/api\/policy-metadata/);
   assert.match(formSource, /unpinOldPolicyMetadata/);
+  assert.match(formSource, /submitted\.finalized/);
   assert.match(formSource, /method: "DELETE"/);
   assert.match(formSource, /oldPolicyUri/);
   assert.match(formSource, /status: "active"/);
@@ -630,6 +631,8 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /handleRevokePolicy/);
   assert.match(panelSource, /writeAgentStatusMetadata\("disabled"\)/);
   assert.match(panelSource, /generatePolicyMetadata\(status\)/);
+  assert.match(panelSource, /ownerNode: policy\[0\]/);
+  assert.match(panelSource, /hashPolicyContractResult\(\{ agentNode, policy \}\)/);
   assert.match(panelSource, /fetch\("\/api\/policy-metadata"/);
   assert.match(panelSource, /unpinOldPolicyMetadata/);
   assert.match(panelSource, /method: "DELETE"/);

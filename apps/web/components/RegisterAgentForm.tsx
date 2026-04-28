@@ -3,6 +3,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { taskLogRecordTaskSelector, type Hex } from "@agentpassport/config";
+import { waitForCallsStatus } from "viem/actions";
 import {
   useAccount,
   useEnsAddress,
@@ -10,7 +11,8 @@ import {
   usePublicClient,
   useReadContract,
   useSendCalls,
-  useSendTransaction
+  useSendTransaction,
+  useWalletClient
 } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -78,6 +80,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const { sendCallsAsync } = useSendCalls();
   const { sendTransactionAsync } = useSendTransaction();
   const publicClient = usePublicClient({ chainId: Number(props.chainId) });
+  const walletClient = useWalletClient({ chainId: Number(props.chainId) });
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
   const [ownerNameEdited, setOwnerNameEdited] = useState(false);
   const [agentLabel, setAgentLabel] = useState(props.defaultAgentLabel);
@@ -408,6 +411,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       estimateGas: ({ account, data, to, value }) => publicClient.estimateGas({ account, data, to, value }),
       sendCalls: (request) => sendCallsAsync(request),
       sendTransaction: (request) => sendTransactionAsync(request),
+      waitForCallsStatus: walletClient.data
+        ? (request) => waitForCallsStatus(walletClient.data, { id: request.id, throwOnFailure: true, timeout: 180_000 })
+        : undefined,
       waitForTransactionReceipt: (request) => publicClient.waitForTransactionReceipt(request)
     });
   }
@@ -549,7 +555,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         agentAddress: normalizedAgentAddress,
         agentName: preview.agentName
       });
-      await unpinOldPolicyMetadata(oldPolicyUriValue, generatedPolicy.policyUri);
+      if (submitted.finalized) {
+        await unpinOldPolicyMetadata(oldPolicyUriValue, generatedPolicy.policyUri);
+      }
       setSubmittedTxHashes(submitted.transactionIds);
       setStatus("submitted");
       setStatusMessage(
