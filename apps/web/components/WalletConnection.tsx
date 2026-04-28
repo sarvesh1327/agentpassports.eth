@@ -21,5 +21,5 @@ export function WalletConnection() {
     );
   }
 
-  return <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false} />;
+  return <ConnectButton accountStatus="full" chainStatus="icon" showBalance={false} />;
 }

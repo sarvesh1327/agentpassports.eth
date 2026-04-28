@@ -138,6 +138,7 @@ test("environment templates document required variables for Sepolia-first develo
     "RELAYER_PRIVATE_KEY",
     "RELAYER_RESERVATION_REDIS_REST_TOKEN",
     "RELAYER_RESERVATION_REDIS_REST_URL",
+    "AGENTPASSPORT_DB_PATH",
     "AGENT_PRIVATE_KEY",
     "RPC_URL",
     "SEPOLIA_RPC_URL",
@@ -153,8 +154,10 @@ test("environment templates document required variables for Sepolia-first develo
   assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_URL=/);
   assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_TOKEN=/);
   assert.match(runnerEnv, /^RPC_URL=$/m);
-  assert.match(runnerEnv, /AGENT_ENS_NAME=assistant\.agentpassports\.eth/);
-  assert.match(runnerEnv, /OWNER_ENS_NAME=agentpassports\.eth/);
+  assert.match(runnerEnv, /^AGENT_ENS_NAME=$/m);
+  assert.match(runnerEnv, /^OWNER_ENS_NAME=$/m);
+  assert.match(runnerEnv, /^TASK_DESCRIPTION=$/m);
+  assert.match(runnerEnv, /^METADATA_URI=$/m);
   assert.match(runnerEnv, /RELAYER_URL=http:\/\/localhost:3000\/api\/relayer\/execute/);
   assert.match(runnerEnv, /CHAIN_ID=11155111/);
   assert.match(contractsEnv, /^SEPOLIA_RPC_URL=$/m);
@@ -187,8 +190,10 @@ test("shared config exposes Sepolia address constants and README setup instructi
 test("runtime chain labels are derived from shared constants instead of raw Sepolia literals", async () => {
   const runnerSource = await readText("agent-runner/src/runTask.ts");
   const relayerSource = await readText("apps/web/app/api/relayer/execute/route.ts");
+  const serverChainSource = await readText("apps/web/lib/serverChain.ts");
 
-  for (const source of [runnerSource, relayerSource]) {
+  assert.match(relayerSource, /buildServerChain/);
+  for (const source of [runnerSource, serverChainSource]) {
     assert.match(source, /chainNameForId/);
     assert.doesNotMatch(source, /11155111\s*\?\s*"Sepolia"/);
   }

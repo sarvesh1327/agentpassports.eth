@@ -8,13 +8,13 @@ import { webEnv } from "./env";
 import { buildAgentName, safeNamehash, splitAgentName } from "./ensPreview";
 import { readConfiguredChainId } from "./publicChain";
 
-export const DEFAULT_DEMO_OWNER_ENS = "agentpassports.eth";
-export const DEFAULT_DEMO_AGENT_LABEL = "assistant";
+export const DEFAULT_DEMO_OWNER_ENS = "";
+export const DEFAULT_DEMO_AGENT_LABEL = "";
 
-const DEFAULT_DEMO_POLICY_URI = "ipfs://agentpassports-demo-policy";
+const DEFAULT_DEMO_POLICY_URI = "";
 const DEFAULT_POLICY_EXPIRES_AT = 1_790_000_000n;
 const DEFAULT_GAS_BUDGET_WEI = 10_000_000_000_000_000n;
-const DEFAULT_MAX_GAS_REIMBURSEMENT_WEI = 1_000_000_000_000_000n;
+const DEFAULT_MAX_GAS_REIMBURSEMENT_WEI = 200_000_000_000_000n;
 const DEFAULT_MAX_VALUE_WEI = 0n;
 const AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
 
@@ -35,6 +35,7 @@ export type AgentProfilePreview = {
   gasBudgetWei: bigint;
   maxGasReimbursementWei: bigint;
   maxValueWei: bigint;
+  nameWrapperAddress: Hex | null;
   nextNonce: bigint | null;
   ownerName: string;
   ownerNode: Hex;
@@ -60,7 +61,7 @@ export type SerializableAgentProfile = Omit<
 };
 
 /**
- * Builds the shared demo profile used by the home, register, and agent pages.
+ * Builds shared chain and contract configuration plus optional route-derived agent identity.
  */
 export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProfilePreview {
   const fallbackOwnerName = readTextEnv(webEnv.demoOwnerEns) ?? DEFAULT_DEMO_OWNER_ENS;
@@ -76,6 +77,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
   const agentAddress = readAddressEnv(webEnv.demoAgentAddress);
   const ensRegistryAddress = readAddressEnv(webEnv.ensRegistry);
   const executorAddress = readAddressEnv(webEnv.executorAddress);
+  const nameWrapperAddress = readAddressEnv(webEnv.nameWrapper);
   const resolverAddress = readAddressEnv(webEnv.publicResolver);
   const taskLogAddress = readAddressEnv(webEnv.taskLogAddress);
   const policyUri = readTextEnv(webEnv.demoPolicyUri) ?? DEFAULT_DEMO_POLICY_URI;
@@ -105,6 +107,7 @@ export function buildDemoAgentProfile(input?: { agentName?: string }): AgentProf
     gasBudgetWei: DEFAULT_GAS_BUDGET_WEI,
     maxGasReimbursementWei: DEFAULT_MAX_GAS_REIMBURSEMENT_WEI,
     maxValueWei: DEFAULT_MAX_VALUE_WEI,
+    nameWrapperAddress,
     nextNonce: null,
     ownerName,
     ownerNode,
@@ -165,7 +168,7 @@ function buildAgentTextRecords(input: {
 }
 
 /**
- * Treats blank env values as unset so demo defaults remain visible.
+ * Treats blank env values as unset so user-controlled fields can start empty.
  */
 function readTextEnv(value?: string): string | undefined {
   const normalized = value?.trim();

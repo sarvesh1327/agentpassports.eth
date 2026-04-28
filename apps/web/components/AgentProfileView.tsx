@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
-import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
+import { useReadContract, useReadContracts } from "wagmi";
 import { AgentPassportCard } from "./AgentPassportCard";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
@@ -11,17 +11,14 @@ import {
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  TASK_RECORDED_EVENT,
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
 import {
-  TASK_HISTORY_FROM_BLOCK,
-  taskFromLog,
-  type TaskHistoryItem,
-  type TaskRecordedLog
+  fetchTaskHistory,
+  type TaskHistoryItem
 } from "../lib/taskHistory";
 
 type TextReadResult = {
@@ -33,7 +30,6 @@ type TextReadResult = {
  * Hydrates the agent passport with live ENS, executor, and TaskLog reads.
  */
 export function AgentProfileView({ initialProfile }: { initialProfile: SerializableAgentProfile }) {
-  const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const registryResolver = useReadContract({
     address: initialProfile.ensRegistryAddress ?? undefined,
@@ -110,22 +106,12 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     let cancelled = false;
 
     /**
-     * Reads historical TaskRecorded events for the selected agent node.
+     * Reads backend-indexed TaskLog records for the selected agent node.
      */
     async function loadTaskHistory() {
-      if (!publicClient || !initialProfile.taskLogAddress) {
-        setTaskHistory([]);
-        return;
-      }
-      const logs = await publicClient.getLogs({
-        address: initialProfile.taskLogAddress,
-        event: TASK_RECORDED_EVENT,
-        args: { agentNode: initialProfile.agentNode },
-        fromBlock: TASK_HISTORY_FROM_BLOCK,
-        toBlock: "latest"
-      });
+      const tasks = await fetchTaskHistory(initialProfile.agentNode);
       if (!cancelled) {
-        setTaskHistory(logs.map((log) => taskFromLog(log as TaskRecordedLog)));
+        setTaskHistory(tasks);
       }
     }
 
@@ -138,7 +124,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     return () => {
       cancelled = true;
     };
-  }, [initialProfile.agentNode, initialProfile.taskLogAddress, publicClient]);
+  }, [initialProfile.agentNode]);
 
   return (
     <>

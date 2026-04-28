@@ -1,50 +1,57 @@
-import { chainNameForId } from "@agentpassport/config";
-import { AgentPassportCard } from "../components/AgentPassportCard";
-import { EnsProofPanel } from "../components/EnsProofPanel";
-import { buildDemoAgentProfile } from "../lib/demoProfile";
+import Link from "next/link";
 
 /**
- * Renders the landing demo with the same ENS proof facts the dedicated flow will expose.
+ * Renders the product landing page without prefilled owner or agent identity values.
  */
 export default function HomePage() {
-  const preview = buildDemoAgentProfile();
-
   return (
     <main className="home-shell">
-      <section className="home-intro" aria-labelledby="home-title">
-        <p className="home-intro__eyebrow">
-          {chainNameForId(preview.chainId)} ({preview.chainId.toString()})
-        </p>
-        <h1 id="home-title">AgentPassport.eth</h1>
-        <p>ENS-native identity and sponsored execution for onchain agents.</p>
+      <section className="landing-hero" aria-labelledby="home-title">
+        <div className="landing-hero__content">
+          <p className="home-intro__eyebrow">ENS-first agent identity</p>
+          <h1 id="home-title">AgentPassports.eth</h1>
+          <p>
+            Register an ENS subname for an agent, set a narrow execution policy, fund a capped
+            gas budget, and prove revocation by changing the live ENS address.
+          </p>
+          <div className="landing-hero__actions" aria-label="Primary workflow">
+            <Link href="/register">Register agent</Link>
+            <Link href="/run">Run task</Link>
+            <Link href="/revoke">Revoke access</Link>
+          </div>
+        </div>
+
+        <div className="landing-visual" aria-label="Agent passport workflow preview">
+          <div className="landing-visual__rail">
+            <span>ENS subname</span>
+            <strong>Owner supplied</strong>
+          </div>
+          <div className="landing-visual__rail">
+            <span>Live resolver</span>
+            <strong>addr(agent)</strong>
+          </div>
+          <div className="landing-visual__rail">
+            <span>Executor policy</span>
+            <strong>TaskLog only</strong>
+          </div>
+          <div className="landing-visual__rail">
+            <span>Revocation proof</span>
+            <strong>Old signatures fail</strong>
+          </div>
+        </div>
       </section>
 
-      <div className="home-grid">
-        <AgentPassportCard
-          agentAddress={preview.agentAddress}
-          agentName={preview.agentName}
-          agentNode={preview.agentNode}
-          capabilities={preview.capabilities}
-          ownerName={preview.ownerName}
-          policyUri={preview.policyUri}
-          status={preview.agentAddress ? "active" : "unknown"}
-        />
-
-        <EnsProofPanel
-          agentName={preview.agentName}
-          agentNode={preview.agentNode}
-          authorizationStatus="unknown"
-          ensAgentAddress={preview.agentAddress}
-          failureReason={preview.agentAddress ? undefined : "Demo agent address not configured"}
-          gasBudgetWei={preview.gasBudgetWei}
-          ownerName={preview.ownerName}
-          ownerNode={preview.ownerNode}
-          policyEnabled={preview.policyEnabled}
-          policyHash={preview.policyHash}
-          recoveredSigner={null}
-          resolverAddress={preview.resolverAddress}
-        />
-      </div>
+      <section className="landing-steps" aria-labelledby="landing-steps-title">
+        <div className="section-heading">
+          <p>Flow</p>
+          <h2 id="landing-steps-title">Build the proof one step at a time</h2>
+        </div>
+        <ol>
+          <li>Connect the owner wallet and register the agent ENS records.</li>
+          <li>Switch to the agent wallet and sign a policy-limited task intent.</li>
+          <li>Submit through the relayer, inspect TaskLog history, then revoke and retry.</li>
+        </ol>
+      </section>
     </main>
   );
 }

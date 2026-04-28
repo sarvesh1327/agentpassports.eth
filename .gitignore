@@ -6,6 +6,10 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.data/
+apps/web/.data/
+*.sqlite
+*.sqlite-*
 
 # Next.js and general build artifacts.
 .next/

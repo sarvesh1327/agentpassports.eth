@@ -123,7 +123,24 @@ test("relayer helpers reject requests before the relayer spends gas", async () =
     "BadNonce",
   );
   assertRelayerCode(
-    () => validateRelayerExecution({ context: precheckContext({ gasBudgetWei: 0n }), now: 1700000000n, payload }),
+    () =>
+      validateRelayerExecution({
+        context: precheckContext({
+          gasBudgetWei: 0n,
+          policy: {
+            ...precheckContext().policy,
+            maxValueWei: 10n
+          }
+        }),
+        now: 1700000000n,
+        payload: {
+          ...payload,
+          intent: {
+            ...payload.intent,
+            value: 1n
+          }
+        }
+      }),
     "InsufficientGasBudget",
   );
   assertRelayerCode(
@@ -145,6 +162,37 @@ test("relayer helpers reject requests before the relayer spends gas", async () =
   );
 });
 
+test("relayer gas budget estimates actual reimbursement instead of requiring the full cap", async () => {
+  const { assertSufficientEstimatedExecutionBudget, estimateExecutionReimbursementWei } = await import(
+    "../apps/web/lib/relayer/gasBudget.ts"
+  );
+
+  const estimatedReimbursementWei = estimateExecutionReimbursementWei({
+    gasPriceWei: 1_000_000_000n,
+    gasSafetyMultiplierBps: 12_000n,
+    gasUsed: 120_000n,
+    reimbursementCapWei: 1_000_000_000_000_000n
+  });
+
+  assert.equal(estimatedReimbursementWei, 144_000_000_000_000n);
+  assert.doesNotThrow(() =>
+    assertSufficientEstimatedExecutionBudget({
+      estimatedReimbursementWei,
+      gasBudgetWei: 200_000_000_000_000n,
+      intentValueWei: 0n
+    })
+  );
+  assertRelayerCode(
+    () =>
+      assertSufficientEstimatedExecutionBudget({
+        estimatedReimbursementWei,
+        gasBudgetWei: 100_000_000_000_000n,
+        intentValueWei: 0n
+      }),
+    "InsufficientGasBudget"
+  );
+});
+
 test("relayer config reads only server-safe operational values", async () => {
   const { loadRelayerConfig } = await import("../apps/web/lib/relayer/config.ts");
 
@@ -156,6 +204,28 @@ test("relayer config reads only server-safe operational values", async () => {
       RELAYER_PRIVATE_KEY,
       RPC_URL: "http://127.0.0.1:8545/",
     }),
+    {
+      chainId: 11155111n,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      executorAddress: EXECUTOR_ADDRESS,
+      reservationStore: { kind: "memory" },
+      relayerPrivateKey: RELAYER_PRIVATE_KEY,
+      rpcUrl: "http://127.0.0.1:8545",
+    },
+  );
+
+  assert.deepEqual(
+    loadRelayerConfig(
+      {
+        NEXT_PUBLIC_CHAIN_ID: "11155111",
+        NEXT_PUBLIC_ENS_REGISTRY: ENS_REGISTRY_ADDRESS,
+        NEXT_PUBLIC_EXECUTOR_ADDRESS: EXECUTOR_ADDRESS,
+      },
+      {
+        RELAYER_PRIVATE_KEY,
+        RPC_URL: "http://127.0.0.1:8545/",
+      },
+    ),
     {
       chainId: 11155111n,
       ensRegistryAddress: ENS_REGISTRY_ADDRESS,
@@ -428,7 +498,7 @@ test("relayer route submits validated executor transactions from a thin API hand
   const validationSource = await readText("apps/web/lib/relayer/validation.ts");
   const txHashIndex = source.indexOf("let txHash");
   const innerTryIndex = source.indexOf("try {", txHashIndex);
-  const accountIndex = source.indexOf("privateKeyToAccount", txHashIndex);
+  const walletClientIndex = source.indexOf("createWalletClient", txHashIndex);
   assert.match(source, /export const runtime = "nodejs"/);
   assert.match(source, /createIntentSubmissionStore/);
   assert.match(source, /validateRelayerExecution/);
@@ -442,12 +512,22 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
   assert.match(source, /waitForTransactionReceipt/);
+  assert.match(source, /estimateContractGas/);
+  assert.match(source, /getGasPrice/);
+  assert.match(source, /assertSufficientEstimatedExecutionBudget/);
+  assert.match(source, /persistTaskReceipt/);
+  assert.match(source, /createSqliteTaskStore/);
+  assert.match(source, /taskRecordFromReceipt/);
   assert.ok(
     source.indexOf("reservation.markBroadcast") < source.indexOf("waitForTransactionReceipt"),
     "broadcast hashes should be stored before waiting for a receipt",
   );
   assert.ok(
-    txHashIndex !== -1 && innerTryIndex !== -1 && innerTryIndex < accountIndex,
+    source.indexOf("persistTaskReceipt") < source.indexOf("reservation.markSubmitted"),
+    "task history should be stored before the relayer marks the nonce submitted",
+  );
+  assert.ok(
+    txHashIndex !== -1 && innerTryIndex !== -1 && innerTryIndex < walletClientIndex,
     "relayer wallet setup should be inside the reservation cleanup try block",
   );
   assert.ok(

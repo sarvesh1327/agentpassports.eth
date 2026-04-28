@@ -16,10 +16,10 @@ export default function RunPage() {
 
       <RunTaskDemo
         chainId={profile.chainId}
-        defaultAgentName={profile.agentName}
-        defaultMetadataURI="ipfs://agentpassports-demo-task"
-        defaultOwnerName={profile.ownerName}
-        defaultTaskDescription="Record wallet health check"
+        defaultAgentName=""
+        defaultMetadataURI=""
+        defaultOwnerName=""
+        defaultTaskDescription=""
         ensRegistryAddress={profile.ensRegistryAddress}
         executorAddress={profile.executorAddress}
         taskLogAddress={profile.taskLogAddress}

@@ -2,7 +2,7 @@ import { RegisterAgentForm } from "../../components/RegisterAgentForm";
 import { buildDemoAgentProfile } from "../../lib/demoProfile";
 
 /**
- * Renders the agent registration workspace with demo defaults and live local previews.
+ * Renders the agent registration workspace with blank user-controlled identity fields.
  */
 export default function RegisterPage() {
   const profile = buildDemoAgentProfile();
@@ -16,16 +16,18 @@ export default function RegisterPage() {
 
       <RegisterAgentForm
         chainId={profile.chainId}
-        defaultAgentAddress={profile.agentAddress}
-        defaultAgentLabel={profile.agentLabel}
-        defaultGasBudgetWei={profile.gasBudgetWei.toString()}
+        defaultAgentAddress={null}
+        defaultAgentLabel=""
+        defaultGasBudgetWei=""
         defaultMaxGasReimbursementWei={profile.maxGasReimbursementWei.toString()}
         defaultMaxValueWei={profile.maxValueWei.toString()}
-        defaultOwnerName={profile.ownerName}
+        defaultOwnerName=""
         defaultPolicyExpiresAt={profile.policyExpiresAt.toString()}
-        defaultPolicyUri={profile.policyUri}
+        defaultPolicyUri=""
         ensRegistryAddress={profile.ensRegistryAddress}
         executorAddress={profile.executorAddress}
+        nameWrapperAddress={profile.nameWrapperAddress}
+        publicResolverAddress={profile.resolverAddress}
         taskLogAddress={profile.taskLogAddress}
       />
     </main>

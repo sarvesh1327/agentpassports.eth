@@ -41,17 +41,31 @@ test("ENS proof panel exposes the authorization facts required by the demo", asy
   }
 });
 
-test("home page includes an ENS proof panel preview", async () => {
+test("home page renders a landing page with workflow navigation", async () => {
   const source = await readText("apps/web/app/page.tsx");
-  const previewSource = await readText("apps/web/lib/ensPreview.ts");
+  const styles = await readText("apps/web/app/globals.css");
+  const headerSource = await readText("apps/web/components/SiteHeader.tsx");
 
-  assert.match(source, /EnsProofPanel/);
-  assert.match(`${source}\n${previewSource}`, /namehashEnsName/);
-  assert.match(source, /buildDemoAgentProfile/);
+  assert.match(source, /landing-hero/);
+  assert.match(source, /AgentPassports\.eth/);
+  assert.match(source, /Register agent/);
+  assert.match(source, /Run task/);
+  assert.match(source, /Revoke access/);
+  assert.match(source, /\/register/);
+  assert.match(source, /\/run/);
+  assert.match(source, /\/revoke/);
+  assert.doesNotMatch(headerSource, /buildDemoAgentProfile/);
+  assert.doesNotMatch(headerSource, /\/agent\/\$\{/);
+  assert.doesNotMatch(source, /buildDemoAgentProfile/);
+  assert.doesNotMatch(source, /AgentPassportCard/);
+  assert.doesNotMatch(source, /EnsProofPanel/);
   assert.doesNotMatch(source, /alice\.eth/);
   assert.doesNotMatch(source, /0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512/);
   assert.doesNotMatch(source, /0xFCAd0B19bB29D4674531d6f115237E16AfCE377c/);
   assert.doesNotMatch(source, /Temporary shell/);
+  assert.match(styles, /\.landing-hero__content\s*{[^}]*min-width: 0/s);
+  assert.match(styles, /\.landing-hero__content h1\s*{[^}]*overflow-wrap: anywhere/s);
+  assert.match(styles, /\.landing-visual\s*{[^}]*min-width: 0/s);
 });
 
 test("agent passport card exposes public profile and policy metadata", async () => {
@@ -68,21 +82,21 @@ test("agent passport card exposes public profile and policy metadata", async () 
   }
 });
 
-test("home page includes a configurable agent passport preview", async () => {
+test("home page and demo profile do not prefill user-owned ENS values", async () => {
   const pageSource = await readText("apps/web/app/page.tsx");
   const demoSource = await readText("apps/web/lib/demoProfile.ts");
   const envSource = await readText("apps/web/lib/env.ts");
   const rootEnv = await readText(".env.example");
   const webEnv = await readText("apps/web/.env.example");
-  const previewSource = `${pageSource}\n${demoSource}`;
 
-  assert.match(pageSource, /AgentPassportCard/);
-  assert.match(pageSource, /buildDemoAgentProfile/);
-  assert.match(previewSource, /demoOwnerEns/);
-  assert.match(previewSource, /agentpassports\.eth/);
-  assert.match(previewSource, /assistant/);
-  assert.doesNotMatch(previewSource, /Configure NEXT_PUBLIC_DEMO_OWNER_ENS/);
-  assert.doesNotMatch(previewSource, /Configure NEXT_PUBLIC_DEMO_AGENT_ADDRESS/);
+  assert.match(pageSource, /landing-hero/);
+  assert.match(demoSource, /demoOwnerEns/);
+  assert.doesNotMatch(demoSource, /DEFAULT_DEMO_OWNER_ENS\s*=\s*"[^"]+"/);
+  assert.doesNotMatch(demoSource, /DEFAULT_DEMO_AGENT_LABEL\s*=\s*"[^"]+"/);
+  assert.doesNotMatch(demoSource, /agentpassports\.eth/);
+  assert.doesNotMatch(demoSource, /const DEFAULT_DEMO_POLICY_URI = "ipfs:\/\//);
+  assert.doesNotMatch(`${pageSource}\n${demoSource}`, /Configure NEXT_PUBLIC_DEMO_OWNER_ENS/);
+  assert.doesNotMatch(`${pageSource}\n${demoSource}`, /Configure NEXT_PUBLIC_DEMO_AGENT_ADDRESS/);
   assert.match(envSource, /demoOwnerEns/);
   assert.match(envSource, /demoAgentLabel/);
   assert.match(envSource, /demoAgentAddress/);
@@ -99,6 +113,9 @@ test("register page renders the ENS registration workflow", async () => {
   const pageSource = await readText("apps/web/app/register/page.tsx");
   const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
   const helperSource = await readText("apps/web/lib/registerAgent.ts");
+  const batchSource = await readText("apps/web/lib/registrationBatch.ts");
+  const submissionSource = await readText("apps/web/lib/registrationSubmission.ts");
+  const source = `${formSource}\n${helperSource}\n${batchSource}\n${submissionSource}`;
   const requiredText = [
     "Owner ENS",
     "Agent label",
@@ -120,14 +137,68 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(pageSource, /buildDemoAgentProfile/);
   assert.match(formSource, /export type RegisterAgentFormProps/);
   assert.match(formSource, /useState/);
+  assert.match(formSource, /useEffect/);
+  assert.match(formSource, /ownerNameEdited/);
+  assert.match(formSource, /readOwnerEnsAutofill/);
+  assert.match(formSource, /setOwnerName\(ownerEnsAutofill\)/);
   assert.match(helperSource, /safeNamehash/);
   assert.match(helperSource, /computeSubnode/);
-  assert.match(`${formSource}\n${helperSource}`, /agent\.policy\.hash/);
-  assert.match(formSource, /setPolicy/);
-  assert.match(formSource, /depositGasBudget/);
+  assert.match(source, /agent\.policy\.hash/);
+  assert.match(batchSource, /setPolicy/);
+  assert.doesNotMatch(formSource, /depositGasBudget/);
+  assert.match(formSource, /publicResolverAddress/);
+  assert.match(formSource, /registrationDraftStatus/);
+  assert.match(formSource, /submitBlocker/);
+  assert.match(formSource, /buildRegistrationBatch/);
+  assert.match(batchSource, /setSubnodeRecord/);
+  assert.match(formSource, /useSendCalls/);
+  assert.match(formSource, /useSendTransaction/);
+  assert.match(formSource, /usePublicClient/);
+  assert.match(formSource, /sendCallsAsync/);
+  assert.match(formSource, /sendTransactionAsync/);
+  assert.match(formSource, /waitForTransactionReceipt/);
+  assert.match(formSource, /parseEthInputToWeiString/);
+  assert.match(formSource, /formatWeiInputAsEth/);
+  assert.match(formSource, /formatWeiAsEth/);
+  assert.match(formSource, /Gas budget \(ETH\)/);
+  assert.match(formSource, /maxReimbursementEth/);
+  assert.match(formSource, /Reimbursement cap \(ETH\)/);
+  assert.doesNotMatch(formSource, /<span>Max reimbursement<\/span>\s*<input readOnly/);
+  assert.doesNotMatch(formSource, /preview\.gasBudgetWei\} wei/);
+  assert.match(submissionSource, /forceAtomic: true/);
+  assert.match(submissionSource, /isWalletSendCallsUnavailable/);
+  assert.match(formSource, /buildRegistrationBatch/);
+  assert.match(formSource, /submitRegistrationBatch/);
+  assert.match(batchSource, /multicall/);
+  assert.match(formSource, /hasPreparedTransactions/);
+  assert.match(formSource, /ENS text records appear after owner ENS, agent label, and agent address are ready/);
+  assert.match(formSource, /Prepared transactions appear after the ENS records, resolver, and gas budget are ready/);
+  assert.match(batchSource, /setSubnodeRecord\(owner ENS, agent label, connected wallet, public resolver\)/);
+  assert.match(formSource, /disabled={status === "submitting" \|\| Boolean\(submitBlocker\)}/);
   for (const label of requiredText) {
     assert.match(formSource, new RegExp(label), `${label} should be rendered`);
   }
+});
+
+test("register, run, and revoke pages start with empty user-entered fields", async () => {
+  const registerSource = await readText("apps/web/app/register/page.tsx");
+  const runSource = await readText("apps/web/app/run/page.tsx");
+  const revokeSource = await readText("apps/web/app/revoke/page.tsx");
+  const source = `${registerSource}\n${runSource}\n${revokeSource}`;
+
+  assert.match(registerSource, /defaultOwnerName=""/);
+  assert.match(registerSource, /defaultAgentLabel=""/);
+  assert.match(registerSource, /defaultAgentAddress={null}/);
+  assert.match(registerSource, /defaultPolicyUri=""/);
+  assert.match(runSource, /defaultAgentName=""/);
+  assert.match(runSource, /defaultOwnerName=""/);
+  assert.match(runSource, /defaultMetadataURI=""/);
+  assert.match(runSource, /defaultTaskDescription=""/);
+  assert.match(revokeSource, /defaultAgentName=""/);
+  assert.match(revokeSource, /defaultOwnerName=""/);
+  assert.doesNotMatch(source, /agentpassports\.eth/);
+  assert.doesNotMatch(source, /agentpassports-demo/);
+  assert.doesNotMatch(source, /Record wallet health check/);
 });
 
 test("agent passport page exposes route-level ENS profile sections", async () => {
@@ -173,6 +244,8 @@ test("web layout configures wallet providers for Sepolia", async () => {
   assert.match(providerSource, /RainbowKitProvider/);
   assert.match(providerSource, /QueryClientProvider/);
   assert.match(walletSource, /ConnectButton/);
+  assert.match(walletSource, /accountStatus="full"/);
+  assert.doesNotMatch(walletSource, /accountStatus="address"/);
   assert.match(configSource, /sepolia/);
   assert.match(configSource, /createConfig/);
   assert.match(configSource, /injected/);
@@ -184,25 +257,45 @@ test("web layout configures wallet providers for Sepolia", async () => {
 test("register form resolves ENS ownership and submits wallet transactions", async () => {
   const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
   const helperSource = await readText("apps/web/lib/registerAgent.ts");
+  const batchSource = await readText("apps/web/lib/registrationBatch.ts");
+  const submissionSource = await readText("apps/web/lib/registrationSubmission.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
+  const source = `${formSource}\n${helperSource}\n${batchSource}\n${submissionSource}`;
 
   assert.match(formSource, /useAccount/);
   assert.match(formSource, /useEnsAddress/);
+  assert.match(formSource, /useEnsName/);
   assert.match(formSource, /chainId: Number\(props\.chainId\)/);
   assert.doesNotMatch(formSource, /chainId: SEPOLIA_CHAIN_ID/);
   assert.match(formSource, /useReadContract/);
-  assert.match(formSource, /useWriteContract/);
+  assert.doesNotMatch(formSource, /useWriteContract/);
+  assert.match(formSource, /useSendTransaction/);
+  assert.match(formSource, /usePublicClient/);
   assert.match(formSource, /ownerResolvedAddress/);
+  assert.match(formSource, /ownerReverseName/);
   assert.match(formSource, /ownerManager/);
-  assert.match(formSource, /writeContractAsync/);
-  assert.match(formSource, /setAddr/);
-  assert.match(formSource, /setText/);
-  assert.match(formSource, /setPolicy/);
-  assert.match(formSource, /depositGasBudget/);
+  assert.match(formSource, /agentOwner/);
+  assert.match(formSource, /effectiveOwnerManager/);
+  assert.match(formSource, /ownerEnsStatus/);
+  assert.match(source, /No owner ENS detected for this wallet/);
+  assert.match(source, /This wallet cannot manage the entered ENS name/);
+  assert.doesNotMatch(formSource, /writeContractAsync/);
+  assert.match(batchSource, /setAddr/);
+  assert.match(batchSource, /setText/);
+  assert.match(batchSource, /setSubnodeRecord/);
+  assert.match(batchSource, /setPolicy/);
+  assert.doesNotMatch(formSource, /depositGasBudget/);
   assert.match(formSource, /submitRegistrationTransactions/);
-  assert.match(formSource, /writeResolverRecords/);
-  assert.match(formSource, /writeExecutorPolicy/);
-  assert.match(formSource, /writeGasBudgetDeposit/);
+  assert.match(formSource, /submitRegistrationBatch/);
+  assert.match(formSource, /indexRegisteredAgent/);
+  assert.match(formSource, /fetch\("\/api\/agents"/);
+  assert.match(formSource, /agentAddress: normalizedAgentAddress/);
+  assert.match(formSource, /agentName: preview\.agentName/);
+  assert.match(submissionSource, /wallet_sendcalls/);
+  assert.doesNotMatch(formSource, /writeResolverRecords/);
+  assert.doesNotMatch(formSource, /writeExecutorPolicy/);
+  assert.doesNotMatch(formSource, /writeGasBudgetDeposit/);
+  assert.match(contractsSource, /name: "multicall"/);
   assert.match(formSource, /from "\.\.\/lib\/registerAgent"/);
   assert.match(formSource, /validateRegistrationInput/);
   assert.match(helperSource, /export function buildRegisterPreview/);
@@ -222,6 +315,13 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
     "registration input should be validated before resolver writes",
   );
   assert.match(formSource, /agentResolver\.isSuccess/);
+  assert.match(formSource, /const liveAgentOwnerAddress = agentOwner\.isSuccess \? nonZeroAddress\(agentOwner\.data as Hex \| undefined\) : null/);
+  assert.match(formSource, /const shouldCreateSubnameRecord = agentOwner\.isSuccess && liveAgentOwnerAddress === null/);
+  assert.doesNotMatch(
+    formSource,
+    /const shouldCreateSubnameRecord = liveResolverAddress === null/,
+    "registration must not recreate a subname just because the resolver read is empty",
+  );
   assert.match(
     formSource,
     /const liveResolverAddress = agentResolver\.isSuccess \? registryResolverAddress : null/,
@@ -251,21 +351,24 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
   const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
   const displaySource = await readText("apps/web/lib/agentProfileDisplay.ts");
+  const taskHistorySource = await readText("apps/web/lib/taskHistory.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
-  const source = `${pageSource}\n${viewSource}\n${historyPanelSource}\n${displaySource}\n${contractsSource}`;
+  const source = `${pageSource}\n${viewSource}\n${historyPanelSource}\n${displaySource}\n${taskHistorySource}\n${contractsSource}`;
 
   assert.match(pageSource, /serializeAgentProfile/);
   assert.match(viewSource, /useReadContract/);
   assert.match(viewSource, /useReadContracts/);
-  assert.match(viewSource, /usePublicClient/);
-  assert.match(viewSource, /usePublicClient\(\{ chainId: Number\(initialProfile\.chainId\) \}\)/);
-  assert.doesNotMatch(viewSource, /usePublicClient\(\{ chainId: SEPOLIA_CHAIN_ID \}\)/);
-  assert.match(viewSource, /getLogs/);
-  assert.match(viewSource, /TaskRecorded/);
+  assert.doesNotMatch(viewSource, /usePublicClient/);
+  assert.match(viewSource, /fetchTaskHistory/);
+  assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
+  assert.doesNotMatch(
+    viewSource,
+    /getLogs/,
+    "agent page should read task history from the backend task index instead of scanning logs in the browser",
+  );
+  assert.match(source, /TaskRecorded/);
   assert.match(viewSource, /from "\.\.\/lib\/taskHistory"/);
   assert.match(viewSource, /from "\.\/TaskHistoryPanel"/);
-  assert.match(viewSource, /TASK_HISTORY_FROM_BLOCK/);
-  assert.match(viewSource, /taskFromLog/);
   assert.doesNotMatch(viewSource, /fromBlock: 0n/);
   assert.doesNotMatch(viewSource, /function taskFromLog/);
   assert.doesNotMatch(viewSource, /function TaskHistoryPanel/);
@@ -294,14 +397,19 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
 test("run page signs task intents and submits them to the relayer", async () => {
   await assertFile("apps/web/app/run/page.tsx");
   await assertFile("apps/web/components/RunTaskDemo.tsx");
+  await assertFile("apps/web/components/AgentLiveDataPanel.tsx");
   await assertFile("apps/web/components/TaskHistoryPanel.tsx");
+  await assertFile("apps/web/lib/agentSession.ts");
   await assertFile("apps/web/lib/taskDemo.ts");
 
   const pageSource = await readText("apps/web/app/run/page.tsx");
   const componentSource = await readText("apps/web/components/RunTaskDemo.tsx");
+  const liveDataPanelSource = await readText("apps/web/components/AgentLiveDataPanel.tsx");
   const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
+  const sessionSource = await readText("apps/web/lib/agentSession.ts");
   const helperSource = await readText("apps/web/lib/taskDemo.ts");
-  const source = `${pageSource}\n${componentSource}\n${historyPanelSource}\n${helperSource}`;
+  const taskHistorySource = await readText("apps/web/lib/taskHistory.ts");
+  const source = `${pageSource}\n${componentSource}\n${liveDataPanelSource}\n${historyPanelSource}\n${sessionSource}\n${helperSource}\n${taskHistorySource}`;
   const requiredText = [
     "RunTaskDemo",
     "Agent ENS",
@@ -309,12 +417,18 @@ test("run page signs task intents and submits them to the relayer", async () => 
     "Task text",
     "Metadata URI",
     "Typed data",
-    "Sign and save for revocation",
+    "Connected wallet",
+    "Wallet reverse ENS",
+    "ENS text records",
+    "Policy state",
     "Submit to relayer",
     "Transaction status",
     "Task history"
   ];
 
+  assert.match(componentSource, /useAccount/);
+  assert.match(componentSource, /useEnsName/);
+  assert.match(componentSource, /useReadContracts/);
   assert.match(componentSource, /useSignTypedData/);
   assert.match(componentSource, /usePublicClient\(\{ chainId: Number\(props\.chainId\) \}\)/);
   assert.doesNotMatch(
@@ -323,10 +437,9 @@ test("run page signs task intents and submits them to the relayer", async () => 
     "run page public reads must use the same configured chain id as signed intents",
   );
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
-  assert.match(`${componentSource}\n${helperSource}`, /localStorage/);
-  assert.match(componentSource, /persistForRevocation/);
-  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: true \}\)/);
-  assert.match(componentSource, /signAndStoreDraft\(\{ persistForRevocation: false \}\)/);
+  assert.doesNotMatch(source, /Sign and save for revocation/);
+  assert.doesNotMatch(componentSource, /persistForRevocation/);
+  assert.doesNotMatch(componentSource, /storeSignedTaskPayload/);
   assert.doesNotMatch(
     componentSource,
     /const \{ relayerPayload \} = await signAndStoreDraft\(\)/,
@@ -354,6 +467,21 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(componentSource, /hashPolicyContractResult/);
   assert.match(componentSource, /policyHash={livePolicyHash}/);
   assert.doesNotMatch(componentSource, /policyHash={null}/);
+  assert.match(componentSource, /taskGasBudgetStatus/);
+  assert.match(componentSource, /runSubmitBlocker/);
+  assert.match(componentSource, /readAgentEnsAutofill/);
+  assert.match(componentSource, /lookupVerifiedAgentDirectory/);
+  assert.match(componentSource, /fetch\(`\/api\/agents\?address=\$\{encodeURIComponent\(connectedWallet\)\}`/);
+  assert.match(componentSource, /directoryAgent\?\.agentName/);
+  assert.match(componentSource, /directoryAgent\?\.ownerName/);
+  assert.match(componentSource, /readImmediateOwnerName/);
+  assert.match(componentSource, /setOwnerName\(derivedOwnerName\)/);
+  assert.match(componentSource, /AgentLiveDataPanel/);
+  assert.match(componentSource, /AGENT_TEXT_RECORD_KEYS/);
+  assert.match(componentSource, /mapAgentTextRecords/);
+  assert.match(componentSource, /connectedWallet/);
+  assert.match(componentSource, /agentReverseName/);
+  assert.match(liveDataPanelSource, /formatWei/);
   assert.match(componentSource, /normalizedAgentName/);
   assert.match(componentSource, /safeNamehash\(normalizedAgentName\)/);
   assert.match(componentSource, /agentName: normalizedAgentName/);
@@ -365,12 +493,15 @@ test("run page signs task intents and submits them to the relayer", async () => 
   );
   assert.match(helperSource, /buildTaskRunDraft/);
   assert.match(helperSource, /serializeRelayerExecutePayload/);
+  assert.match(helperSource, /normalizeOptionalTaskMetadataURI/);
+  assert.doesNotMatch(helperSource, /normalizeRequiredText\(input\.metadataURI, "Metadata URI"\)/);
   assert.match(source, /EnsProofPanel/);
   assert.match(source, /TaskRecorded/);
+  assert.match(componentSource, /fetchTaskHistory/);
+  assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
   assert.match(componentSource, /from "\.\.\/lib\/taskHistory"/);
   assert.match(componentSource, /from "\.\/TaskHistoryPanel"/);
-  assert.match(componentSource, /TASK_HISTORY_FROM_BLOCK/);
-  assert.match(componentSource, /taskFromLog/);
+  assert.doesNotMatch(componentSource, /getLogs/);
   assert.doesNotMatch(componentSource, /fromBlock: 0n/);
   assert.doesNotMatch(componentSource, /function taskFromLog/);
   assert.doesNotMatch(componentSource, /function TaskHistoryPanel/);
@@ -382,23 +513,49 @@ test("run page signs task intents and submits them to the relayer", async () => 
 test("revoke page disables policy, updates ENS records, and retries the last payload", async () => {
   await assertFile("apps/web/app/revoke/page.tsx");
   await assertFile("apps/web/components/RevokeAgentPanel.tsx");
+  await assertFile("apps/web/components/AgentLiveDataPanel.tsx");
+  await assertFile("apps/web/lib/agentSession.ts");
 
   const pageSource = await readText("apps/web/app/revoke/page.tsx");
   const panelSource = await readText("apps/web/components/RevokeAgentPanel.tsx");
+  const liveDataPanelSource = await readText("apps/web/components/AgentLiveDataPanel.tsx");
+  const sessionSource = await readText("apps/web/lib/agentSession.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
-  const source = `${pageSource}\n${panelSource}\n${contractsSource}`;
+  const source = `${pageSource}\n${panelSource}\n${liveDataPanelSource}\n${sessionSource}\n${contractsSource}`;
   const requiredText = [
     "RevokeAgentPanel",
+    "Connected wallet",
+    "Wallet reverse ENS",
+    "ENS text records",
+    "Policy state",
+    "Next nonce",
     "Current agent address",
     "Revoke policy",
     "Set status revoked",
     "Update addr record",
+    "Withdraw gas budget",
+    "Withdraw amount ETH",
+    "Owner receives",
     "Retry last signed payload",
     "Failure proof"
   ];
 
+  assert.match(panelSource, /useAccount/);
+  assert.match(panelSource, /useEnsName/);
+  assert.match(panelSource, /useReadContracts/);
   assert.match(panelSource, /useWriteContract/);
   assert.match(panelSource, /revokePolicy/);
+  assert.match(panelSource, /withdrawGasBudget/);
+  assert.match(panelSource, /handleWithdrawGasBudget/);
+  assert.match(panelSource, /withdrawAmountEth/);
+  assert.match(panelSource, /parseEthInputToWei/);
+  assert.match(panelSource, /formatWeiAsEth/);
+  assert.match(panelSource, /handleUseMaxGasBudget/);
+  assert.match(panelSource, />Max</);
+  assert.doesNotMatch(panelSource, /Use full budget/);
+  assert.match(panelSource, /args: \[writeAgentNode, withdrawAmountWei\]/);
+  assert.match(panelSource, /Withdraw gas budget transaction submitted/);
+  assert.match(contractsSource, /name: "withdrawGasBudget"/);
   assert.match(panelSource, /setText/);
   assert.match(panelSource, /setAddr/);
   assert.match(panelSource, /fetch\("\/api\/relayer\/execute"/);
@@ -431,6 +588,34 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /hashPolicyContractResult/);
   assert.match(panelSource, /policyHash={livePolicyHash}/);
   assert.doesNotMatch(panelSource, /policyHash={null}/);
+  assert.match(panelSource, /readOwnerEnsAutofill/);
+  assert.match(panelSource, /ownerReverseName/);
+  assert.match(panelSource, /setOwnerName\(ownerEnsAutofill\)/);
+  assert.match(panelSource, /ownerAgents/);
+  assert.match(panelSource, /lookupOwnerAgentDirectory/);
+  assert.match(panelSource, /fetch\(`\/api\/agents\?ownerName=\$\{encodeURIComponent\(normalizedOwnerName\)\}`/);
+  assert.match(panelSource, /setAgentName\(ownerAgents\[0\]\.agentName\)/);
+  assert.match(panelSource, /setAgentNameEdited\(true\)/);
+  assert.match(panelSource, /owner-agent-options/);
+  assert.doesNotMatch(
+    panelSource,
+    /readAgentEnsAutofill/,
+    "revoke is an owner flow, so wallet reverse ENS must not autofill Agent ENS",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /setAgentName\(agentEnsAutofill\)/,
+    "revoke must not copy the owner wallet reverse ENS into the Agent ENS field",
+  );
+  assert.match(panelSource, /readImmediateOwnerName/);
+  assert.match(panelSource, /setOwnerName\(derivedOwnerName\)/);
+  assert.match(panelSource, /AgentLiveDataPanel/);
+  assert.match(panelSource, /AGENT_TEXT_RECORD_KEYS/);
+  assert.match(panelSource, /mapAgentTextRecords/);
+  assert.match(panelSource, /connectedWallet/);
+  assert.doesNotMatch(panelSource, /agentReverseName/);
+  assert.match(panelSource, /nextNonceRead/);
+  assert.match(liveDataPanelSource, /formatWei/);
   assert.match(panelSource, /normalizeAddressInput/);
   assert.match(panelSource, /normalizedReplacementAddress/);
   assert.doesNotMatch(

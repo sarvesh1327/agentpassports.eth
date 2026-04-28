@@ -1,5 +1,10 @@
 import type { Hex } from "../../../../packages/config/src/index.ts";
 import { assertHex, normalizeAddress } from "../../../../packages/config/src/hex.ts";
+import {
+  readLocalServerFallbackEnv,
+  readMergedServerEnv,
+  type ServerEnv
+} from "../serverEnv.ts";
 import { RelayerValidationError } from "./errors.ts";
 
 export type RelayerConfig = {
@@ -21,19 +26,24 @@ export type RelayerReservationStoreConfig =
       url: string;
     };
 
-type RelayerEnv = Record<string, string | undefined>;
+type RelayerEnv = ServerEnv;
 
 /**
  * Loads the server-only relayer settings needed by the API route.
  */
-export function loadRelayerConfig(env: RelayerEnv = process.env): RelayerConfig {
+export function loadRelayerConfig(
+  env: RelayerEnv = process.env,
+  fallbackEnv: RelayerEnv = env === process.env ? readLocalServerFallbackEnv() : {}
+): RelayerConfig {
+  const mergedEnv = readMergedServerEnv(env, fallbackEnv);
+
   return {
-    chainId: readChainId(env, "NEXT_PUBLIC_CHAIN_ID"),
-    ensRegistryAddress: readAddress(env, "NEXT_PUBLIC_ENS_REGISTRY"),
-    executorAddress: readAddress(env, "NEXT_PUBLIC_EXECUTOR_ADDRESS"),
-    reservationStore: readReservationStore(env),
-    relayerPrivateKey: readPrivateKey(env, "RELAYER_PRIVATE_KEY"),
-    rpcUrl: readUrl(env, "RPC_URL")
+    chainId: readChainId(mergedEnv, "NEXT_PUBLIC_CHAIN_ID"),
+    ensRegistryAddress: readAddress(mergedEnv, "NEXT_PUBLIC_ENS_REGISTRY"),
+    executorAddress: readAddress(mergedEnv, "NEXT_PUBLIC_EXECUTOR_ADDRESS"),
+    reservationStore: readReservationStore(mergedEnv),
+    relayerPrivateKey: readPrivateKey(mergedEnv, "RELAYER_PRIVATE_KEY"),
+    rpcUrl: readUrl(mergedEnv, "RPC_URL")
   };
 }
 

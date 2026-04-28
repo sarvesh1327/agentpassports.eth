@@ -1,4 +1,5 @@
 import type { Hex } from "@agentpassport/config";
+import { formatWeiAsEth } from "../lib/ethAmount";
 
 export type EnsProofPanelProps = {
   ownerName?: string;
@@ -70,13 +71,7 @@ export function EnsProofPanel(props: EnsProofPanelProps) {
  * Converts wei into a compact ETH amount for dense proof surfaces.
  */
 export function formatWei(value?: bigint): string {
-  if (value === undefined) {
-    return "Unknown";
-  }
-  const whole = value / 1_000_000_000_000_000_000n;
-  const fraction = value % 1_000_000_000_000_000_000n;
-  const fractionText = fraction.toString().padStart(18, "0").slice(0, 4).replace(/0+$/u, "");
-  return fractionText ? `${whole}.${fractionText} ETH` : `${whole} ETH`;
+  return formatWeiAsEth(value);
 }
 
 /**
