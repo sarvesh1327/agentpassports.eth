@@ -230,6 +230,7 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /sendCallsAsync/);
   assert.match(formSource, /sendTransactionAsync/);
   assert.match(formSource, /waitForTransactionReceipt/);
+  assert.match(formSource, /publicClient\.call/);
   assert.match(formSource, /parseEthInputToWeiString/);
   assert.match(formSource, /formatWeiInputAsEth/);
   assert.match(formSource, /formatWeiAsEth/);
@@ -603,7 +604,7 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     "Next nonce",
     "Current agent address",
     "Revoke policy",
-    "Set status revoked",
+    "Set status disabled",
     "Update addr record",
     "Withdraw gas budget",
     "Withdraw amount ETH",
@@ -617,6 +618,9 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /useReadContracts/);
   assert.match(panelSource, /useWriteContract/);
   assert.match(panelSource, /revokePolicy/);
+  assert.match(panelSource, /handleRevokePolicy/);
+  assert.match(panelSource, /agent\.status", "disabled"/);
+  assert.match(panelSource, /Promise\.all\(\[/);
   assert.match(panelSource, /withdrawGasBudget/);
   assert.match(panelSource, /handleWithdrawGasBudget/);
   assert.match(panelSource, /withdrawAmountEth/);

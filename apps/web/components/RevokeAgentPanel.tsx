@@ -260,15 +260,24 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   async function handleRevokePolicy() {
     try {
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+      const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
-      const txHash = await writeContractAsync({
-        address: executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
-        functionName: "revokePolicy",
-        args: [writeAgentNode]
-      });
-      setTxHashes((hashes) => [...hashes, txHash]);
-      setStatusMessage("Revoke policy transaction submitted");
+      const [policyTxHash, statusTxHash] = await Promise.all([
+        writeContractAsync({
+          address: executorAddress,
+          abi: AGENT_POLICY_EXECUTOR_ABI,
+          functionName: "revokePolicy",
+          args: [writeAgentNode]
+        }),
+        writeContractAsync({
+          address: resolver,
+          abi: PUBLIC_RESOLVER_ABI,
+          functionName: "setText",
+          args: [writeAgentNode, "agent.status", "disabled"]
+        })
+      ]);
+      setTxHashes((hashes) => [...hashes, policyTxHash, statusTxHash]);
+      setStatusMessage("Revoke policy and disable ENS status transactions submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Policy revocation failed");
     }
@@ -307,9 +316,9 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }
 
   /**
-   * Publishes agent.status=revoked for the public ENS metadata surface.
+   * Publishes agent.status=disabled for the public ENS metadata surface.
    */
-  async function handleSetStatusRevoked() {
+  async function handleSetStatusDisabled() {
     try {
       const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
@@ -317,10 +326,10 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         address: resolver,
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setText",
-        args: [writeAgentNode, "agent.status", "revoked"]
+        args: [writeAgentNode, "agent.status", "disabled"]
       });
       setTxHashes((hashes) => [...hashes, txHash]);
-      setStatusMessage("Set status revoked transaction submitted");
+      setStatusMessage("Set status disabled transaction submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Status update failed");
     }
@@ -437,7 +446,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           </div>
           <div className="register-form__actions register-form__actions--flush">
             <button onClick={handleRevokePolicy} type="button">Revoke policy</button>
-            <button onClick={handleSetStatusRevoked} type="button">Set status revoked</button>
+            <button onClick={handleSetStatusDisabled} type="button">Set status disabled</button>
           </div>
         </div>
 
