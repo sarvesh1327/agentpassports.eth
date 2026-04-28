@@ -16,8 +16,9 @@ export default function RevokePage() {
 
       <div className="agent-layout">
         <RevokeAgentPanel
-          defaultAgentName={profile.agentName}
-          defaultOwnerName={profile.ownerName}
+          chainId={profile.chainId}
+          defaultAgentName=""
+          defaultOwnerName=""
           ensRegistryAddress={profile.ensRegistryAddress}
           executorAddress={profile.executorAddress}
         />

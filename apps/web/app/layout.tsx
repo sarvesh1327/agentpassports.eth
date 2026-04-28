@@ -7,7 +7,7 @@ import "./globals.css";
 
 // Shared app metadata used by Next.js for the current scaffolded routes.
 export const metadata: Metadata = {
-  title: "AgentPassport.eth",
+  title: "AgentPassports.eth",
   description: "ENS-native identity and sponsored execution for onchain agents"
 };
 

@@ -1,11 +1,12 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { namehashEnsName, type Hex } from "@agentpassport/config";
-import { useReadContract, useWriteContract } from "wagmi";
+import { useAccount, useEnsName, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
   ZERO_ADDRESS,
@@ -13,8 +14,15 @@ import {
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeAddressInput } from "../lib/addressInput";
+import { formatWeiAsEth, parseEthInputToWei } from "../lib/ethAmount";
+import {
+  mapAgentTextRecords,
+  readImmediateOwnerName,
+  type AgentTextReadResult
+} from "../lib/agentSession";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
+import { readOwnerEnsAutofill } from "../lib/registerAgent";
 import { revocationFailureProof, type RelayerRetryResponse } from "../lib/revocationProof";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
@@ -22,23 +30,42 @@ import {
   storedPayloadMatchesAgentNode,
   storedPayloadToRelayerBody
 } from "../lib/taskDemo";
+import { AgentLiveDataPanel } from "./AgentLiveDataPanel";
 import { EnsProofPanel, shortenHex } from "./EnsProofPanel";
 
 export type RevokeAgentPanelProps = {
+  chainId: bigint;
   defaultAgentName: string;
   defaultOwnerName: string;
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
 };
 
+type OwnerDirectoryAgent = {
+  agentAddress: Hex;
+  agentName: string;
+  agentNode: Hex;
+  ownerName: string;
+};
+
+type OwnerAgentDirectoryResponse = {
+  agents?: unknown;
+  status?: string;
+};
+
 /**
  * Demonstrates policy and ENS-record revocation, then retries the previous signed task intent.
  */
 export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
+  const { address: connectedWallet } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const [agentName, setAgentName] = useState(props.defaultAgentName);
+  const [agentNameEdited, setAgentNameEdited] = useState(Boolean(props.defaultAgentName));
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
+  const [ownerNameEdited, setOwnerNameEdited] = useState(Boolean(props.defaultOwnerName));
+  const [ownerAgents, setOwnerAgents] = useState<OwnerDirectoryAgent[]>([]);
   const [replacementAddress, setReplacementAddress] = useState<string>(ZERO_ADDRESS);
+  const [withdrawAmountEth, setWithdrawAmountEth] = useState("");
   const [lastPayload, setLastPayload] = useState<StoredSignedTaskPayload | null>(null);
   const [statusMessage, setStatusMessage] = useState("Load or create a signed task before retrying revocation");
   const [failureProof, setFailureProof] = useState<string | null>(null);
@@ -47,6 +74,16 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
   const agentNode = useMemo(() => safeNamehash(normalizedAgentName), [normalizedAgentName]);
   const ownerNode = useMemo(() => safeNamehash(normalizedOwnerName), [normalizedOwnerName]);
+  const ownerReverseName = useEnsName({
+    address: connectedWallet,
+    chainId: Number(props.chainId),
+    query: { enabled: Boolean(connectedWallet) }
+  });
+  const ownerEnsAutofill = readOwnerEnsAutofill({
+    currentOwnerName: ownerName,
+    hasUserEditedOwnerName: ownerNameEdited,
+    reverseEnsName: ownerReverseName.data ?? null
+  });
   const resolverRead = useReadContract({
     address: props.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -63,6 +100,17 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     args: [agentNode],
     query: { enabled: Boolean(resolverAddress) }
   });
+  const textRecordReads = useReadContracts({
+    contracts: resolverAddress
+      ? AGENT_TEXT_RECORD_KEYS.map((key) => ({
+          address: resolverAddress,
+          abi: PUBLIC_RESOLVER_ABI,
+          functionName: "text",
+          args: [agentNode, key]
+        }))
+      : [],
+    query: { enabled: Boolean(resolverAddress) }
+  });
   const policyRead = useReadContract({
     address: props.executorAddress ?? undefined,
     abi: AGENT_POLICY_EXECUTOR_ABI,
@@ -77,10 +125,22 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
   });
+  const nextNonceRead = useReadContract({
+    address: props.executorAddress ?? undefined,
+    abi: AGENT_POLICY_EXECUTOR_ABI,
+    functionName: "nextNonce",
+    args: [agentNode],
+    query: { enabled: Boolean(props.executorAddress) }
+  });
   const liveAgentAddress = nonZeroAddress(currentAgentAddress.data as Hex | undefined);
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = typeof gasBudgetRead.data === "bigint" ? gasBudgetRead.data : 0n;
+  const liveNextNonce = typeof nextNonceRead.data === "bigint" ? nextNonceRead.data : null;
+  const textRecords = useMemo(
+    () => mapAgentTextRecords(textRecordReads.data as AgentTextReadResult[] | undefined),
+    [textRecordReads.data]
+  );
   const displayRecoveredSigner = storedRecoveredSigner(lastPayload);
   /**
    * Keeps stale localStorage payloads from driving the active revocation proof surface.
@@ -96,6 +156,79 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   useEffect(() => {
     setLastPayload(readLastPayload());
   }, []);
+
+  useEffect(() => {
+    if (ownerEnsAutofill) {
+      setOwnerName(ownerEnsAutofill);
+    }
+  }, [ownerEnsAutofill]);
+
+  useEffect(() => {
+    const derivedOwnerName = readImmediateOwnerName(agentName);
+    if (!ownerNameEdited && derivedOwnerName && ownerName !== derivedOwnerName) {
+      setOwnerName(derivedOwnerName);
+    }
+  }, [agentName, ownerName, ownerNameEdited]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    /**
+     * Loads already registered agents for the selected owner ENS from the server-side verified directory.
+     */
+    async function lookupOwnerAgentDirectory() {
+      if (!normalizedOwnerName.includes(".")) {
+        setOwnerAgents([]);
+        return;
+      }
+
+      const response = await fetch(`/api/agents?ownerName=${encodeURIComponent(normalizedOwnerName)}`);
+      const body = (await response.json().catch(() => ({}))) as OwnerAgentDirectoryResponse;
+      const agents =
+        response.ok && body.status === "found" && Array.isArray(body.agents)
+          ? body.agents.filter(isOwnerDirectoryAgent)
+          : [];
+
+      if (!cancelled) {
+        setOwnerAgents(agents);
+      }
+    }
+
+    lookupOwnerAgentDirectory().catch(() => {
+      if (!cancelled) {
+        setOwnerAgents([]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedOwnerName]);
+
+  useEffect(() => {
+    if (!agentNameEdited && !agentName.trim() && ownerAgents.length > 0) {
+      setAgentName(ownerAgents[0].agentName);
+    }
+  }, [agentName, agentNameEdited, ownerAgents]);
+
+  /**
+   * Updates the selected agent ENS; owner wallet reverse ENS is never copied into this field.
+   */
+  function handleAgentNameChange(event: ChangeEvent<HTMLInputElement>) {
+    setAgentNameEdited(true);
+    setAgentName(event.target.value);
+  }
+
+  /**
+   * Marks owner ENS as manual while preserving the default immediate-parent autofill.
+   */
+  function handleOwnerNameChange(event: ChangeEvent<HTMLInputElement>) {
+    setOwnerNameEdited(true);
+    setOwnerName(event.target.value);
+    if (!agentNameEdited) {
+      setAgentName("");
+    }
+  }
 
   /**
    * Builds the validated agent node used by write transactions so invalid input cannot hit the ENS root.
@@ -138,6 +271,38 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Policy revocation failed");
     }
+  }
+
+  /**
+   * Withdraws unused gas budget to the owner wallet that submits the transaction.
+   */
+  async function handleWithdrawGasBudget(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+      const writeAgentNode = requireAgentNode();
+      const withdrawAmountWei = parseEthInputToWei(withdrawAmountEth);
+      if (withdrawAmountWei === 0n) {
+        throw new Error("Enter a withdrawal amount");
+      }
+      const txHash = await writeContractAsync({
+        address: executorAddress,
+        abi: AGENT_POLICY_EXECUTOR_ABI,
+        functionName: "withdrawGasBudget",
+        args: [writeAgentNode, withdrawAmountWei]
+      });
+      setTxHashes((hashes) => [...hashes, txHash]);
+      setStatusMessage("Withdraw gas budget transaction submitted");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Gas budget withdrawal failed");
+    }
+  }
+
+  /**
+   * Copies the live budget into the withdrawal input when the owner wants to close the budget.
+   */
+  function handleUseMaxGasBudget() {
+    setWithdrawAmountEth(formatWeiAsEth(liveGasBudget).replace(/ ETH$/u, ""));
   }
 
   /**
@@ -239,11 +404,19 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           <div className="field-grid">
             <label>
               <span>Agent ENS</span>
-              <input name="agentName" onChange={(event) => setAgentName(event.target.value)} value={agentName} />
+              <input list="owner-agent-options" name="agentName" onChange={handleAgentNameChange} value={agentName} />
+              <datalist id="owner-agent-options">
+                {ownerAgents.map((agent) => (
+                  <option key={agent.agentNode} value={agent.agentName} />
+                ))}
+              </datalist>
+              {ownerAgents.length > 0 ? (
+                <small className="field-help">Registered agent: {ownerAgents[0].agentName}</small>
+              ) : null}
             </label>
             <label>
               <span>Owner ENS</span>
-              <input name="ownerName" onChange={(event) => setOwnerName(event.target.value)} value={ownerName} />
+              <input name="ownerName" onChange={handleOwnerNameChange} value={ownerName} />
             </label>
             <label>
               <span>Current agent address</span>
@@ -266,6 +439,38 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
             <button onClick={handleSetStatusRevoked} type="button">Set status revoked</button>
           </div>
         </div>
+
+        <form className="register-form__section" onSubmit={handleWithdrawGasBudget}>
+          <div className="section-heading">
+            <p>Budget</p>
+            <h2>Withdraw gas budget</h2>
+          </div>
+          <div className="field-grid">
+            <label>
+              <span>Available gas budget</span>
+              <input readOnly value={formatWeiAsEth(liveGasBudget)} />
+            </label>
+            <label>
+              <span>
+                Withdraw amount ETH
+                <button className="inline-field-action" onClick={handleUseMaxGasBudget} type="button">Max</button>
+              </span>
+              <input
+                inputMode="decimal"
+                name="withdrawAmountEth"
+                onChange={(event) => setWithdrawAmountEth(event.target.value)}
+                value={withdrawAmountEth}
+              />
+            </label>
+            <label>
+              <span>Owner receives</span>
+              <input readOnly title={connectedWallet ?? undefined} value={connectedWallet ?? "Connect owner wallet"} />
+            </label>
+          </div>
+          <div className="register-form__actions register-form__actions--flush">
+            <button type="submit">Withdraw gas budget</button>
+          </div>
+        </form>
 
         <form className="register-form__section" onSubmit={handleUpdateAddrRecord}>
           <div className="section-heading">
@@ -314,20 +519,35 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         ) : null}
       </section>
 
-      <EnsProofPanel
-        agentName={agentName}
-        agentNode={agentNode}
-        authorizationStatus={proofStatus}
-        ensAgentAddress={liveAgentAddress}
-        failureReason={activeFailureProof ?? undefined}
-        gasBudgetWei={liveGasBudget}
-        ownerName={ownerName}
-        ownerNode={ownerNode}
-        policyEnabled={livePolicy?.[7]}
-        policyHash={livePolicyHash}
-        recoveredSigner={proofRecoveredSigner}
-        resolverAddress={resolverAddress}
-      />
+      <div className="detail-grid">
+        <AgentLiveDataPanel
+          agentAddress={liveAgentAddress}
+          agentName={agentName}
+          connectedWallet={connectedWallet ?? null}
+          gasBudgetWei={liveGasBudget}
+          isReverseEnsSettled={!connectedWallet || ownerReverseName.isSuccess || ownerReverseName.isError}
+          nextNonce={nextNonceRead.isSuccess ? liveNextNonce : null}
+          policy={livePolicy}
+          policyHash={livePolicyHash}
+          resolverAddress={resolverAddress}
+          reverseEnsName={ownerReverseName.data ?? null}
+          textRecords={textRecords}
+        />
+        <EnsProofPanel
+          agentName={agentName}
+          agentNode={agentNode}
+          authorizationStatus={proofStatus}
+          ensAgentAddress={liveAgentAddress}
+          failureReason={activeFailureProof ?? undefined}
+          gasBudgetWei={liveGasBudget}
+          ownerName={ownerName}
+          ownerNode={ownerNode}
+          policyEnabled={livePolicy?.[7]}
+          policyHash={livePolicyHash}
+          recoveredSigner={proofRecoveredSigner}
+          resolverAddress={resolverAddress}
+        />
+      </div>
     </>
   );
 }
@@ -363,6 +583,20 @@ function storedRecoveredSigner(payload: StoredSignedTaskPayload | null): Hex | n
     return null;
   }
   return normalizeAddressInput(recoveredSigner);
+}
+
+/**
+ * Narrows untrusted directory API entries before they become input suggestions.
+ */
+function isOwnerDirectoryAgent(value: unknown): value is OwnerDirectoryAgent {
+  const agent = value as Partial<OwnerDirectoryAgent> | null;
+  return Boolean(
+    agent &&
+      typeof agent.agentAddress === "string" &&
+      typeof agent.agentName === "string" &&
+      typeof agent.agentNode === "string" &&
+      typeof agent.ownerName === "string"
+  );
 }
 
 function requireAddress(value: Hex | null | undefined, message: string): Hex {

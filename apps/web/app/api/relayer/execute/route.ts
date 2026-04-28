@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createPublicClient, createWalletClient, defineChain, http } from "viem";
+import { createPublicClient, createWalletClient, http, parseEventLogs, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { ZERO_ADDRESS, chainNameForId, type Hex } from "@agentpassport/config";
+import { ZERO_ADDRESS, type Hex } from "@agentpassport/config";
 import {
   ADDR_RESOLVER_ABI,
   AGENT_POLICY_EXECUTOR_ABI,
@@ -9,8 +9,14 @@ import {
   type PolicyContractResult,
   policyFromContractResult
 } from "../../../../lib/relayer/contracts";
-import { loadRelayerConfig, type RelayerConfig } from "../../../../lib/relayer/config";
+import { buildServerChain } from "../../../../lib/serverChain";
+import { TASK_LOG_ABI } from "../../../../lib/contracts";
+import { loadRelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
+import {
+  assertSufficientEstimatedExecutionBudget,
+  estimateExecutionReimbursementWei
+} from "../../../../lib/relayer/gasBudget";
 import {
   createIntentSubmissionStore,
   reserveIntentSubmission
@@ -20,6 +26,8 @@ import {
   parseRelayerExecuteRequest,
   validateRelayerExecution
 } from "../../../../lib/relayer/validation";
+import { buildTaskRecord } from "../../../../lib/taskStore";
+import { createSqliteTaskStore } from "../../../../lib/taskStoreSqlite";
 
 export const runtime = "nodejs";
 
@@ -30,9 +38,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const config = loadRelayerConfig();
     const payload = parseRelayerExecuteRequest(await readJsonBody(request));
-    const chain = relayerChain(config);
+    const chain = buildServerChain(config);
     const transport = http(config.rpcUrl);
     const publicClient = createPublicClient({ chain, transport });
+    const account = privateKeyToAccount(config.relayerPrivateKey);
     const reservationStore = createIntentSubmissionStore(config.reservationStore);
     const [policyResult, nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
       publicClient.readContract({
@@ -62,18 +71,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       publicClient.getBlock({ blockTag: "latest" })
     ]);
     const resolvedAgentAddress = await readResolvedAgent(publicClient, resolverAddress as Hex, payload.intent.agentNode);
+    const policy = policyFromContractResult(policyResult as PolicyContractResult);
     const validated = validateRelayerExecution({
       context: {
         chainId: config.chainId,
         executorAddress: config.executorAddress,
         gasBudgetWei: gasBudgetWei as bigint,
         nextNonce: nextNonce as bigint,
-        policy: policyFromContractResult(policyResult as PolicyContractResult),
+        policy,
         resolvedAgentAddress,
         resolverAddress: resolverAddress as Hex
       },
       now: latestBlock.timestamp,
       payload
+    });
+    await assertEstimatedBudget({
+      account: account.address,
+      gasBudgetWei: gasBudgetWei as bigint,
+      payload: validated,
+      policy,
+      publicClient,
+      relayerConfig: config
     });
     const reservation = await reserveIntentSubmission({
       agentNode: validated.intent.agentNode,
@@ -114,7 +132,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     let txHash: Hex | undefined;
     try {
-      const account = privateKeyToAccount(config.relayerPrivateKey);
       const walletClient = createWalletClient({ account, chain, transport });
       txHash = await walletClient.writeContract({
         address: config.executorAddress,
@@ -128,6 +145,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         await reservation.release();
         throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
       }
+      await persistTaskReceipt(receipt);
       await reservation.markSubmitted(txHash);
     } catch (error) {
       if (!txHash) {
@@ -143,6 +161,86 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     const response = relayerErrorResponse(error);
     return NextResponse.json(response.body, { status: response.httpStatus });
+  }
+}
+
+async function persistTaskReceipt(receipt: TransactionReceipt): Promise<void> {
+  try {
+    const record = taskRecordFromReceipt(receipt);
+    if (!record) {
+      return;
+    }
+
+    const store = createSqliteTaskStore();
+    try {
+      store.upsert(record);
+    } finally {
+      store.close();
+    }
+  } catch (error) {
+    console.error("Task history persistence failed", error);
+  }
+}
+
+function taskRecordFromReceipt(receipt: TransactionReceipt) {
+  const [taskLog] = parseEventLogs({
+    abi: TASK_LOG_ABI,
+    eventName: "TaskRecorded",
+    logs: receipt.logs
+  });
+  if (!taskLog) {
+    return null;
+  }
+
+  return buildTaskRecord({
+    agentNode: taskLog.args.agentNode,
+    metadataURI: taskLog.args.metadataURI,
+    ownerNode: taskLog.args.ownerNode,
+    taskHash: taskLog.args.taskHash,
+    taskId: taskLog.args.taskId,
+    timestamp: taskLog.args.timestamp,
+    txHash: receipt.transactionHash
+  });
+}
+
+async function assertEstimatedBudget(input: {
+  account: Hex;
+  gasBudgetWei: bigint;
+  payload: ReturnType<typeof validateRelayerExecution>;
+  policy: ReturnType<typeof policyFromContractResult>;
+  publicClient: ReturnType<typeof createPublicClient>;
+  relayerConfig: ReturnType<typeof loadRelayerConfig>;
+}): Promise<void> {
+  try {
+    // Estimate the actual executor call before reserving the nonce so the cap is treated as a ceiling, not a debit.
+    const [estimatedGas, gasPriceWei] = await Promise.all([
+      input.publicClient.estimateContractGas({
+        account: input.account,
+        address: input.relayerConfig.executorAddress,
+        abi: AGENT_POLICY_EXECUTOR_ABI,
+        functionName: "execute",
+        args: [input.payload.intent, input.payload.callData, input.payload.signature]
+      }),
+      input.publicClient.getGasPrice()
+    ]);
+    const estimatedReimbursementWei = estimateExecutionReimbursementWei({
+      gasPriceWei,
+      gasUsed: estimatedGas,
+      reimbursementCapWei: input.policy.maxGasReimbursementWei
+    });
+
+    assertSufficientEstimatedExecutionBudget({
+      estimatedReimbursementWei,
+      gasBudgetWei: input.gasBudgetWei,
+      intentValueWei: input.payload.intent.value
+    });
+  } catch (error) {
+    if (error instanceof RelayerValidationError) {
+      throw error;
+    }
+
+    // RPC and simulation failures are relayer failures; only explicit budget checks report budget errors.
+    throw error;
   }
 }
 
@@ -168,22 +266,4 @@ async function readResolvedAgent(
     functionName: "addr",
     args: [agentNode]
   }) as Promise<Hex>;
-}
-
-function relayerChain(config: RelayerConfig) {
-  const id = Number(config.chainId);
-  return defineChain({
-    id,
-    name: chainNameForId(config.chainId),
-    nativeCurrency: {
-      decimals: 18,
-      name: "Ether",
-      symbol: "ETH"
-    },
-    rpcUrls: {
-      default: {
-        http: [config.rpcUrl]
-      }
-    }
-  });
 }

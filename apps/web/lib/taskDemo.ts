@@ -69,6 +69,11 @@ export type TaskAuthorizationResult = {
   status: "fail" | "pass" | "unknown";
 };
 
+export type TaskGasBudgetStatus = {
+  blocker: string | null;
+  requiredWei: bigint;
+};
+
 type SignedTaskPayloadStorage = {
   setItem(key: string, value: string): void;
 };
@@ -80,7 +85,7 @@ export function buildTaskRunDraft(input: TaskRunDraftInput): TaskRunDraft {
   const agentName = normalizeEnsName(input.agentName, "Agent ENS");
   const ownerName = validateImmediateOwnerName(agentName, input.ownerName);
   const taskDescription = normalizeRequiredText(input.taskDescription, "Task text");
-  const metadataURI = normalizeRequiredText(input.metadataURI, "Metadata URI");
+  const metadataURI = normalizeOptionalTaskMetadataURI(input.metadataURI);
   const agentNode = namehashEnsName(agentName);
   const ownerNode = namehashEnsName(ownerName);
   const taskHash = keccak256(toHex(taskDescription));
@@ -118,6 +123,13 @@ export function buildFreshTaskRunDraft(input: FreshTaskRunDraftInput): TaskRunDr
     ...input,
     expiresAt: input.nowSeconds + input.ttlSeconds
   });
+}
+
+/**
+ * Keeps TaskLog metadata optional until the Pinata-backed metadata flow exists.
+ */
+export function normalizeOptionalTaskMetadataURI(value: string): string {
+  return value.trim();
 }
 
 /**
@@ -238,6 +250,29 @@ export function taskAuthorizationResult(input: {
     };
   }
   return { status: "pass" };
+}
+
+/**
+ * Checks the budget facts the browser can prove before signing; relayer-side gas estimation handles reimbursement.
+ */
+export function taskGasBudgetStatus(input: {
+  gasBudgetWei?: bigint;
+  maxGasReimbursementWei?: bigint;
+  maxValueWei?: bigint;
+}): TaskGasBudgetStatus {
+  const gasBudgetWei = input.gasBudgetWei ?? 0n;
+  const requiredWei = input.maxValueWei && input.maxValueWei > 0n ? input.maxValueWei : gasBudgetWei === 0n ? 1n : 0n;
+  if (requiredWei > 0n && gasBudgetWei < requiredWei) {
+    return {
+      blocker: gasBudgetWei === 0n ? "Gas budget is empty" : "Gas budget cannot cover the task value",
+      requiredWei
+    };
+  }
+
+  return {
+    blocker: null,
+    requiredWei
+  };
 }
 
 /**

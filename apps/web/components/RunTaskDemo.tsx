@@ -1,34 +1,40 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { type Hex } from "@agentpassport/config";
-import { usePublicClient, useReadContract, useSignTypedData } from "wagmi";
+import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useSignTypedData } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  TASK_RECORDED_EVENT,
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
 import {
-  buildFreshTaskRunDraft,
   buildStoredSignedTaskPayload,
+  buildFreshTaskRunDraft,
   recoverTaskSigner,
   serializeRelayerExecutePayload,
   serializeTypedData,
   storeSignedTaskPayload,
-  taskAuthorizationResult
+  taskAuthorizationResult,
+  taskGasBudgetStatus
 } from "../lib/taskDemo";
 import {
-  TASK_HISTORY_FROM_BLOCK,
-  taskFromLog,
-  type TaskHistoryItem,
-  type TaskRecordedLog
+  mapAgentTextRecords,
+  readAgentEnsAutofill,
+  readImmediateOwnerName,
+  type AgentTextReadResult
+} from "../lib/agentSession";
+import {
+  loadTaskHistory,
+  type TaskHistoryItem
 } from "../lib/taskHistory";
+import { AgentLiveDataPanel } from "./AgentLiveDataPanel";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 
@@ -51,21 +57,31 @@ type RelayerResponse = {
   txHash?: Hex;
 };
 
-type SignDraftOptions = {
-  persistForRevocation: boolean;
+type DirectoryAgent = {
+  agentName: string;
+  ownerName: string;
+};
+
+type DirectoryAgentResponse = {
+  agentName?: string;
+  ownerName?: string;
+  status?: string;
 };
 
 /**
- * Builds, signs, submits, and stores one TaskLog execution intent for the live demo flow.
+ * Builds, signs, and submits one TaskLog execution intent for the live demo flow.
  */
 export function RunTaskDemo(props: RunTaskDemoProps) {
+  const { address: connectedWallet } = useAccount();
   const publicClient = usePublicClient({ chainId: Number(props.chainId) });
   const { signTypedDataAsync } = useSignTypedData();
   const [agentName, setAgentName] = useState(props.defaultAgentName);
+  const [agentNameEdited, setAgentNameEdited] = useState(Boolean(props.defaultAgentName));
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
+  const [ownerNameEdited, setOwnerNameEdited] = useState(Boolean(props.defaultOwnerName));
   const [taskDescription, setTaskDescription] = useState(props.defaultTaskDescription);
   const [metadataURI, setMetadataURI] = useState(props.defaultMetadataURI);
-  const [status, setStatus] = useState<"idle" | "signing" | "signed" | "submitted" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "signing" | "submitted" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("Ready to sign a task intent");
   const [signature, setSignature] = useState<Hex | null>(null);
   const [recoveredSigner, setRecoveredSigner] = useState<Hex | null>(null);
@@ -75,10 +91,22 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const [optimisticNextNonce, setOptimisticNextNonce] = useState<bigint | null>(null);
   const [chainNowSeconds, setChainNowSeconds] = useState<bigint | null>(null);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
+  const [directoryAgent, setDirectoryAgent] = useState<DirectoryAgent | null>(null);
   const normalizedAgentName = useMemo(() => normalizeEnsFormName(agentName), [agentName]);
   const normalizedOwnerName = useMemo(() => normalizeEnsFormName(ownerName), [ownerName]);
   const agentNode = useMemo(() => safeNamehash(normalizedAgentName), [normalizedAgentName]);
   const ownerNode = useMemo(() => safeNamehash(normalizedOwnerName), [normalizedOwnerName]);
+  const agentReverseName = useEnsName({
+    address: connectedWallet,
+    chainId: Number(props.chainId),
+    query: { enabled: Boolean(connectedWallet) }
+  });
+  const agentEnsAutofill = readAgentEnsAutofill({
+    currentAgentName: agentName,
+    directoryAgentName: directoryAgent?.agentName ?? null,
+    hasUserEditedAgentName: agentNameEdited,
+    reverseEnsName: agentReverseName.data ?? null
+  });
   const resolverRead = useReadContract({
     address: props.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -92,6 +120,17 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     abi: PUBLIC_RESOLVER_ABI,
     functionName: "addr",
     args: [agentNode],
+    query: { enabled: Boolean(resolverAddress) }
+  });
+  const textRecordReads = useReadContracts({
+    contracts: resolverAddress
+      ? AGENT_TEXT_RECORD_KEYS.map((key) => ({
+          address: resolverAddress,
+          abi: PUBLIC_RESOLVER_ABI,
+          functionName: "text",
+          args: [agentNode, key]
+        }))
+      : [],
     query: { enabled: Boolean(resolverAddress) }
   });
   const policyRead = useReadContract({
@@ -117,6 +156,75 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   });
   const chainNextNonce = safeBigInt(nextNonceRead.data as bigint | undefined);
   const effectiveNextNonce = optimisticNextNonce ?? chainNextNonce;
+  const textRecords = useMemo(
+    () => mapAgentTextRecords(textRecordReads.data as AgentTextReadResult[] | undefined),
+    [textRecordReads.data]
+  );
+
+  useEffect(() => {
+    if (agentEnsAutofill) {
+      setAgentName(agentEnsAutofill);
+    }
+  }, [agentEnsAutofill]);
+
+  useEffect(() => {
+    const derivedOwnerName = directoryAgent?.ownerName ?? readImmediateOwnerName(agentName);
+    if (!ownerNameEdited && derivedOwnerName && ownerName !== derivedOwnerName) {
+      setOwnerName(derivedOwnerName);
+    }
+  }, [agentName, directoryAgent?.ownerName, ownerName, ownerNameEdited]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const reverseEnsSettled = !connectedWallet || agentReverseName.isSuccess || agentReverseName.isError;
+
+    /**
+     * Looks up a backend-indexed agent ENS only after reverse ENS is absent.
+     */
+    async function lookupVerifiedAgentDirectory() {
+      if (!connectedWallet) {
+        setDirectoryAgent(null);
+        return;
+      }
+
+      const response = await fetch(`/api/agents?address=${encodeURIComponent(connectedWallet)}`);
+      const body = (await response.json().catch(() => ({}))) as DirectoryAgentResponse;
+      if (cancelled) {
+        return;
+      }
+
+      if (response.ok && body.status === "found" && body.agentName && body.ownerName) {
+        setDirectoryAgent({
+          agentName: body.agentName,
+          ownerName: body.ownerName
+        });
+        return;
+      }
+
+      setDirectoryAgent(null);
+    }
+
+    if (!connectedWallet || agentNameEdited || !reverseEnsSettled || agentReverseName.data) {
+      setDirectoryAgent(null);
+      return;
+    }
+
+    lookupVerifiedAgentDirectory().catch(() => {
+      if (!cancelled) {
+        setDirectoryAgent(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    agentNameEdited,
+    agentReverseName.data,
+    agentReverseName.isError,
+    agentReverseName.isSuccess,
+    connectedWallet
+  ]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setPreviewRefreshKey((key) => key + 1), 60_000);
@@ -194,6 +302,22 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     });
   }
 
+  /**
+   * Marks the agent ENS as user-controlled so reverse ENS never overwrites a manual selection.
+   */
+  function handleAgentNameChange(event: ChangeEvent<HTMLInputElement>) {
+    setAgentNameEdited(true);
+    setAgentName(event.target.value);
+  }
+
+  /**
+   * Allows advanced users to override the immediate parent when testing invalid-owner failures.
+   */
+  function handleOwnerNameChange(event: ChangeEvent<HTMLInputElement>) {
+    setOwnerNameEdited(true);
+    setOwnerName(event.target.value);
+  }
+
   const draftState = useMemo(() => {
     try {
       if (chainNowSeconds === null) {
@@ -223,6 +347,12 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
   const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = safeBigInt(gasBudgetRead.data as bigint | undefined);
+  const gasBudgetStatus = taskGasBudgetStatus({
+    gasBudgetWei: liveGasBudget,
+    maxGasReimbursementWei: livePolicy?.[5],
+    maxValueWei: livePolicy?.[4]
+  });
+  const runSubmitBlocker = draftState.error ?? gasBudgetStatus.blocker;
   const authorization = taskAuthorizationResult({
     liveAgentAddress,
     policyEnabled: livePolicy?.[7],
@@ -233,26 +363,24 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     let cancelled = false;
 
     /**
-     * Loads TaskRecorded events so the task proof appears after the relayer transaction lands.
+     * Loads indexed and onchain TaskLog records so the task proof appears after any valid execution lands.
      */
-    async function loadTaskHistory() {
-      if (!publicClient || !props.taskLogAddress) {
+    async function refreshTaskHistory() {
+      if (!normalizedAgentName) {
         setTaskHistory([]);
         return;
       }
-      const logs = await publicClient.getLogs({
-        address: props.taskLogAddress,
-        event: TASK_RECORDED_EVENT,
-        args: { agentNode },
-        fromBlock: TASK_HISTORY_FROM_BLOCK,
-        toBlock: "latest"
+      const tasks = await loadTaskHistory({
+        agentNode,
+        publicClient,
+        taskLogAddress: props.taskLogAddress ?? null
       });
       if (!cancelled) {
-        setTaskHistory(logs.map((log) => taskFromLog(log as TaskRecordedLog)));
+        setTaskHistory(tasks);
       }
     }
 
-    loadTaskHistory().catch(() => {
+    refreshTaskHistory().catch(() => {
       if (!cancelled) {
         setTaskHistory([]);
       }
@@ -261,12 +389,12 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     return () => {
       cancelled = true;
     };
-  }, [agentNode, historyRefreshKey, props.taskLogAddress, publicClient]);
+  }, [agentNode, historyRefreshKey, normalizedAgentName, props.taskLogAddress, publicClient]);
 
   /**
-   * Signs the prepared EIP-712 payload and optionally stores an unsubmitted copy for revoke retries.
+   * Signs the prepared EIP-712 payload and returns the relayer request body.
    */
-  async function signAndStoreDraft(options: SignDraftOptions) {
+  async function signDraft() {
     const chainTimestamp = await readLatestBlockTimestamp();
     setChainNowSeconds(chainTimestamp);
     const draft = buildCurrentDraft(chainTimestamp);
@@ -283,49 +411,22 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       intent: draft.intent,
       signature: signed as Hex
     });
-    let stored = false;
+    const storedPayload = buildStoredSignedTaskPayload({
+      agentName: normalizedAgentName,
+      callData: draft.callData,
+      digest: draft.digest,
+      intent: draft.intent,
+      ownerName: normalizedOwnerName,
+      recoveredSigner: recovered,
+      signature: signed as Hex,
+      taskHash: draft.taskHash,
+      typedData: draft.typedData
+    });
+    storeSignedTaskPayload({ payload: storedPayload });
 
-    if (options.persistForRevocation) {
-      const storedPayload = buildStoredSignedTaskPayload({
-        agentName: normalizedAgentName,
-        callData: draft.callData,
-        digest: draft.digest,
-        intent: draft.intent,
-        ownerName: normalizedOwnerName,
-        recoveredSigner: recovered,
-        signature: signed as Hex,
-        taskHash: draft.taskHash,
-        typedData: draft.typedData
-      });
-      stored = storeSignedTaskPayload({ payload: storedPayload });
-    }
     setSignature(signed as Hex);
     setRecoveredSigner(recovered);
-    return { relayerPayload, stored };
-  }
-
-  /**
-   * Stores an unsubmitted signature so the revoke page can prove ENS addr changes invalidate it.
-   */
-  async function handleSaveSignedPayload() {
-    setStatus("signing");
-    setStatusMessage("Awaiting agent wallet signature");
-    setSignature(null);
-    setRecoveredSigner(null);
-    setSubmittedTxHash(null);
-
-    try {
-      const { stored } = await signAndStoreDraft({ persistForRevocation: true });
-      setStatus("signed");
-      setStatusMessage(
-        stored
-          ? "Signed payload saved for revocation retry"
-          : "Signed payload created; browser storage unavailable"
-      );
-    } catch (error) {
-      setStatus("error");
-      setStatusMessage(error instanceof Error ? error.message : "Task signing failed");
-    }
+    return relayerPayload;
   }
 
   /**
@@ -340,7 +441,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     setSubmittedTxHash(null);
 
     try {
-      const { relayerPayload } = await signAndStoreDraft({ persistForRevocation: false });
+      if (runSubmitBlocker) {
+        throw new Error(runSubmitBlocker);
+      }
+
+      const relayerPayload = await signDraft();
       const response = await fetch("/api/relayer/execute", {
         body: JSON.stringify(relayerPayload),
         headers: { "content-type": "application/json" },
@@ -355,7 +460,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n);
       void nextNonceRead.refetch().catch(() => undefined);
       setStatus("submitted");
-      setStatusMessage("Transaction status: submitted");
+      setStatusMessage("Task submitted and saved for revocation proof");
       setHistoryRefreshKey((key) => key + 1);
     } catch (error) {
       setStatus("error");
@@ -374,11 +479,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           <div className="field-grid">
             <label>
               <span>Agent ENS</span>
-              <input name="agentName" onChange={(event) => setAgentName(event.target.value)} value={agentName} />
+              <input name="agentName" onChange={handleAgentNameChange} value={agentName} />
             </label>
             <label>
               <span>Owner ENS</span>
-              <input name="ownerName" onChange={(event) => setOwnerName(event.target.value)} value={ownerName} />
+              <input name="ownerName" onChange={handleOwnerNameChange} value={ownerName} />
             </label>
             <label>
               <span>Task text</span>
@@ -432,13 +537,11 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
         </section>
 
         <div className="register-form__actions">
-          <button disabled={status === "signing"} onClick={handleSaveSignedPayload} type="button">
-            {status === "signing" ? "Signing..." : "Sign and save for revocation"}
-          </button>
-          <button disabled={status === "signing"} type="submit">
+          <button disabled={status === "signing" || Boolean(runSubmitBlocker)} type="submit">
             {status === "signing" ? "Signing..." : "Submit to relayer"}
           </button>
           <a href={`/agent/${encodeURIComponent(agentName)}`}>View task history</a>
+          {runSubmitBlocker ? <small className="field-help field-help--warning">{runSubmitBlocker}</small> : null}
           <strong>{statusMessage}</strong>
         </div>
 
@@ -452,12 +555,25 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       </form>
 
       <div className="detail-grid">
+        <AgentLiveDataPanel
+          agentAddress={liveAgentAddress}
+          agentName={agentName}
+          connectedWallet={connectedWallet ?? null}
+          gasBudgetWei={liveGasBudget}
+          isReverseEnsSettled={!connectedWallet || agentReverseName.isSuccess || agentReverseName.isError}
+          nextNonce={nextNonceRead.isSuccess ? effectiveNextNonce : null}
+          policy={livePolicy}
+          policyHash={livePolicyHash}
+          resolverAddress={resolverAddress}
+          reverseEnsName={agentReverseName.data ?? null}
+          textRecords={textRecords}
+        />
         <EnsProofPanel
           agentName={agentName}
           agentNode={agentNode}
           authorizationStatus={authorization.status}
           ensAgentAddress={liveAgentAddress}
-          failureReason={authorization.failureReason ?? draftState.error ?? undefined}
+          failureReason={authorization.failureReason ?? runSubmitBlocker ?? undefined}
           gasBudgetWei={liveGasBudget}
           ownerName={ownerName}
           ownerNode={ownerNode}

@@ -33,6 +33,28 @@ test("task demo draft builds recordTask calldata and viem-ready typed data", asy
   assert.equal(payload.intent.expiresAt, "1800000000");
 });
 
+test("task demo draft allows blank metadata URI for tasks without offchain proof", async () => {
+  const { decodeFunctionData } = await import("../apps/web/node_modules/viem/_esm/index.js");
+  const { buildTaskRunDraft } = await import("../apps/web/lib/taskDemo.ts");
+  const { TASK_LOG_ABI } = await import("../apps/web/lib/contracts.ts");
+
+  const draft = buildTaskRunDraft({
+    agentName: "assistant.agentpassports.eth",
+    chainId: 11155111n,
+    executorAddress: EXECUTOR_ADDRESS,
+    expiresAt: 1_800_000_000n,
+    metadataURI: "   ",
+    nonce: 7n,
+    ownerName: "agentpassports.eth",
+    taskDescription: "Record wallet health check",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const decoded = decodeFunctionData({ abi: TASK_LOG_ABI, data: draft.callData });
+
+  assert.equal(decoded.functionName, "recordTask");
+  assert.equal(decoded.args[3], "");
+});
+
 test("task demo draft requires owner ENS to match the agent immediate parent", async () => {
   const { buildTaskRunDraft } = await import("../apps/web/lib/taskDemo.ts");
 
@@ -123,6 +145,33 @@ test("task authorization proof requires matching signer and enabled policy", asy
       recoveredSigner: signer
     }),
     { status: "unknown" }
+  );
+});
+
+test("task gas budget status treats reimbursement cap as a ceiling, not a required balance", async () => {
+  const { taskGasBudgetStatus } = await import("../apps/web/lib/taskDemo.ts");
+
+  assert.deepEqual(
+    taskGasBudgetStatus({
+      gasBudgetWei: 110100000000000n,
+      maxGasReimbursementWei: 1000000000000000n,
+      maxValueWei: 0n
+    }),
+    {
+      blocker: null,
+      requiredWei: 0n
+    }
+  );
+  assert.deepEqual(
+    taskGasBudgetStatus({
+      gasBudgetWei: 0n,
+      maxGasReimbursementWei: 1000000000000000n,
+      maxValueWei: 0n
+    }),
+    {
+      blocker: "Gas budget is empty",
+      requiredWei: 1n
+    }
   );
 });
 

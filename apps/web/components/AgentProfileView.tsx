@@ -11,17 +11,14 @@ import {
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  TASK_RECORDED_EVENT,
   type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
 import {
-  TASK_HISTORY_FROM_BLOCK,
-  taskFromLog,
-  type TaskHistoryItem,
-  type TaskRecordedLog
+  loadTaskHistory,
+  type TaskHistoryItem
 } from "../lib/taskHistory";
 
 type TextReadResult = {
@@ -110,26 +107,20 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     let cancelled = false;
 
     /**
-     * Reads historical TaskRecorded events for the selected agent node.
+     * Reads indexed and onchain TaskLog records for the selected agent node.
      */
-    async function loadTaskHistory() {
-      if (!publicClient || !initialProfile.taskLogAddress) {
-        setTaskHistory([]);
-        return;
-      }
-      const logs = await publicClient.getLogs({
-        address: initialProfile.taskLogAddress,
-        event: TASK_RECORDED_EVENT,
-        args: { agentNode: initialProfile.agentNode },
-        fromBlock: TASK_HISTORY_FROM_BLOCK,
-        toBlock: "latest"
+    async function refreshTaskHistory() {
+      const tasks = await loadTaskHistory({
+        agentNode: initialProfile.agentNode,
+        publicClient,
+        taskLogAddress: initialProfile.taskLogAddress
       });
       if (!cancelled) {
-        setTaskHistory(logs.map((log) => taskFromLog(log as TaskRecordedLog)));
+        setTaskHistory(tasks);
       }
     }
 
-    loadTaskHistory().catch(() => {
+    refreshTaskHistory().catch(() => {
       if (!cancelled) {
         setTaskHistory([]);
       }

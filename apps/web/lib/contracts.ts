@@ -33,6 +33,47 @@ export const ENS_REGISTRY_ABI = [
     stateMutability: "view",
     inputs: [{ name: "node", type: "bytes32" }],
     outputs: [{ name: "resolver", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "setSubnodeRecord",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "label", type: "bytes32" },
+      { name: "owner", type: "address" },
+      { name: "resolver", type: "address" },
+      { name: "ttl", type: "uint64" }
+    ],
+    outputs: []
+  }
+] as const;
+
+/**
+ * ENS NameWrapper read used to resolve the current manager for wrapped names.
+ */
+export const NAME_WRAPPER_ABI = [
+  {
+    type: "function",
+    name: "ownerOf",
+    stateMutability: "view",
+    inputs: [{ name: "id", type: "uint256" }],
+    outputs: [{ name: "owner", type: "address" }]
+  },
+  {
+    type: "function",
+    name: "setSubnodeRecord",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "parentNode", type: "bytes32" },
+      { name: "label", type: "string" },
+      { name: "owner", type: "address" },
+      { name: "resolver", type: "address" },
+      { name: "ttl", type: "uint64" },
+      { name: "fuses", type: "uint32" },
+      { name: "expiry", type: "uint64" }
+    ],
+    outputs: []
   }
 ] as const;
 
@@ -77,6 +118,13 @@ export const PUBLIC_RESOLVER_ABI = [
       { name: "value", type: "string" }
     ],
     outputs: []
+  },
+  {
+    type: "function",
+    name: "multicall",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "data", type: "bytes[]" }],
+    outputs: [{ name: "results", type: "bytes[]" }]
   }
 ] as const;
 
@@ -134,6 +182,16 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
     name: "depositGasBudget",
     stateMutability: "payable",
     inputs: [{ name: "agentNode", type: "bytes32" }],
+    outputs: []
+  },
+  {
+    type: "function",
+    name: "withdrawGasBudget",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentNode", type: "bytes32" },
+      { name: "amount", type: "uint256" }
+    ],
     outputs: []
   },
   {
