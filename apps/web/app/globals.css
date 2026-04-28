@@ -299,7 +299,7 @@ input {
   color: #166534;
 }
 
-.passport-card__status--revoked {
+.passport-card__status--disabled {
   background: #fee2e2;
   color: #991b1b;
 }

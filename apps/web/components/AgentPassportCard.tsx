@@ -8,7 +8,7 @@ export type AgentPassportCardProps = {
   capabilities: readonly string[];
   ownerName?: string;
   policyUri?: string;
-  status: "active" | "revoked" | "unknown";
+  status: "active" | "disabled" | "unknown";
   summary?: string;
 };
 
@@ -78,8 +78,8 @@ function statusLabel(status: AgentPassportCardProps["status"]): string {
   if (status === "active") {
     return "Active";
   }
-  if (status === "revoked") {
-    return "Revoked";
+  if (status === "disabled") {
+    return "Disabled";
   }
   return "Unknown";
 }

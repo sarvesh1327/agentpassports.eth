@@ -61,6 +61,41 @@ test("register preview derives ENS nodes, policy hash, and text records from for
   );
 });
 
+test("register preview includes only generated policy URIs in ENS records", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+
+  const withoutGeneratedUri = buildRegisterPreview({
+    agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "10000000000000000",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const withGeneratedUri = buildRegisterPreview({
+    agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "10000000000000000",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "ipfs://bafyagentpolicy",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+
+  assert.equal(withoutGeneratedUri.textRecords.some((record) => record.key === "agent.policy.uri"), false);
+  assert.deepEqual(
+    withGeneratedUri.textRecords.find((record) => record.key === "agent.policy.uri"),
+    { key: "agent.policy.uri", value: "ipfs://bafyagentpolicy" }
+  );
+});
+
 test("register preview keeps partially typed form values safe without throwing", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
 
@@ -758,6 +793,39 @@ test("registration fallback preflights each transaction before wallet signing", 
   assert.deepEqual(
     sentTransactions.map((request) => request.to),
     [PUBLIC_RESOLVER_ADDRESS]
+  );
+});
+
+test("registration fallback passes public gas estimates to wallet transactions", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+  const batch = {
+    calls: [
+      { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
+      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+    ],
+    summary: []
+  };
+  const sentTransactions = [];
+
+  await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch,
+    chainId: 11155111,
+    estimateGas: async (request) => request.to === EXECUTOR_ADDRESS ? 65_000n : 120_000n,
+    sendCalls: async () => {
+      throw new Error('The method "wallet_sendCalls" does not exist / is not available.');
+    },
+    sendTransaction: async (request) => {
+      sentTransactions.push(request);
+      return `0x${sentTransactions.length.toString(16).padStart(64, "0")}`;
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.deepEqual(
+    sentTransactions.map((request) => request.gas),
+    [154_000n, 88_000n]
   );
 });
 

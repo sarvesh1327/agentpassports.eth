@@ -3,6 +3,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { namehashEnsName, type Hex } from "@agentpassport/config";
+import { encodeFunctionData } from "viem";
 import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -54,6 +55,22 @@ type OwnerAgentDirectoryResponse = {
   agents?: unknown;
   status?: string;
 };
+
+type GeneratedPolicyMetadataResponse = {
+  policyHash?: Hex;
+  policyUri?: string;
+  status?: string;
+};
+
+type StatusMetadataWrite = {
+  newPolicyUri: string;
+  oldPolicyUri: string;
+  txHash: Hex;
+};
+
+type AgentPolicyStatus = "active" | "disabled";
+
+const AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
 
 /**
  * Demonstrates policy and ENS-record revocation, then retries the previous signed task intent.
@@ -159,6 +176,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     [textRecordReads.data]
   );
   const agentStatusText = textRecords.find((record) => record.key === "agent.status")?.value ?? null;
+  const livePolicyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value ?? "";
   const revocationActionState = buildRevocationActionState({
     canWriteEnsStatus: ensStatusWriteState.canWrite,
     ensStatusBlocker: ensStatusWriteState.blocker,
@@ -289,6 +307,116 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }
 
   /**
+   * Pins a fresh policy/profile document for the requested public ENS status.
+   */
+  async function generatePolicyMetadata(status: AgentPolicyStatus): Promise<{ policyHash: Hex; policyUri: string }> {
+    const policy = requireLivePolicy();
+    const agentAddress = requireAddress(liveAgentAddress, "Agent ENS address is not configured");
+    const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+    const response = await fetch("/api/policy-metadata", {
+      body: JSON.stringify({
+        agentAddress,
+        agentName: normalizedAgentName,
+        agentNode,
+        capabilities: AGENT_CAPABILITIES,
+        chainId: props.chainId.toString(),
+        executorAddress,
+        expiresAt: policy[6].toString(),
+        maxGasReimbursementWei: policy[5].toString(),
+        maxValueWei: policy[4].toString(),
+        ownerName: normalizedOwnerName,
+        ownerNode,
+        status,
+        target: policy[2]
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    });
+    const body = (await response.json().catch(() => ({}))) as GeneratedPolicyMetadataResponse;
+
+    if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
+      throw new Error("Policy metadata Pinata upload failed");
+    }
+
+    return {
+      policyHash: body.policyHash,
+      policyUri: body.policyUri
+    };
+  }
+
+  /**
+   * Writes status, policy URI, and policy hash together so ENS metadata and pinned JSON stay in sync.
+   */
+  async function writeAgentStatusMetadata(status: AgentPolicyStatus): Promise<StatusMetadataWrite> {
+    const writeAgentNode = requireAgentNode();
+    const generatedPolicy = await generatePolicyMetadata(status);
+    const resolver = requireEnsStatusWrite();
+
+    const txHash = await writeContractAsync({
+      address: resolver,
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "multicall",
+      args: [
+        [
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [writeAgentNode, "agent.status", status]
+          }),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [writeAgentNode, "agent.policy.uri", generatedPolicy.policyUri]
+          }),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [writeAgentNode, "agent.policy.hash", generatedPolicy.policyHash]
+          })
+        ]
+      ]
+    });
+
+    return {
+      newPolicyUri: generatedPolicy.policyUri,
+      oldPolicyUri: livePolicyUri,
+      txHash
+    };
+  }
+
+  /**
+   * Best-effort cleanup for the previous Pinata CID after ENS has moved to a replacement URI.
+   */
+  async function unpinOldPolicyMetadata(oldPolicyUri: string, newPolicyUri: string): Promise<boolean> {
+    if (!oldPolicyUri.trim() || oldPolicyUri.trim() === newPolicyUri.trim()) {
+      return false;
+    }
+
+    try {
+      const response = await fetch("/api/policy-metadata", {
+        body: JSON.stringify({ policyUri: oldPolicyUri }),
+        headers: { "content-type": "application/json" },
+        method: "DELETE"
+      });
+
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Returns the live executor policy tuple needed to regenerate policy JSON.
+   */
+  function requireLivePolicy(): PolicyContractResult {
+    if (!livePolicy) {
+      throw new Error("Policy state is not loaded");
+    }
+
+    return livePolicy;
+  }
+
+  /**
    * Disables the policy in AgentPolicyExecutor so new and old intents are blocked.
    */
   async function handleRevokePolicy() {
@@ -298,19 +426,15 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
       }
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
       const writeAgentNode = requireAgentNode();
-      const statusTxHash = revocationActionState.shouldWriteEnsStatus
-        ? await writeContractAsync({
-            address: requireEnsStatusWrite(),
-            abi: PUBLIC_RESOLVER_ABI,
-            functionName: "setText",
-            args: [writeAgentNode, "agent.status", "disabled"]
-          })
+      const statusWrite = revocationActionState.shouldWriteEnsStatus
+        ? await writeAgentStatusMetadata("disabled")
         : null;
-      if (statusTxHash) {
+      if (statusWrite) {
         if (!publicClient) {
           throw new Error("Sepolia public client is not ready");
         }
-        await publicClient.waitForTransactionReceipt({ hash: statusTxHash });
+        await publicClient.waitForTransactionReceipt({ hash: statusWrite.txHash });
+        await unpinOldPolicyMetadata(statusWrite.oldPolicyUri, statusWrite.newPolicyUri);
       }
       const policyTxHash = await writeContractAsync({
         address: executorAddress,
@@ -318,7 +442,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         functionName: "revokePolicy",
         args: [writeAgentNode]
       });
-      setTxHashes((hashes) => [...hashes, ...[statusTxHash, policyTxHash].filter(Boolean) as Hex[]]);
+      setTxHashes((hashes) => [...hashes, ...[statusWrite?.txHash, policyTxHash].filter(Boolean) as Hex[]]);
       setStatusMessage("Policy revocation and ENS status disable transactions submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Policy revocation failed");
@@ -362,15 +486,14 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
    */
   async function handleSetStatusDisabled() {
     try {
-      const writeAgentNode = requireAgentNode();
-      const txHash = await writeContractAsync({
-        address: requireEnsStatusWrite(),
-        abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [writeAgentNode, "agent.status", "disabled"]
-      });
-      setTxHashes((hashes) => [...hashes, txHash]);
-      setStatusMessage("Set status disabled transaction submitted");
+      const statusWrite = await writeAgentStatusMetadata("disabled");
+      if (!publicClient) {
+        throw new Error("Sepolia public client is not ready");
+      }
+      await publicClient.waitForTransactionReceipt({ hash: statusWrite.txHash });
+      await unpinOldPolicyMetadata(statusWrite.oldPolicyUri, statusWrite.newPolicyUri);
+      setTxHashes((hashes) => [...hashes, statusWrite.txHash]);
+      setStatusMessage("Set status disabled and policy metadata transaction submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Status update failed");
     }

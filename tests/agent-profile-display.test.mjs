@@ -67,7 +67,7 @@ test("agent profile display parses capabilities and status from ENS text records
     "sponsored-execution"
   ]);
   assert.deepEqual(parseCapabilities("", ["fallback"]), ["fallback"]);
-  assert.equal(readPassportStatus("revoked", LIVE_AGENT_ADDRESS), "revoked");
+  assert.equal(readPassportStatus("disabled", LIVE_AGENT_ADDRESS), "disabled");
   assert.equal(readPassportStatus("", LIVE_AGENT_ADDRESS), "active");
   assert.equal(readPassportStatus("", null), "unknown");
 });

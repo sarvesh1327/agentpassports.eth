@@ -12,6 +12,7 @@ export type RegistrationSendTransactionRequest = {
   account: Hex;
   chainId: number;
   data: Hex;
+  gas?: bigint;
   to: Hex;
   value?: bigint;
 };
@@ -26,10 +27,15 @@ export type RegistrationSubmissionInput = {
   batch: RegistrationBatch;
   call?: (request: RegistrationSendTransactionRequest) => Promise<unknown>;
   chainId: number;
+  estimateGas?: (request: RegistrationSendTransactionRequest) => Promise<bigint>;
   sendCalls: (request: RegistrationSendCallsRequest) => Promise<{ id: string }>;
   sendTransaction: (request: RegistrationSendTransactionRequest) => Promise<Hex>;
   waitForTransactionReceipt: (request: { hash: Hex }) => Promise<unknown>;
 };
+
+const GAS_LIMIT_BUFFER_NUMERATOR = 120n;
+const GAS_LIMIT_BUFFER_DENOMINATOR = 100n;
+const GAS_LIMIT_BUFFER_FLOOR = 10_000n;
 
 /**
  * Submits registration with atomic wallet batching when supported, then falls back to normal wallet transactions.
@@ -70,12 +76,16 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       value: call.value
     }, call.label);
 
-    const hash = await input.sendTransaction({
+    const request = {
       account: input.account,
       chainId: input.chainId,
       data: call.data,
       to: call.to,
       value: call.value
+    };
+    const hash = await input.sendTransaction({
+      ...request,
+      gas: await estimateBufferedGas(input.estimateGas, request)
     });
 
     transactionIds.push(hash);
@@ -86,6 +96,21 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
     mode: "sequential",
     transactionIds
   };
+}
+
+/**
+ * Uses the app's public RPC to give wallets a gas limit and avoid provider-side estimation failures.
+ */
+async function estimateBufferedGas(
+  estimateGas: RegistrationSubmissionInput["estimateGas"],
+  request: RegistrationSendTransactionRequest
+): Promise<bigint | undefined> {
+  if (!estimateGas) {
+    return undefined;
+  }
+
+  const estimatedGas = await estimateGas(request);
+  return (estimatedGas * GAS_LIMIT_BUFFER_NUMERATOR) / GAS_LIMIT_BUFFER_DENOMINATOR + GAS_LIMIT_BUFFER_FLOOR;
 }
 
 /**
