@@ -1,24 +1,20 @@
-import Link from "next/link";
+import { OwnerDashboardEntry } from "../components/OwnerDashboardEntry";
 
 /**
- * Renders the product landing page without prefilled owner or agent identity values.
+ * Renders the dashboard-first owner entry without prefilled user identity values.
  */
 export default function HomePage() {
   return (
     <main className="home-shell">
       <section className="landing-hero" aria-labelledby="home-title">
         <div className="landing-hero__content">
-          <p className="home-intro__eyebrow">ENS-first agent identity</p>
+          <p className="home-intro__eyebrow">Owner dashboard</p>
           <h1 id="home-title">AgentPassports.eth</h1>
           <p>
-            Register an ENS subname for an agent, set a narrow execution policy, fund a capped
-            gas budget, and prove revocation by changing the live ENS address.
+            Manage ENS agent subnames from one owner view, register new agents from the owner index,
+            and open each agent for policy, gas, signer, task history, and delete controls.
           </p>
-          <div className="landing-hero__actions" aria-label="Primary workflow">
-            <Link href="/register">Register agent</Link>
-            <Link href="/run">Run task</Link>
-            <Link href="/revoke">Revoke access</Link>
-          </div>
+          <OwnerDashboardEntry />
         </div>
 
         <div className="landing-visual" aria-label="Agent passport workflow preview">
@@ -44,12 +40,12 @@ export default function HomePage() {
       <section className="landing-steps" aria-labelledby="landing-steps-title">
         <div className="section-heading">
           <p>Flow</p>
-          <h2 id="landing-steps-title">Build the proof one step at a time</h2>
+          <h2 id="landing-steps-title">Start from the owner ENS</h2>
         </div>
         <ol>
-          <li>Connect the owner wallet and register the agent ENS records.</li>
-          <li>Switch to the agent wallet and sign a policy-limited task intent.</li>
-          <li>Submit through the relayer, inspect TaskLog history, then revoke and retry.</li>
+          <li>Open the owner dashboard for the ENS name that controls agent subnames.</li>
+          <li>Register new agents from that dashboard so the owner ENS index is updated.</li>
+          <li>Manage each agent from its agent page while keeping TaskLog history visible.</li>
         </ol>
       </section>
     </main>

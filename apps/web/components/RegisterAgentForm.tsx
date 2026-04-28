@@ -35,11 +35,13 @@ import {
 } from "../lib/registerAgent";
 import { formatWeiAsEth, formatWeiInputAsEth, parseEthInputToWeiString } from "../lib/ethAmount";
 import { buildRegistrationBatch, type RegistrationBatchInput } from "../lib/registrationBatch";
+import { OWNER_INDEX_AGENTS_KEY, parseOwnerAgentIndex } from "../lib/ownerIndex";
 import {
   submitRegistrationBatch,
   type RegistrationSubmissionResult
 } from "../lib/registrationSubmission";
 import { shortenHex } from "./EnsProofPanel";
+import { UiIcon } from "./icons/UiIcons";
 import { StatusBanner } from "./StatusBanner";
 
 export type RegisterAgentFormProps = {
@@ -121,7 +123,6 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const normalizedOwnerName = ownerName.trim().toLowerCase();
   const normalizedAgentLabel = agentLabel.trim().toLowerCase();
   const normalizedAgentAddress = normalizeAddressInput(agentAddress);
-  const agentPageHref = `/agent/${encodeURIComponent(preview.agentName)}`;
   const ownerReverseName = useEnsName({
     address: connectedWallet,
     chainId: Number(props.chainId),
@@ -137,6 +138,24 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     name: normalizedOwnerName || undefined,
     query: { enabled: Boolean(normalizedOwnerName) }
   });
+  const ownerResolver = useReadContract({
+    address: props.ensRegistryAddress ?? undefined,
+    abi: ENS_REGISTRY_ABI,
+    functionName: "resolver",
+    args: [preview.ownerNode],
+    query: { enabled: Boolean(props.ensRegistryAddress && normalizedOwnerName) }
+  });
+  const ownerResolverAddress = ownerResolver.isSuccess
+    ? nonZeroAddress(ownerResolver.data as Hex | undefined)
+    : null;
+  const ownerAgentIndex = useReadContract({
+    address: ownerResolverAddress ?? undefined,
+    abi: PUBLIC_RESOLVER_ABI,
+    functionName: "text",
+    args: [preview.ownerNode, OWNER_INDEX_AGENTS_KEY],
+    query: { enabled: Boolean(ownerResolverAddress && normalizedOwnerName) }
+  });
+  const ownerAgentLabels = parseOwnerAgentIndex(typeof ownerAgentIndex.data === "string" ? ownerAgentIndex.data : "");
   const ownerManager = useReadContract({
     address: props.ensRegistryAddress ?? undefined,
     abi: ENS_REGISTRY_ABI,
@@ -259,6 +278,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       preview.gasBudgetWei,
       preview.ownerNode,
       preview.textRecords,
+      ownerAgentLabels,
+      ownerResolverAddress,
       maxGasReimbursementWei,
       props.defaultMaxValueWei,
       props.defaultPolicyExpiresAt,
@@ -342,7 +363,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       maxValueWei: props.defaultMaxValueWei,
       nameWrapperAddress: props.nameWrapperAddress,
       normalizedAgentAddress,
+      ownerAgentLabels,
       ownerNode: preview.ownerNode,
+      ownerResolverAddress,
       policyExpiresAt: props.defaultPolicyExpiresAt,
       publicResolverAddress: shouldCreateSubnameRecord
         ? requireAddress(props.publicResolverAddress, "Public resolver address is not configured")
@@ -383,7 +406,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       maxValueWei: props.defaultMaxValueWei,
       nameWrapperAddress: props.nameWrapperAddress,
       normalizedAgentAddress,
+      ownerAgentLabels,
       ownerNode: preview.ownerNode,
+      ownerResolverAddress,
       policyExpiresAt: props.defaultPolicyExpiresAt,
       publicResolverAddress: props.publicResolverAddress ?? resolverWriteAddress,
       resolverAddress: resolverWriteAddress,
@@ -575,55 +600,117 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   }
 
   return (
-    <form className="register-form" onSubmit={handleSubmit}>
-      <section className="register-form__section" aria-labelledby="register-identity-title">
-        <div className="section-heading">
-          <p>Identity</p>
-          <h2 id="register-identity-title">Agent ENS</h2>
-        </div>
-        <div className="field-grid">
-          <label>
-            <span>Owner ENS</span>
-            <input name="ownerName" onChange={handleOwnerNameChange} value={ownerName} />
-            <small className="field-help">{ownerEnsStatus.guidance}</small>
-            {ownerEnsStatus.blocker ? <small className="field-help field-help--warning">{ownerEnsStatus.blocker}</small> : null}
-          </label>
-          <label>
-            <span>Agent label</span>
-            <input name="agentLabel" onChange={(event) => setAgentLabel(event.target.value)} value={agentLabel} />
-          </label>
-          <label>
-            <span>Agent address</span>
-            <input
-              name="agentAddress"
-              onChange={(event) => setAgentAddress(event.target.value)}
-              placeholder="0x..."
-              value={agentAddress}
-            />
-          </label>
-        </div>
-      </section>
+    <form className="register-form register-workspace" onSubmit={handleSubmit}>
+      <div className="register-workspace__main">
+        <section className="register-step" aria-labelledby="register-owner-title">
+          <div className="register-step__heading">
+            <span><UiIcon name="shield" size={18} /></span>
+            <h2 id="register-owner-title">Owner ENS</h2>
+            {ownerEnsStatus.canSubmit ? <strong>Owner verified</strong> : null}
+          </div>
+          <div className="register-field-stack">
+            <label>
+              <span>Owner ENS</span>
+              <input name="ownerName" onChange={handleOwnerNameChange} value={ownerName} />
+              <small className="field-help">{ownerEnsStatus.guidance}</small>
+            </label>
+            <label>
+              <span>Owner manager</span>
+              <input readOnly value={formatNullableHex(effectiveOwnerManager)} />
+            </label>
+            <label>
+              <span>Resolver</span>
+              <input readOnly value={formatNullableHex(ownerResolverAddress)} />
+            </label>
+          </div>
+          {ownerEnsStatus.blocker ? <small className="field-help field-help--warning">{ownerEnsStatus.blocker}</small> : null}
+        </section>
 
-      <section className="register-form__section" aria-labelledby="register-policy-title">
-        <div className="section-heading">
-          <p>Policy</p>
-          <h2 id="register-policy-title">Execution limits</h2>
-        </div>
-        <div className="field-grid">
-          <label>
-            <span>Policy target</span>
-            <input readOnly value={props.taskLogAddress ?? "TaskLog not configured"} />
-          </label>
-          <label>
-            <span>TaskLog selector</span>
-            <input readOnly value={taskLogRecordTaskSelector()} />
-          </label>
-          <label>
-            <span>Policy URI</span>
-            <input readOnly value="Generated by Pinata on submit" />
-          </label>
-          <label>
-            <span>Gas budget (ETH)</span>
+        <section className="register-step register-step--identity" aria-labelledby="register-agent-title">
+          <div className="register-step__heading">
+            <span><UiIcon name="document" size={18} /></span>
+            <h2 id="register-agent-title">Agent identity</h2>
+          </div>
+          <div className="register-field-stack">
+            <label>
+              <span>Agent label</span>
+              <input name="agentLabel" onChange={(event) => setAgentLabel(event.target.value)} value={agentLabel} />
+            </label>
+            <label>
+              <span>Full agent ENS (preview)</span>
+              <input readOnly value={preview.agentName} />
+            </label>
+            <label>
+              <span>Agent address</span>
+              <input
+                name="agentAddress"
+                onChange={(event) => setAgentAddress(event.target.value)}
+                placeholder="0x..."
+                value={agentAddress}
+              />
+            </label>
+            <div className="segmented-control" aria-label="Agent kind">
+              <button type="button" aria-pressed="true">Personal assistant</button>
+              <button type="button">Swapper</button>
+              <button type="button">Researcher</button>
+              <button type="button">Keeper</button>
+            </div>
+            <div className="capability-row" aria-label="Capabilities">
+              {AGENT_CAPABILITIES.map((capability) => (
+                <span key={capability}><input readOnly type="checkbox" /> {capability}</span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="register-step register-step--wide" aria-labelledby="register-policy-title">
+          <div className="register-step__heading">
+            <span><UiIcon name="document" size={18} /></span>
+            <h2 id="register-policy-title">Policy</h2>
+            <strong>Policy source <span className="pill pill--success">ENS</span></strong>
+          </div>
+          <div className="field-grid">
+            <label>
+              <span>Target (TaskLog)</span>
+              <span className="sr-only">Policy target</span>
+              <input readOnly value={props.taskLogAddress ?? "TaskLog not configured"} />
+            </label>
+            <label>
+              <span>Selector</span>
+              <input readOnly value={taskLogRecordTaskSelector()} />
+            </label>
+            <label>
+              <span>Max value per call (ETH)</span>
+              <input readOnly value={props.defaultMaxValueWei} />
+            </label>
+            <label>
+              <span>Reimbursement cap (ETH)</span>
+              <input
+                name="maxReimbursementEth"
+                onChange={(event) => setMaxReimbursementEth(event.target.value)}
+                placeholder="0.0002"
+                value={maxReimbursementEth}
+              />
+            </label>
+            <label>
+              <span>Policy URI</span>
+              <input readOnly value="Generated by Pinata on submit" />
+            </label>
+            <label>
+              <span>Policy digest (preview)</span>
+              <span className="sr-only">Policy hash</span>
+              <input readOnly value={preview.policyHash ?? "Pending"} />
+            </label>
+          </div>
+        </section>
+
+        <section className="register-step" aria-labelledby="register-gas-title">
+          <div className="register-step__heading">
+            <span><UiIcon name="gas" size={18} /></span>
+            <h2 id="register-gas-title">Gas budget</h2>
+          </div>
+          <label className="register-field-stack">
+            <span>Initial gas budget (ETH)</span>
             <input
               name="gasBudgetEth"
               onChange={(event) => setGasBudgetEth(event.target.value)}
@@ -631,117 +718,92 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               value={gasBudgetEth}
             />
           </label>
-          <label>
-            <span>Reimbursement cap (ETH)</span>
-            <input
-              name="maxReimbursementEth"
-              onChange={(event) => setMaxReimbursementEth(event.target.value)}
-              placeholder="0.0002"
-              value={maxReimbursementEth}
-            />
-          </label>
-        </div>
-      </section>
+          <div className="budget-preview">
+            <span>Estimated required top-up</span>
+            <strong>{formatWeiAsEth(safeBigInt(preview.gasBudgetWei))}</strong>
+          </div>
+        </section>
 
-      <section className="register-form__preview" aria-labelledby="register-preview-title">
-        <div className="section-heading">
-          <p>Preview</p>
-          <h2 id="register-preview-title">Registration facts</h2>
+        <div className="register-workspace__actions">
+          <a href={`/owner/${encodeURIComponent(normalizedOwnerName)}`}>Cancel</a>
+          <button disabled type="button"><UiIcon name="document" size={17} /> Save draft</button>
+          <button disabled={status === "submitting" || Boolean(submitBlocker)} type="submit">
+            <UiIcon name="shield" size={18} /> {status === "submitting" ? "Submitting..." : "Register agent"}
+          </button>
         </div>
-        <dl className="fact-grid">
-          <PreviewRow label="Agent ENS" value={preview.agentName} />
-          <PreviewRow
-            label="Owner resolved address"
-            title={ownerResolvedAddress.data ?? undefined}
-            value={formatNullableHex(ownerResolvedAddress.data)}
-          />
-          <PreviewRow
-            label="Owner manager"
-            title={(ownerManager.data as Hex | undefined) ?? undefined}
-            value={formatNullableHex(ownerManager.data as Hex | undefined)}
-          />
-          <PreviewRow label="Connected wallet" title={connectedWallet} value={formatNullableHex(connectedWallet)} />
-          <PreviewRow
-            label="Owner node"
-            title={normalizedOwnerName ? preview.ownerNode : undefined}
-            value={normalizedOwnerName ? shortenHex(preview.ownerNode) : "Unknown"}
-          />
-          <PreviewRow
-            label="Agent node"
-            title={normalizedOwnerName && normalizedAgentLabel ? preview.agentNode : undefined}
-            value={normalizedOwnerName && normalizedAgentLabel ? shortenHex(preview.agentNode) : "Unknown"}
-          />
-          <PreviewRow
-            label="Resolver"
-            title={resolverWriteAddress ?? undefined}
-            value={formatNullableHex(resolverWriteAddress)}
-          />
-          <PreviewRow
-            label="Policy hash"
-            title={preview.policyHash ?? undefined}
-            value={formatNullableHex(preview.policyHash)}
-          />
-          <PreviewRow label="Gas budget" value={formatWeiAsEth(safeBigInt(preview.gasBudgetWei))} />
-        </dl>
-      </section>
+      </div>
 
-      <section className="register-form__section" aria-labelledby="register-records-title">
-        <div className="section-heading">
-          <p>Records</p>
-          <h2 id="register-records-title">ENS text records</h2>
-        </div>
-        {preview.textRecords.length > 0 ? (
-          <div className="record-table" role="table" aria-label="ENS text records">
-            {preview.textRecords.map((record) => (
-              <div className="record-table__row" role="row" key={record.key}>
-                <span role="cell">{record.key}</span>
-                <strong role="cell">{record.value}</strong>
+      <aside className="register-workspace__side">
+        <section className="register-side-card" aria-labelledby="register-preview-title">
+          <div className="register-side-card__header">
+            <h2 id="register-preview-title"><UiIcon name="eye" size={18} /> Prepared registration</h2>
+            <span className="pill pill--success">Preview</span>
+          </div>
+          <dl className="register-preview-list">
+            <PreviewRow label="Owner node" title={preview.ownerNode} value={normalizedOwnerName || "Unknown"} />
+            <PreviewRow label="Agent node" title={preview.agentNode} value={preview.agentName ? `${preview.agentName} (new)` : "Unknown"} />
+            <PreviewRow label="Subname action" value={preview.agentName ? `create ${preview.agentName}` : "Waiting for agent label"} />
+            <PreviewRow label="Resolver writes" value={`addr + ${preview.textRecords.length} text records`} />
+            <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${normalizedAgentLabel || "label"}`} />
+            <PreviewRow label="Budget transaction" value={preparedBatchSummary.some((step) => step.includes("depositGasBudget")) ? "depositGasBudget" : "setPolicy"} />
+          </dl>
+
+          <div className="transaction-queue" aria-labelledby="register-transactions-title">
+            <div className="register-side-card__header">
+              <h3 id="register-transactions-title"><UiIcon name="queue" size={18} /> Transaction queue</h3>
+              <span className="pill pill--info">{preparedBatchSummary.length || 0} steps</span>
+            </div>
+            {hasPreparedTransactions ? (
+              <ol>
+                {preparedBatchSummary.map((step, index) => (
+                  <li key={step}>
+                    <span>{index + 1}</span>
+                    <strong>{step}</strong>
+                    <em>Ready</em>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="empty-state">
+                <strong>No transactions prepared</strong>
+                <span>{registrationDraftStatus.blocker ?? "Prepared transactions appear after the ENS records, resolver, and gas budget are ready."}</span>
               </div>
-            ))}
+            )}
           </div>
-        ) : (
-          <div className="empty-state">
-            <strong>No ENS records prepared</strong>
-            <span>ENS text records appear after owner ENS, agent label, and agent address are ready.</span>
-          </div>
-        )}
-      </section>
+        </section>
 
-      <section className="register-form__section" aria-labelledby="register-transactions-title">
-        <div className="section-heading">
-          <p>Queue</p>
-          <h2 id="register-transactions-title">Prepared transactions</h2>
-        </div>
-        {hasPreparedTransactions ? (
-          <ol className="transaction-list">
-            {preparedBatchSummary.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        ) : (
-          <div className="empty-state">
-            <strong>No transactions prepared</strong>
-            <span>{registrationDraftStatus.blocker ?? "Prepared transactions appear after the ENS records, resolver, and gas budget are ready."}</span>
+        <section className="register-side-card" aria-labelledby="register-records-title">
+          <div className="register-side-card__header">
+            <h2 id="register-records-title"><UiIcon name="document" size={18} /> ENS records that will be written</h2>
           </div>
-        )}
-      </section>
+          {preview.textRecords.length > 0 ? (
+            <div className="record-table" role="table" aria-label="ENS text records">
+              {preview.textRecords.map((record) => (
+                <div className="record-table__row" role="row" key={record.key}>
+                  <span role="cell">{record.key}</span>
+                  <strong role="cell">{record.value}</strong>
+                </div>
+              ))}
+              <div className="record-table__row" role="row">
+                <span role="cell">Total records</span>
+                <strong role="cell">{preview.textRecords.length} text + 1 addr</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <strong>No ENS records prepared</strong>
+              <span>ENS text records appear after owner ENS, agent label, and agent address are ready.</span>
+            </div>
+          )}
+        </section>
 
-      <div className="register-form__section">
         <StatusBanner
           details={submitBlocker ?? "Waiting for ENS and wallet state to become ready."}
           message={statusMessage}
           title="Registration status"
           variant={status === "submitting" ? "loading" : status === "submitted" ? "success" : status}
         />
-      </div>
-
-      <div className="register-form__actions">
-        <button disabled={status === "submitting" || Boolean(submitBlocker)} type="submit">
-          {status === "submitting" ? "Submitting..." : "Submit registration"}
-        </button>
-        <a href={agentPageHref}>View agent passport</a>
-        {submitBlocker ? <small className="field-help field-help--warning">{submitBlocker}</small> : null}
-      </div>
+      </aside>
       {submittedTxHashes.length > 0 ? (
         <div className="transaction-result" aria-label="Registration submitted transactions">
           <span>Registration submitted</span>

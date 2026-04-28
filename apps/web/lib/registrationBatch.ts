@@ -3,6 +3,13 @@ import { encodeFunctionData, labelhash } from "viem";
 import { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, NAME_WRAPPER_ABI, PUBLIC_RESOLVER_ABI } from "./contracts.ts";
 import { requireAddress, safeBigInt } from "./registerAgent.ts";
 import type { PolicyContractResult } from "./contracts.ts";
+import {
+  OWNER_INDEX_AGENTS_KEY,
+  OWNER_INDEX_VERSION,
+  OWNER_INDEX_VERSION_KEY,
+  addOwnerAgentLabel,
+  serializeOwnerAgentIndex
+} from "./ownerIndex.ts";
 
 export type RegistrationBatchCall = {
   data: Hex;
@@ -30,7 +37,9 @@ export type RegistrationBatchInput = {
   maxValueWei: string;
   nameWrapperAddress?: Hex | null;
   normalizedAgentAddress: Hex;
+  ownerAgentLabels?: readonly string[];
   ownerNode: Hex;
+  ownerResolverAddress?: Hex | null;
   policyExpiresAt: string;
   publicResolverAddress: Hex;
   resolverAddress: Hex;
@@ -58,6 +67,12 @@ export function buildRegistrationBatch(input: RegistrationBatchInput): Registrat
   if (policyCall) {
     calls.push(policyCall.call);
     summary.push(policyCall.summary);
+  }
+
+  const ownerIndexCall = buildOwnerIndexCall(input);
+  if (ownerIndexCall) {
+    calls.push(ownerIndexCall);
+    summary.push("set owner index text records");
   }
 
   return { calls, summary };
@@ -118,6 +133,39 @@ function buildResolverMulticall(input: RegistrationBatchInput): RegistrationBatc
     }),
     label: "multicall",
     to: input.resolverAddress
+  };
+}
+
+/**
+ * Encodes the owner-level dashboard index text writes when the owner resolver is known.
+ */
+function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCall | null {
+  if (!input.ownerResolverAddress) {
+    return null;
+  }
+
+  const nextLabels = addOwnerAgentLabel(input.ownerAgentLabels ?? [], input.agentLabel);
+  const resolverCalls = [
+    encodeFunctionData({
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "setText",
+      args: [input.ownerNode, OWNER_INDEX_VERSION_KEY, OWNER_INDEX_VERSION]
+    }),
+    encodeFunctionData({
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "setText",
+      args: [input.ownerNode, OWNER_INDEX_AGENTS_KEY, serializeOwnerAgentIndex(nextLabels)]
+    })
+  ];
+
+  return {
+    data: encodeFunctionData({
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "multicall",
+      args: [resolverCalls]
+    }),
+    label: "setOwnerIndex",
+    to: input.ownerResolverAddress
   };
 }
 

@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
 import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
-import { AgentPassportCard } from "./AgentPassportCard";
-import { DemoReadinessPanel } from "./DemoReadinessPanel";
-import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
+import { AgentManagementPanel } from "./AgentManagementPanel";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
@@ -17,6 +15,8 @@ import {
 } from "../lib/contracts";
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
+import { formatWeiAsEth } from "../lib/ethAmount";
+import { AgentBotIcon, UiIcon } from "./icons/UiIcons";
 import {
   loadTaskHistory,
   type TaskHistoryItem
@@ -102,6 +102,8 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const capabilityText = textRecords.find((record) => record.key === "agent.capabilities")?.value;
   const capabilities = parseCapabilities(capabilityText, initialProfile.capabilities);
   const statusText = textRecords.find((record) => record.key === "agent.status")?.value;
+  const policyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value || initialProfile.policyUri;
+  const policyHash = textRecords.find((record) => record.key === "agent.policy.hash")?.value || initialProfile.policyHash;
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
 
   useEffect(() => {
@@ -134,82 +136,125 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   }, [initialProfile.agentNode, initialProfile.taskLogAddress, initialProfile.taskLogStartBlock, publicClient]);
 
   return (
-    <>
-      <div className="agent-layout">
-        <AgentPassportCard
+    <div className="agent-detail">
+      <section className="agent-detail__topbar" aria-labelledby="agent-title">
+        <a className="agent-detail__back" href={`/owner/${encodeURIComponent(initialProfile.ownerName)}`}>
+          <UiIcon name="arrow-left" size={15} /> Back to dashboard
+        </a>
+        <div className="agent-detail__header">
+          <div className="agent-detail__identity">
+            <span className="agent-detail__avatar" aria-hidden="true"><AgentBotIcon size={36} /></span>
+            <div>
+              <div className="agent-detail__name-row">
+                <h1 id="agent-title">{initialProfile.agentName}</h1>
+                <span className={`pill pill--${passportStatus === "active" ? "success" : passportStatus === "disabled" ? "warning" : "neutral"}`}>
+                  {passportStatus === "active" ? "Active" : passportStatus === "disabled" ? "Disabled" : "Unknown"}
+                </span>
+              </div>
+              <dl className="agent-detail__quick-facts">
+                <div>
+                  <dt>Signer</dt>
+                  <dd title={liveAgentAddress ?? undefined}>{liveAgentAddress ? shortenHex(liveAgentAddress) : "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Policy Source</dt>
+                  <dd><span className="pill pill--success">ENS</span></dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+          <div className="agent-detail__actions" aria-label="Agent quick actions">
+            <a href="#agent-management-status-title"><UiIcon name="shield" size={16} /> Disable</a>
+            <a href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
+            <a href="#agent-management-gas-title"><UiIcon name="plus" size={16} /> Add gas</a>
+            <a href="#agent-management-withdraw-title"><UiIcon name="download" size={16} /> Withdraw gas</a>
+            <a className="agent-detail__delete-link" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
+          </div>
+        </div>
+      </section>
+
+      <div className="agent-detail__grid">
+        <LiveEnsPassportPanel
           agentAddress={liveAgentAddress}
           agentName={initialProfile.agentName}
           agentNode={initialProfile.agentNode}
-          capabilities={capabilities}
-          ownerName={initialProfile.ownerName}
-          policyUri={initialProfile.policyUri}
-          status={passportStatus}
-        />
-
-        <EnsProofPanel
-          agentName={initialProfile.agentName}
-          agentNode={initialProfile.agentNode}
-          authorizationStatus="unknown"
-          ensAgentAddress={liveAgentAddress}
-          failureReason={liveAgentAddress ? undefined : "ENS addr(agent) not configured"}
-          gasBudgetWei={liveGasBudget}
           ownerName={initialProfile.ownerName}
           ownerNode={initialProfile.ownerNode}
-          policyEnabled={policyEnabled}
-          policyHash={initialProfile.policyHash}
-          recoveredSigner={null}
+          policyHash={policyHash}
+          policyUri={policyUri}
           resolverAddress={resolverAddress}
+          status={passportStatus}
         />
-      </div>
-
-      <div className="detail-grid">
-        <TextRecordPanel textRecords={textRecords} />
         <PolicyStatePanel
+          capabilities={capabilities}
           executorAddress={initialProfile.executorAddress}
           gasBudgetWei={liveGasBudget}
           nextNonce={liveNextNonce}
           policy={livePolicy}
-          policyHash={initialProfile.policyHash}
+          policyHash={typeof policyHash === "string" && policyHash.startsWith("0x") ? policyHash as Hex : initialProfile.policyHash}
+          policyUri={policyUri}
           taskLogAddress={initialProfile.taskLogAddress}
         />
+        <GasBudgetPanel gasBudgetWei={liveGasBudget} />
         <TaskHistoryPanel
-          cardClassName="app-card app-card--wide"
-          emptyDescription="TaskLog events will appear here after the relayer submits executor transactions."
+          cardClassName="agent-panel agent-history-card"
+          emptyDescription="TaskLog events remain visible here after disable or delete."
+          emptyTitle="No task history"
           eyebrow="TaskLog"
           headingId="agent-history-title"
           tasks={taskHistory}
           title="Task history"
         />
-        <DemoReadinessPanel
-          agentAddress={liveAgentAddress}
-          gasBudgetWei={liveGasBudget}
-          policyEnabled={policyEnabled}
-          resolverAddress={resolverAddress}
-          taskLogAddress={initialProfile.taskLogAddress}
-        />
       </div>
-    </>
+
+      <AgentManagementPanel
+        gasBudgetWei={liveGasBudget}
+        initialProfile={initialProfile}
+        liveAgentAddress={liveAgentAddress}
+        policyEnabled={policyEnabled}
+        resolverAddress={resolverAddress}
+      />
+    </div>
   );
 }
 
 /**
- * Displays the ENS text records that make up the public agent metadata surface.
+ * Displays the live ENS passport fields in the management-page layout.
  */
-function TextRecordPanel({ textRecords }: { textRecords: readonly { key: string; value: string }[] }) {
+function LiveEnsPassportPanel(props: {
+  agentAddress: Hex | null;
+  agentName: string;
+  agentNode: Hex;
+  ownerName: string;
+  ownerNode: Hex;
+  policyHash: Hex | string | null;
+  policyUri: string;
+  resolverAddress: Hex | null;
+  status: string;
+}) {
+  const rows = [
+    { label: "addr", title: props.agentAddress ?? undefined, value: props.agentAddress ? shortenHex(props.agentAddress) : "Unknown" },
+    { label: "resolver", title: props.resolverAddress ?? undefined, value: props.resolverAddress ? shortenHex(props.resolverAddress) : "Unknown" },
+    { label: "owner", title: props.ownerNode, value: props.ownerName },
+    { label: "agent.status", value: props.status },
+    { label: "agent.policy.uri", title: props.policyUri, value: props.policyUri || "Unknown" },
+    { label: "agent.policy.digest", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash as Hex) : "Unknown" }
+  ];
+
   return (
-    <section className="app-card" aria-labelledby="agent-records-title">
-      <div className="section-heading">
-        <p>ENS</p>
-        <h2 id="agent-records-title">ENS text records</h2>
-      </div>
-      <div className="record-table" role="table" aria-label="ENS text records">
-        {textRecords.map((record) => (
-          <div className="record-table__row" role="row" key={record.key}>
-            <span role="cell">{record.key}</span>
-            <strong role="cell">{record.value}</strong>
+    <section className="agent-panel agent-passport-panel" aria-labelledby="agent-passport-title">
+      <h2 id="agent-passport-title"><UiIcon name="shield" size={18} /> Live ENS Passport</h2>
+      <dl className="agent-fact-table">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd title={row.title}>
+              {row.label === "agent.status" ? <span className="pill pill--success">{row.value}</span> : row.value}
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
+      <span className="sr-only">{props.agentName}</span>
     </section>
   );
 }
@@ -218,15 +263,21 @@ function TextRecordPanel({ textRecords }: { textRecords: readonly { key: string;
  * Shows the executor-facing policy and gas budget facts for the agent node.
  */
 function PolicyStatePanel(props: {
+  capabilities: readonly string[];
   executorAddress: Hex | null;
   gasBudgetWei: bigint;
   nextNonce: string;
   policy?: PolicyContractResult;
   policyHash: Hex | null;
+  policyUri: string;
   taskLogAddress: Hex | null;
 }) {
   const rows = [
-    { label: "Policy state", value: props.policy?.[7] ? "Enabled" : "Unknown" },
+    { label: "Allowed Target (TaskLog)", title: props.policy?.[2] ?? props.taskLogAddress ?? undefined, value: props.policy?.[2] ? shortenHex(props.policy[2]) : props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
+    { label: "Allowed Selector", title: props.policy?.[3], value: props.policy?.[3] ?? "Unknown" },
+    { label: "Max Value per Call", value: props.policy?.[4] !== undefined ? formatWei(props.policy[4]) : "Unknown" },
+    { label: "Reimbursement Cap", value: props.policy?.[5] !== undefined ? formatWei(props.policy[5]) : "Unknown" },
+    { label: "Expiry", value: props.policy?.[6] !== undefined ? formatUnixTime(props.policy[6]) : "Unknown" },
     {
       label: "Policy hash",
       title: props.policyHash ?? undefined,
@@ -237,28 +288,15 @@ function PolicyStatePanel(props: {
       title: props.executorAddress ?? undefined,
       value: props.executorAddress ? shortenHex(props.executorAddress) : "Unknown"
     },
-    {
-      label: "TaskLog",
-      title: props.taskLogAddress ?? undefined,
-      value: props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown"
-    },
-    { label: "Policy target", title: props.policy?.[2], value: props.policy?.[2] ? shortenHex(props.policy[2]) : "Unknown" },
-    {
-      label: "Policy selector",
-      title: props.policy?.[3],
-      value: props.policy?.[3] ? shortenHex(props.policy[3]) : "Unknown"
-    },
-    { label: "Gas budget", value: formatWei(props.gasBudgetWei) },
+    { label: "Policy Source", value: props.policyUri ? "ENS" : "Unknown" },
+    { label: "Policy state", value: props.policy?.[7] ? "Enabled" : "Unknown" },
     { label: "Next nonce", value: props.nextNonce }
   ];
 
   return (
-    <section className="app-card" aria-labelledby="agent-policy-title">
-      <div className="section-heading">
-        <p>Policy</p>
-        <h2 id="agent-policy-title">Policy state</h2>
-      </div>
-      <dl className="fact-grid">
+    <section className="agent-panel agent-policy-card" aria-labelledby="agent-policy-title">
+      <h2 id="agent-policy-title"><UiIcon name="document" size={18} /> Policy</h2>
+      <dl className="agent-fact-table">
         {rows.map((row) => (
           <div key={row.label}>
             <dt>{row.label}</dt>
@@ -266,6 +304,38 @@ function PolicyStatePanel(props: {
           </div>
         ))}
       </dl>
+      <div className="agent-policy-card__capabilities">
+        <span>Capabilities</span>
+        <div>
+          {props.capabilities.map((capability) => (
+            <span className="pill pill--info" key={capability}>{capability}</span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GasBudgetPanel(props: { gasBudgetWei: bigint }) {
+  return (
+    <section className="agent-panel agent-gas-card" aria-labelledby="agent-gas-title">
+      <h2 id="agent-gas-title"><UiIcon name="gas" size={18} /> Gas Budget</h2>
+      <span>Balance</span>
+      <strong>{formatWei(props.gasBudgetWei)}</strong>
+      <div className="agent-gas-card__inputs">
+        <label>
+          <span>Add amount (ETH)</span>
+          <input readOnly value="0.0" />
+        </label>
+        <label>
+          <span>Withdraw amount (ETH)</span>
+          <span className="agent-gas-card__input-row">
+            <input readOnly value="0.0" />
+            <button type="button">Max</button>
+          </span>
+        </label>
+      </div>
+      <a href="#agent-management-gas-title">Manage gas</a>
     </section>
   );
 }
@@ -296,4 +366,25 @@ function safeBigInt(value: string): bigint {
  */
 function parseOptionalBigInt(value: string | null): bigint | null {
   return value && /^\d+$/u.test(value) ? BigInt(value) : null;
+}
+
+function formatUnixTime(value: bigint): string {
+  const timestamp = Number(value);
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC"
+  }).format(new Date(timestamp * 1000));
+}
+
+function formatWei(value?: bigint): string {
+  return formatWeiAsEth(value);
+}
+
+function shortenHex(value: Hex): string {
+  return value.length <= 18 ? value : `${value.slice(0, 10)}...${value.slice(-6)}`;
 }
