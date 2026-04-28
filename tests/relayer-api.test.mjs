@@ -301,6 +301,20 @@ test("relayer error responses do not expose internal provider details", async ()
   assert.doesNotMatch(response.body.details, /secret-token|provider\.example/);
 });
 
+test("relayer estimate failures are not reported as gas budget validation errors", async () => {
+  const routeSource = await readText("apps/web/app/api/relayer/execute/route.ts");
+  const assertEstimatedBudgetBody = routeSource.match(
+    /async function assertEstimatedBudget[\s\S]*?\n}\n\nasync function readJsonBody/
+  )?.[0] ?? "";
+
+  assert.match(assertEstimatedBudgetBody, /throw error/);
+  assert.doesNotMatch(
+    assertEstimatedBudgetBody,
+    /throw new RelayerValidationError\(\s*"InsufficientGasBudget"/,
+    "gas estimation RPC or simulation failures must not be converted into budget errors"
+  );
+});
+
 test("relayer contract adapters map executor reads into validation input", async () => {
   const { policyFromContractResult } = await import("../apps/web/lib/relayer/contracts.ts");
 

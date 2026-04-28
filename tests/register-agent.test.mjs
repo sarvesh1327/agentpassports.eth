@@ -14,6 +14,8 @@ test("ETH amount helpers keep small nonzero budgets visible", async () => {
   assert.equal(formatWeiAsEth(100000000000n), "0.0000001 ETH");
   assert.equal(formatWeiAsEth(10000000000000000n), "0.01 ETH");
   assert.equal(formatWeiAsEth(1n), "0.000000000000000001 ETH");
+  assert.equal(formatWeiAsEth(10_000000000000000000n), "10 ETH");
+  assert.equal(formatWeiAsEth(100_000000000000000000n), "100 ETH");
 });
 
 test("ETH amount helpers parse registration ETH inputs into wei", async () => {
@@ -26,6 +28,7 @@ test("ETH amount helpers parse registration ETH inputs into wei", async () => {
   assert.equal(parseEthInputToWei("0.0000000000000000001"), 0n);
   assert.equal(parseEthInputToWeiString("0.0000001"), "100000000000");
   assert.equal(formatWeiInputAsEth("100000000000"), "0.0000001");
+  assert.equal(formatWeiInputAsEth("10000000000000000000"), "10");
   assert.equal(formatWeiInputAsEth(""), "");
 });
 
@@ -675,9 +678,22 @@ test("owner ENS status blocks unresolved or unowned owner names", async () => {
   const { buildOwnerEnsStatus } = await import("../apps/web/lib/registerAgent.ts");
   const connectedWallet = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-  const unresolved = buildOwnerEnsStatus({
+  const checkingManager = buildOwnerEnsStatus({
     connectedWallet,
     effectiveOwnerManager: null,
+    isOwnerManagerSettled: false,
+    isOwnerResolutionSettled: true,
+    isReverseEnsSettled: true,
+    normalizedOwnerName: "alice.eth",
+    ownerResolvedAddress: null,
+    reverseEnsName: null
+  });
+  assert.equal(checkingManager.canSubmit, false);
+  assert.equal(checkingManager.blocker, "Checking whether this wallet can manage the ENS name");
+
+  const ownedWithoutAddressRecord = buildOwnerEnsStatus({
+    connectedWallet,
+    effectiveOwnerManager: connectedWallet,
     isOwnerManagerSettled: true,
     isOwnerResolutionSettled: true,
     isReverseEnsSettled: true,
@@ -685,8 +701,8 @@ test("owner ENS status blocks unresolved or unowned owner names", async () => {
     ownerResolvedAddress: null,
     reverseEnsName: null
   });
-  assert.equal(unresolved.canSubmit, false);
-  assert.equal(unresolved.blocker, "Owner ENS does not exist or has no address record");
+  assert.equal(ownedWithoutAddressRecord.canSubmit, true);
+  assert.equal(ownedWithoutAddressRecord.blocker, null);
 
   const unowned = buildOwnerEnsStatus({
     connectedWallet,

@@ -15,10 +15,12 @@ import {
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
 import {
+  buildStoredSignedTaskPayload,
   buildFreshTaskRunDraft,
   recoverTaskSigner,
   serializeRelayerExecutePayload,
   serializeTypedData,
+  storeSignedTaskPayload,
   taskAuthorizationResult,
   taskGasBudgetStatus
 } from "../lib/taskDemo";
@@ -29,7 +31,7 @@ import {
   type AgentTextReadResult
 } from "../lib/agentSession";
 import {
-  fetchTaskHistory,
+  loadTaskHistory,
   type TaskHistoryItem
 } from "../lib/taskHistory";
 import { AgentLiveDataPanel } from "./AgentLiveDataPanel";
@@ -361,20 +363,24 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     let cancelled = false;
 
     /**
-     * Loads DB-indexed TaskLog records so the task proof appears after the relayer transaction lands.
+     * Loads indexed and onchain TaskLog records so the task proof appears after any valid execution lands.
      */
-    async function loadTaskHistory() {
+    async function refreshTaskHistory() {
       if (!normalizedAgentName) {
         setTaskHistory([]);
         return;
       }
-      const tasks = await fetchTaskHistory(agentNode);
+      const tasks = await loadTaskHistory({
+        agentNode,
+        publicClient,
+        taskLogAddress: props.taskLogAddress ?? null
+      });
       if (!cancelled) {
         setTaskHistory(tasks);
       }
     }
 
-    loadTaskHistory().catch(() => {
+    refreshTaskHistory().catch(() => {
       if (!cancelled) {
         setTaskHistory([]);
       }
@@ -383,7 +389,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     return () => {
       cancelled = true;
     };
-  }, [agentNode, historyRefreshKey, normalizedAgentName]);
+  }, [agentNode, historyRefreshKey, normalizedAgentName, props.taskLogAddress, publicClient]);
 
   /**
    * Signs the prepared EIP-712 payload and returns the relayer request body.
@@ -405,6 +411,18 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       intent: draft.intent,
       signature: signed as Hex
     });
+    const storedPayload = buildStoredSignedTaskPayload({
+      agentName: normalizedAgentName,
+      callData: draft.callData,
+      digest: draft.digest,
+      intent: draft.intent,
+      ownerName: normalizedOwnerName,
+      recoveredSigner: recovered,
+      signature: signed as Hex,
+      taskHash: draft.taskHash,
+      typedData: draft.typedData
+    });
+    storeSignedTaskPayload({ payload: storedPayload });
 
     setSignature(signed as Hex);
     setRecoveredSigner(recovered);
@@ -442,7 +460,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n);
       void nextNonceRead.refetch().catch(() => undefined);
       setStatus("submitted");
-      setStatusMessage("Transaction status: submitted");
+      setStatusMessage("Task submitted and saved for revocation proof");
       setHistoryRefreshKey((key) => key + 1);
     } catch (error) {
       setStatus("error");

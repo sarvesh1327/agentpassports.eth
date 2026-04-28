@@ -57,6 +57,8 @@ type AgentIndexResponse = {
   status?: string;
 };
 
+const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
+
 /**
  * Captures the ENS identity, record metadata, policy, and gas budget inputs for a new agent.
  */
@@ -395,6 +397,23 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   }
 
   /**
+   * Retries indexing because wallet batches may return before all ENS reads are visible to the API.
+   */
+  async function indexRegisteredAgentWithRetry(input: { agentAddress: Hex | null; agentName: string }): Promise<boolean> {
+    for (const delayMs of AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS) {
+      if (delayMs > 0) {
+        await delay(delayMs);
+      }
+
+      if (await indexRegisteredAgent(input)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Validates input, requests wallet writes, and records submitted transaction hashes.
    */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -406,7 +425,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     try {
       const submissionInput = readSubmissionInput();
       const submitted = await submitRegistrationTransactions(submissionInput);
-      const directoryIndexed = await indexRegisteredAgent({
+      const directoryIndexed = await indexRegisteredAgentWithRetry({
         agentAddress: normalizedAgentAddress,
         agentName: preview.agentName
       });
@@ -596,6 +615,13 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       ) : null}
     </form>
   );
+}
+
+/**
+ * Waits between post-registration directory verification attempts.
+ */
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 /**

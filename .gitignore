@@ -20,6 +20,7 @@ coverage/
 **/*.tsbuildinfo
 
 # Foundry build, test, and deployment artifacts.
+cache/
 contracts/out/
 contracts/cache/
 contracts/broadcast/

@@ -288,6 +288,8 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(formSource, /submitRegistrationTransactions/);
   assert.match(formSource, /submitRegistrationBatch/);
   assert.match(formSource, /indexRegisteredAgent/);
+  assert.match(formSource, /indexRegisteredAgentWithRetry/);
+  assert.match(formSource, /AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS/);
   assert.match(formSource, /fetch\("\/api\/agents"/);
   assert.match(formSource, /agentAddress: normalizedAgentAddress/);
   assert.match(formSource, /agentName: preview\.agentName/);
@@ -358,14 +360,10 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(pageSource, /serializeAgentProfile/);
   assert.match(viewSource, /useReadContract/);
   assert.match(viewSource, /useReadContracts/);
-  assert.doesNotMatch(viewSource, /usePublicClient/);
-  assert.match(viewSource, /fetchTaskHistory/);
+  assert.match(viewSource, /usePublicClient\(\{ chainId: Number\(initialProfile\.chainId\) \}\)/);
+  assert.match(viewSource, /loadTaskHistory/);
   assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
-  assert.doesNotMatch(
-    viewSource,
-    /getLogs/,
-    "agent page should read task history from the backend task index instead of scanning logs in the browser",
-  );
+  assert.match(taskHistorySource, /getLogs/);
   assert.match(source, /TaskRecorded/);
   assert.match(viewSource, /from "\.\.\/lib\/taskHistory"/);
   assert.match(viewSource, /from "\.\/TaskHistoryPanel"/);
@@ -439,12 +437,9 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
   assert.doesNotMatch(source, /Sign and save for revocation/);
   assert.doesNotMatch(componentSource, /persistForRevocation/);
-  assert.doesNotMatch(componentSource, /storeSignedTaskPayload/);
-  assert.doesNotMatch(
-    componentSource,
-    /const \{ relayerPayload \} = await signAndStoreDraft\(\)/,
-    "normal relayer submission must not overwrite the saved revocation retry payload",
-  );
+  assert.match(componentSource, /storeSignedTaskPayload/);
+  assert.match(componentSource, /buildStoredSignedTaskPayload/);
+  assert.match(componentSource, /setStatusMessage\("Task submitted and saved for revocation proof"\)/);
   assert.match(componentSource, /buildFreshTaskRunDraft/);
   assert.match(componentSource, /chainNowSeconds/);
   assert.match(componentSource, /readLatestBlockTimestamp/);
@@ -497,11 +492,11 @@ test("run page signs task intents and submits them to the relayer", async () => 
   assert.doesNotMatch(helperSource, /normalizeRequiredText\(input\.metadataURI, "Metadata URI"\)/);
   assert.match(source, /EnsProofPanel/);
   assert.match(source, /TaskRecorded/);
-  assert.match(componentSource, /fetchTaskHistory/);
+  assert.match(componentSource, /loadTaskHistory/);
   assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
+  assert.match(taskHistorySource, /getLogs/);
   assert.match(componentSource, /from "\.\.\/lib\/taskHistory"/);
   assert.match(componentSource, /from "\.\/TaskHistoryPanel"/);
-  assert.doesNotMatch(componentSource, /getLogs/);
   assert.doesNotMatch(componentSource, /fromBlock: 0n/);
   assert.doesNotMatch(componentSource, /function taskFromLog/);
   assert.doesNotMatch(componentSource, /function TaskHistoryPanel/);

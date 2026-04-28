@@ -239,10 +239,8 @@ async function assertEstimatedBudget(input: {
       throw error;
     }
 
-    throw new RelayerValidationError(
-      "InsufficientGasBudget",
-      "Gas budget cannot cover the estimated execution reimbursement"
-    );
+    // RPC and simulation failures are relayer failures; only explicit budget checks report budget errors.
+    throw error;
   }
 }
 

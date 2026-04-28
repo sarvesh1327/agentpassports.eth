@@ -258,18 +258,11 @@ function readOwnerEnsBlocker(input: OwnerEnsStatusInput): string | null {
     return "Enter an ENS name you control before submitting registration";
   }
 
-  if (!input.isOwnerResolutionSettled) {
-    return "Checking owner ENS address record";
-  }
-
-  if (!input.ownerResolvedAddress) {
-    return "Owner ENS does not exist or has no address record";
-  }
-
   if (!input.isOwnerManagerSettled) {
     return "Checking whether this wallet can manage the ENS name";
   }
 
+  // Subname creation authority comes from the registry owner or NameWrapper owner, not from addr(owner).
   if (!input.effectiveOwnerManager || !sameAddress(input.connectedWallet, input.effectiveOwnerManager)) {
     return "This wallet cannot manage the entered ENS name";
   }

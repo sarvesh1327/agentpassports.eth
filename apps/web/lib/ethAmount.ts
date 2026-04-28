@@ -50,7 +50,12 @@ export function parseEthInputToWeiString(value: string): string {
  * Returns the raw ETH decimal string used inside formatted labels and inputs.
  */
 function formatWeiAsEthValue(value: bigint): string {
-  return formatEther(value).replace(/\.?0+$/u, "") || "0";
+  const formatted = formatEther(value);
+  if (!formatted.includes(".")) {
+    return formatted;
+  }
+
+  return formatted.replace(/0+$/u, "").replace(/\.$/u, "") || "0";
 }
 
 /**

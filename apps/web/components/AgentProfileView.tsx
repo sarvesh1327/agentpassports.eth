@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
-import { useReadContract, useReadContracts } from "wagmi";
+import { usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import { AgentPassportCard } from "./AgentPassportCard";
 import { EnsProofPanel, formatWei, shortenHex } from "./EnsProofPanel";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
@@ -17,7 +17,7 @@ import {
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
 import {
-  fetchTaskHistory,
+  loadTaskHistory,
   type TaskHistoryItem
 } from "../lib/taskHistory";
 
@@ -30,6 +30,7 @@ type TextReadResult = {
  * Hydrates the agent passport with live ENS, executor, and TaskLog reads.
  */
 export function AgentProfileView({ initialProfile }: { initialProfile: SerializableAgentProfile }) {
+  const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const registryResolver = useReadContract({
     address: initialProfile.ensRegistryAddress ?? undefined,
@@ -106,16 +107,20 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     let cancelled = false;
 
     /**
-     * Reads backend-indexed TaskLog records for the selected agent node.
+     * Reads indexed and onchain TaskLog records for the selected agent node.
      */
-    async function loadTaskHistory() {
-      const tasks = await fetchTaskHistory(initialProfile.agentNode);
+    async function refreshTaskHistory() {
+      const tasks = await loadTaskHistory({
+        agentNode: initialProfile.agentNode,
+        publicClient,
+        taskLogAddress: initialProfile.taskLogAddress
+      });
       if (!cancelled) {
         setTaskHistory(tasks);
       }
     }
 
-    loadTaskHistory().catch(() => {
+    refreshTaskHistory().catch(() => {
       if (!cancelled) {
         setTaskHistory([]);
       }
@@ -124,7 +129,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     return () => {
       cancelled = true;
     };
-  }, [initialProfile.agentNode]);
+  }, [initialProfile.agentNode, initialProfile.taskLogAddress, publicClient]);
 
   return (
     <>
