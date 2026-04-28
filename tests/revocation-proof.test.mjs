@@ -75,7 +75,7 @@ test("revocation action is complete when policy and ENS status are both disabled
       statusText: "disabled"
     }),
     {
-      blocker: "Agent is already revoked",
+      blocker: "Agent is already disabled",
       canRevoke: false,
       isComplete: true,
       shouldWriteEnsStatus: false

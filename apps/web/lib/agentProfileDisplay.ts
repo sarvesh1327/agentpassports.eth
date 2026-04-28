@@ -1,6 +1,6 @@
 import type { Hex } from "@agentpassport/config";
 
-export type AgentPassportStatus = "active" | "revoked" | "unknown";
+export type AgentPassportStatus = "active" | "disabled" | "unknown";
 
 export type VisibleAgentAddressInput = {
   agentAddressReadSettled: boolean;
@@ -45,7 +45,7 @@ export function parseCapabilities(capabilityText: string | undefined, fallback: 
  * Derives the passport status from ENS metadata and the live agent address proof.
  */
 export function readPassportStatus(statusText: string | undefined, liveAgentAddress: Hex | null): AgentPassportStatus {
-  if (statusText === "active" || statusText === "revoked") {
+  if (statusText === "active" || statusText === "disabled") {
     return statusText;
   }
 

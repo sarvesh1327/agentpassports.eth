@@ -12,13 +12,20 @@ export type RegistrationSendTransactionRequest = {
   account: Hex;
   chainId: number;
   data: Hex;
+  gas?: bigint;
   to: Hex;
   value?: bigint;
 };
 
 export type RegistrationSubmissionResult = {
+  finalized: boolean;
   mode: "batch" | "sequential";
   transactionIds: string[];
+};
+
+export type RegistrationCallsStatus = {
+  receipts?: readonly { transactionHash?: Hex }[];
+  status?: string;
 };
 
 export type RegistrationSubmissionInput = {
@@ -26,10 +33,16 @@ export type RegistrationSubmissionInput = {
   batch: RegistrationBatch;
   call?: (request: RegistrationSendTransactionRequest) => Promise<unknown>;
   chainId: number;
+  estimateGas?: (request: RegistrationSendTransactionRequest) => Promise<bigint>;
   sendCalls: (request: RegistrationSendCallsRequest) => Promise<{ id: string }>;
   sendTransaction: (request: RegistrationSendTransactionRequest) => Promise<Hex>;
+  waitForCallsStatus?: (request: { id: string }) => Promise<RegistrationCallsStatus>;
   waitForTransactionReceipt: (request: { hash: Hex }) => Promise<unknown>;
 };
+
+const GAS_LIMIT_BUFFER_NUMERATOR = 120n;
+const GAS_LIMIT_BUFFER_DENOMINATOR = 100n;
+const GAS_LIMIT_BUFFER_FLOOR = 10_000n;
 
 /**
  * Submits registration with atomic wallet batching when supported, then falls back to normal wallet transactions.
@@ -50,10 +63,7 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       forceAtomic: true
     });
 
-    return {
-      mode: "batch",
-      transactionIds: [result.id]
-    };
+    return finalizeCallBatch(input.waitForCallsStatus, result.id);
   } catch (error) {
     if (!isWalletSendCallsUnavailable(error)) {
       throw error;
@@ -70,12 +80,16 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       value: call.value
     }, call.label);
 
-    const hash = await input.sendTransaction({
+    const request = {
       account: input.account,
       chainId: input.chainId,
       data: call.data,
       to: call.to,
       value: call.value
+    };
+    const hash = await input.sendTransaction({
+      ...request,
+      gas: await estimateBufferedGas(input.estimateGas, request)
     });
 
     transactionIds.push(hash);
@@ -83,9 +97,56 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
   }
 
   return {
+    finalized: true,
     mode: "sequential",
     transactionIds
   };
+}
+
+/**
+ * Waits for EIP-5792 wallet batches when the wallet exposes status tracking.
+ */
+async function finalizeCallBatch(
+  waitForCallsStatus: RegistrationSubmissionInput["waitForCallsStatus"],
+  id: string
+): Promise<RegistrationSubmissionResult> {
+  if (!waitForCallsStatus) {
+    return {
+      finalized: false,
+      mode: "batch",
+      transactionIds: [id]
+    };
+  }
+
+  const result = await waitForCallsStatus({ id });
+  if (result.status !== "success") {
+    throw new Error("Registration batch did not finalize successfully");
+  }
+
+  const receiptHashes = (result.receipts ?? [])
+    .map((receipt) => receipt.transactionHash)
+    .filter((hash): hash is Hex => typeof hash === "string" && hash.startsWith("0x"));
+
+  return {
+    finalized: true,
+    mode: "batch",
+    transactionIds: receiptHashes.length > 0 ? receiptHashes : [id]
+  };
+}
+
+/**
+ * Uses the app's public RPC to give wallets a gas limit and avoid provider-side estimation failures.
+ */
+async function estimateBufferedGas(
+  estimateGas: RegistrationSubmissionInput["estimateGas"],
+  request: RegistrationSendTransactionRequest
+): Promise<bigint | undefined> {
+  if (!estimateGas) {
+    return undefined;
+  }
+
+  const estimatedGas = await estimateGas(request);
+  return (estimatedGas * GAS_LIMIT_BUFFER_NUMERATOR) / GAS_LIMIT_BUFFER_DENOMINATOR + GAS_LIMIT_BUFFER_FLOOR;
 }
 
 /**

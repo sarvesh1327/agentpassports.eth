@@ -61,6 +61,41 @@ test("register preview derives ENS nodes, policy hash, and text records from for
   );
 });
 
+test("register preview includes only generated policy URIs in ENS records", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+
+  const withoutGeneratedUri = buildRegisterPreview({
+    agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "10000000000000000",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const withGeneratedUri = buildRegisterPreview({
+    agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "10000000000000000",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "ipfs://bafyagentpolicy",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+
+  assert.equal(withoutGeneratedUri.textRecords.some((record) => record.key === "agent.policy.uri"), false);
+  assert.deepEqual(
+    withGeneratedUri.textRecords.find((record) => record.key === "agent.policy.uri"),
+    { key: "agent.policy.uri", value: "ipfs://bafyagentpolicy" }
+  );
+});
+
 test("register preview keeps partially typed form values safe without throwing", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
 
@@ -640,6 +675,7 @@ test("registration submission falls back when the wallet does not support sendCa
   });
 
   assert.equal(result.mode, "sequential");
+  assert.equal(result.finalized, true);
   assert.deepEqual(
     sentTransactions.map((request) => request.to),
     batch.calls.map((call) => call.to)
@@ -653,6 +689,89 @@ test("registration submission falls back when the wallet does not support sendCa
     "0x0000000000000000000000000000000000000000000000000000000000000002",
     "0x0000000000000000000000000000000000000000000000000000000000000003"
   ]);
+});
+
+test("registration submission waits for wallet call batches before treating them as finalized", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+  const batch = {
+    calls: [
+      { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
+      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+    ],
+    summary: []
+  };
+  const events = [];
+
+  const result = await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch,
+    chainId: 11155111,
+    sendCalls: async () => {
+      events.push("sendCalls");
+      return { id: "0xbatch" };
+    },
+    sendTransaction: async () => {
+      throw new Error("fallback should not run");
+    },
+    waitForCallsStatus: async ({ id }) => {
+      events.push(`wait:${id}`);
+      return {
+        receipts: [{ transactionHash: "0x00000000000000000000000000000000000000000000000000000000000000aa" }],
+        status: "success"
+      };
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.deepEqual(events, ["sendCalls", "wait:0xbatch"]);
+  assert.equal(result.finalized, true);
+  assert.deepEqual(result.transactionIds, ["0x00000000000000000000000000000000000000000000000000000000000000aa"]);
+});
+
+test("registration submission reports untracked wallet batches as unfinalized", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+
+  const result = await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch: {
+      calls: [{ data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS }],
+      summary: []
+    },
+    chainId: 11155111,
+    sendCalls: async () => ({ id: "0xbatch" }),
+    sendTransaction: async () => {
+      throw new Error("fallback should not run");
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.equal(result.finalized, false);
+  assert.deepEqual(result.transactionIds, ["0xbatch"]);
+});
+
+test("registration submission rejects failed wallet call batches", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+
+  await assert.rejects(
+    submitRegistrationBatch({
+      account: OWNER_WALLET,
+      batch: {
+        calls: [{ data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS }],
+        summary: []
+      },
+      chainId: 11155111,
+      sendCalls: async () => ({ id: "0xbatch" }),
+      sendTransaction: async () => {
+        throw new Error("fallback should not run");
+      },
+      waitForCallsStatus: async () => ({ receipts: [], status: "failure" }),
+      waitForTransactionReceipt: async () => {
+      }
+    }),
+    /Registration batch did not finalize successfully/
+  );
 });
 
 test("registration fallback waits for each transaction before sending the dependent next call", async () => {
@@ -758,6 +877,39 @@ test("registration fallback preflights each transaction before wallet signing", 
   assert.deepEqual(
     sentTransactions.map((request) => request.to),
     [PUBLIC_RESOLVER_ADDRESS]
+  );
+});
+
+test("registration fallback passes public gas estimates to wallet transactions", async () => {
+  const { submitRegistrationBatch } = await import("../apps/web/lib/registrationSubmission.ts");
+  const batch = {
+    calls: [
+      { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
+      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+    ],
+    summary: []
+  };
+  const sentTransactions = [];
+
+  await submitRegistrationBatch({
+    account: OWNER_WALLET,
+    batch,
+    chainId: 11155111,
+    estimateGas: async (request) => request.to === EXECUTOR_ADDRESS ? 65_000n : 120_000n,
+    sendCalls: async () => {
+      throw new Error('The method "wallet_sendCalls" does not exist / is not available.');
+    },
+    sendTransaction: async (request) => {
+      sentTransactions.push(request);
+      return `0x${sentTransactions.length.toString(16).padStart(64, "0")}`;
+    },
+    waitForTransactionReceipt: async () => {
+    }
+  });
+
+  assert.deepEqual(
+    sentTransactions.map((request) => request.gas),
+    [154_000n, 88_000n]
   );
 });
 

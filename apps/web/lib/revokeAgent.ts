@@ -47,7 +47,7 @@ export function buildRevocationActionState(input: RevocationActionStateInput): R
   const isComplete = input.policyEnabled === false && normalizedStatus === "disabled";
   if (isComplete) {
     return {
-      blocker: "Agent is already revoked",
+      blocker: "Agent is already disabled",
       canRevoke: false,
       isComplete,
       shouldWriteEnsStatus

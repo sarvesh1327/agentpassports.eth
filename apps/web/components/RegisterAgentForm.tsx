@@ -3,6 +3,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { taskLogRecordTaskSelector, type Hex } from "@agentpassport/config";
+import { waitForCallsStatus } from "viem/actions";
 import {
   useAccount,
   useEnsAddress,
@@ -10,12 +11,14 @@ import {
   usePublicClient,
   useReadContract,
   useSendCalls,
-  useSendTransaction
+  useSendTransaction,
+  useWalletClient
 } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
   NAME_WRAPPER_ABI,
+  PUBLIC_RESOLVER_ABI,
   nonZeroAddress,
   type PolicyContractResult
 } from "../lib/contracts";
@@ -60,7 +63,14 @@ type AgentIndexResponse = {
   status?: string;
 };
 
+type GeneratedPolicyMetadataResponse = {
+  policyHash?: Hex;
+  policyUri?: string;
+  status?: string;
+};
+
 const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
+const AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
 
 /**
  * Captures the ENS identity, record metadata, policy, and gas budget inputs for a new agent.
@@ -70,11 +80,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const { sendCallsAsync } = useSendCalls();
   const { sendTransactionAsync } = useSendTransaction();
   const publicClient = usePublicClient({ chainId: Number(props.chainId) });
+  const walletClient = useWalletClient({ chainId: Number(props.chainId) });
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
   const [ownerNameEdited, setOwnerNameEdited] = useState(false);
   const [agentLabel, setAgentLabel] = useState(props.defaultAgentLabel);
   const [agentAddress, setAgentAddress] = useState(props.defaultAgentAddress ?? "");
-  const [policyUri, setPolicyUri] = useState(props.defaultPolicyUri);
   const [gasBudgetEth, setGasBudgetEth] = useState(formatWeiInputAsEth(props.defaultGasBudgetWei));
   const [maxReimbursementEth, setMaxReimbursementEth] = useState(formatWeiInputAsEth(props.defaultMaxGasReimbursementWei));
   const [status, setStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
@@ -93,7 +103,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         maxValueWei: props.defaultMaxValueWei,
         ownerName,
         policyExpiresAt: props.defaultPolicyExpiresAt,
-        policyUri,
+        policyUri: "",
         taskLogAddress: props.taskLogAddress
       }),
     [
@@ -102,7 +112,6 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       gasBudgetWei,
       maxGasReimbursementWei,
       ownerName,
-      policyUri,
       props.defaultMaxValueWei,
       props.defaultPolicyExpiresAt,
       props.executorAddress,
@@ -203,6 +212,14 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   });
   const livePolicy = existingPolicy.isSuccess ? existingPolicy.data as PolicyContractResult : null;
   const liveGasBudgetWei = existingGasBudget.isSuccess && typeof existingGasBudget.data === "bigint" ? existingGasBudget.data : null;
+  const oldPolicyUri = useReadContract({
+    address: resolverWriteAddress ?? undefined,
+    abi: PUBLIC_RESOLVER_ABI,
+    functionName: "text",
+    args: [preview.agentNode, "agent.policy.uri"],
+    query: { enabled: Boolean(resolverWriteAddress && normalizedOwnerName && normalizedAgentLabel) }
+  });
+  const oldPolicyUriValue = typeof oldPolicyUri.data === "string" ? oldPolicyUri.data : "";
   const registrationDraftStatus = buildRegistrationDraftStatus({
     agentLabel: normalizedAgentLabel,
     executorAddress: props.executorAddress,
@@ -291,7 +308,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   /**
    * Validates form and environment state before any wallet transaction is requested.
    */
-  function readSubmissionInput(): RegistrationBatchInput {
+  function readSubmissionInput(textRecords = preview.textRecords): RegistrationBatchInput {
     if (submitBlocker) {
       throw new Error(submitBlocker);
     }
@@ -333,7 +350,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       resolverAddress,
       shouldCreateSubnameRecord,
       taskLogAddress: requireAddress(props.taskLogAddress, "TaskLog address is not configured"),
-      textRecords: preview.textRecords
+      textRecords
     };
   }
 
@@ -391,10 +408,73 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       batch,
       call: (request) => publicClient.call(request),
       chainId: Number(props.chainId),
+      estimateGas: ({ account, data, to, value }) => publicClient.estimateGas({ account, data, to, value }),
       sendCalls: (request) => sendCallsAsync(request),
       sendTransaction: (request) => sendTransactionAsync(request),
+      waitForCallsStatus: walletClient.data
+        ? (request) => waitForCallsStatus(walletClient.data, { id: request.id, throwOnFailure: true, timeout: 180_000 })
+        : undefined,
       waitForTransactionReceipt: (request) => publicClient.waitForTransactionReceipt(request)
     });
+  }
+
+  /**
+   * Creates the ENS policy URI through the server so Pinata credentials never reach the browser bundle.
+   */
+  async function generatePolicyMetadata(): Promise<{ policyHash: Hex; policyUri: string }> {
+    const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
+    const taskLogAddress = requireAddress(props.taskLogAddress, "TaskLog address is not configured");
+    const agentSignerAddress = requireAddress(normalizedAgentAddress, "Enter a valid agent address before submitting registration");
+    const response = await fetch("/api/policy-metadata", {
+      body: JSON.stringify({
+        agentAddress: agentSignerAddress,
+        agentName: preview.agentName,
+        agentNode: preview.agentNode,
+        capabilities: AGENT_CAPABILITIES,
+        chainId: props.chainId.toString(),
+        executorAddress,
+        expiresAt: props.defaultPolicyExpiresAt,
+        maxGasReimbursementWei,
+        maxValueWei: props.defaultMaxValueWei,
+        ownerName: normalizedOwnerName,
+        ownerNode: preview.ownerNode,
+        status: "active",
+        target: taskLogAddress
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    });
+    const body = (await response.json().catch(() => ({}))) as GeneratedPolicyMetadataResponse;
+
+    if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
+      throw new Error("Policy metadata Pinata upload failed");
+    }
+
+    return {
+      policyHash: body.policyHash,
+      policyUri: body.policyUri
+    };
+  }
+
+  /**
+   * Best-effort cleanup for the previous Pinata CID after ENS has been pointed at a replacement URI.
+   */
+  async function unpinOldPolicyMetadata(oldPolicyUri: string, newPolicyUri: string): Promise<boolean> {
+    if (!oldPolicyUri.trim() || oldPolicyUri.trim() === newPolicyUri.trim()) {
+      return false;
+    }
+
+    try {
+      const response = await fetch("/api/policy-metadata", {
+        body: JSON.stringify({ policyUri: oldPolicyUri }),
+        headers: { "content-type": "application/json" },
+        method: "DELETE"
+      });
+
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -449,12 +529,35 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     setSubmittedTxHashes([]);
 
     try {
-      const submissionInput = readSubmissionInput();
+      setStatusMessage("Generating policy metadata with Pinata");
+      const generatedPolicy = await generatePolicyMetadata();
+      const generatedPreview = buildRegisterPreview({
+        agentAddress,
+        agentLabel,
+        executorAddress: props.executorAddress,
+        gasBudgetWei,
+        maxGasReimbursementWei,
+        maxValueWei: props.defaultMaxValueWei,
+        ownerName,
+        policyExpiresAt: props.defaultPolicyExpiresAt,
+        policyUri: generatedPolicy.policyUri,
+        taskLogAddress: props.taskLogAddress
+      });
+
+      if (generatedPreview.policyHash !== generatedPolicy.policyHash) {
+        throw new Error("Generated policy hash does not match the registration preview");
+      }
+
+      setStatusMessage("Awaiting wallet approval");
+      const submissionInput = readSubmissionInput(generatedPreview.textRecords);
       const submitted = await submitRegistrationTransactions(submissionInput);
       const directoryIndexed = await indexRegisteredAgentWithRetry({
         agentAddress: normalizedAgentAddress,
         agentName: preview.agentName
       });
+      if (submitted.finalized) {
+        await unpinOldPolicyMetadata(oldPolicyUriValue, generatedPolicy.policyUri);
+      }
       setSubmittedTxHashes(submitted.transactionIds);
       setStatus("submitted");
       setStatusMessage(
@@ -498,10 +601,6 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               value={agentAddress}
             />
           </label>
-          <label>
-            <span>Metadata URI</span>
-            <input name="policyUri" onChange={(event) => setPolicyUri(event.target.value)} value={policyUri} />
-          </label>
         </div>
       </section>
 
@@ -518,6 +617,10 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           <label>
             <span>TaskLog selector</span>
             <input readOnly value={taskLogRecordTaskSelector()} />
+          </label>
+          <label>
+            <span>Policy URI</span>
+            <input readOnly value="Generated by Pinata on submit" />
           </label>
           <label>
             <span>Gas budget (ETH)</span>
