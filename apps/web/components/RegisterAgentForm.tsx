@@ -13,9 +13,11 @@ import {
   useSendTransaction
 } from "wagmi";
 import {
+  AGENT_POLICY_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
   NAME_WRAPPER_ABI,
-  nonZeroAddress
+  nonZeroAddress,
+  type PolicyContractResult
 } from "../lib/contracts";
 import { normalizeAddressInput } from "../lib/addressInput";
 import {
@@ -185,6 +187,22 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const registryResolverAddress = nonZeroAddress(agentResolver.data as Hex | undefined);
   const liveResolverAddress = agentResolver.isSuccess ? registryResolverAddress : null;
   const resolverWriteAddress = liveResolverAddress ?? (shouldCreateSubnameRecord ? props.publicResolverAddress ?? null : null);
+  const existingPolicy = useReadContract({
+    address: props.executorAddress ?? undefined,
+    abi: AGENT_POLICY_EXECUTOR_ABI,
+    functionName: "policies",
+    args: [preview.agentNode],
+    query: { enabled: Boolean(props.executorAddress && normalizedOwnerName && normalizedAgentLabel) }
+  });
+  const existingGasBudget = useReadContract({
+    address: props.executorAddress ?? undefined,
+    abi: AGENT_POLICY_EXECUTOR_ABI,
+    functionName: "gasBudgetWei",
+    args: [preview.agentNode],
+    query: { enabled: Boolean(props.executorAddress && normalizedOwnerName && normalizedAgentLabel) }
+  });
+  const livePolicy = existingPolicy.isSuccess ? existingPolicy.data as PolicyContractResult : null;
+  const liveGasBudgetWei = existingGasBudget.isSuccess && typeof existingGasBudget.data === "bigint" ? existingGasBudget.data : null;
   const registrationDraftStatus = buildRegistrationDraftStatus({
     agentLabel: normalizedAgentLabel,
     executorAddress: props.executorAddress,
@@ -213,7 +231,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     [
       connectedWallet,
       hasPreparedTransactions,
+      liveGasBudgetWei,
       liveAgentOwnerAddress,
+      livePolicy,
       liveResolverAddress,
       normalizedAgentAddress,
       normalizedAgentLabel,
@@ -296,6 +316,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       agentNode: preview.agentNode,
       connectedWallet,
       ensRegistryAddress: props.ensRegistryAddress,
+      existingGasBudgetWei: liveGasBudgetWei,
+      existingPolicy: livePolicy,
       executorAddress: requireAddress(props.executorAddress, "Executor address is not configured"),
       gasBudgetWei: preview.gasBudgetWei,
       isOwnerWrapped: ownerIsWrapped,
@@ -335,6 +357,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       agentNode: preview.agentNode,
       connectedWallet,
       ensRegistryAddress: props.ensRegistryAddress,
+      existingGasBudgetWei: liveGasBudgetWei,
+      existingPolicy: livePolicy,
       executorAddress: props.executorAddress,
       gasBudgetWei: preview.gasBudgetWei,
       isOwnerWrapped: ownerIsWrapped,

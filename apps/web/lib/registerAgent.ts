@@ -88,7 +88,7 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
   const normalizedOwnerName = input.ownerName.trim().toLowerCase();
   const normalizedAgentAddress = normalizeAddressInput(input.agentAddress);
   const hasCompleteEnsInput = Boolean(normalizedAgentLabel && normalizedOwnerName);
-  const agentName = buildAgentName(normalizedAgentLabel, normalizedOwnerName);
+  const agentName = hasCompleteEnsInput ? buildAgentName(normalizedAgentLabel, normalizedOwnerName) : "";
   const ownerNode = safeNamehash(normalizedOwnerName);
   const agentNode = normalizedAgentLabel ? safeSubnode(ownerNode, normalizedAgentLabel) : safeNamehash(agentName);
   const policyHash = buildPreviewPolicyHash({

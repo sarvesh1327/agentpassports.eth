@@ -3,7 +3,7 @@
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { namehashEnsName, type Hex } from "@agentpassport/config";
-import { useAccount, useEnsName, useReadContract, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
@@ -23,6 +23,7 @@ import {
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
 import { hashPolicyContractResult } from "../lib/policyProof";
 import { readOwnerEnsAutofill } from "../lib/registerAgent";
+import { buildEnsStatusWriteState, buildRevocationActionState } from "../lib/revokeAgent";
 import { revocationFailureProof, type RelayerRetryResponse } from "../lib/revocationProof";
 import {
   LAST_SIGNED_TASK_STORAGE_KEY,
@@ -60,6 +61,7 @@ type OwnerAgentDirectoryResponse = {
 export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   const { address: connectedWallet } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient({ chainId: Number(props.chainId) });
   const [agentName, setAgentName] = useState(props.defaultAgentName);
   const [agentNameEdited, setAgentNameEdited] = useState(Boolean(props.defaultAgentName));
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
@@ -92,8 +94,22 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     args: [agentNode],
     query: { enabled: Boolean(props.ensRegistryAddress) }
   });
+  const agentRegistryOwnerRead = useReadContract({
+    address: props.ensRegistryAddress ?? undefined,
+    abi: ENS_REGISTRY_ABI,
+    functionName: "owner",
+    args: [agentNode],
+    query: { enabled: Boolean(props.ensRegistryAddress) }
+  });
   const registryResolverAddress = nonZeroAddress(resolverRead.data as Hex | undefined);
   const resolverAddress = resolverRead.isSuccess ? registryResolverAddress : null;
+  const agentRegistryOwner = nonZeroAddress(agentRegistryOwnerRead.data as Hex | undefined);
+  const ensStatusWriteState = buildEnsStatusWriteState({
+    connectedWallet: connectedWallet ?? null,
+    registryOwner: agentRegistryOwner,
+    resolverAddress,
+    resolverLookupSettled: resolverRead.isSuccess || resolverRead.isError
+  });
   const currentAgentAddress = useReadContract({
     address: resolverAddress ?? undefined,
     abi: PUBLIC_RESOLVER_ABI,
@@ -142,6 +158,13 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     () => mapAgentTextRecords(textRecordReads.data as AgentTextReadResult[] | undefined),
     [textRecordReads.data]
   );
+  const agentStatusText = textRecords.find((record) => record.key === "agent.status")?.value ?? null;
+  const revocationActionState = buildRevocationActionState({
+    canWriteEnsStatus: ensStatusWriteState.canWrite,
+    ensStatusBlocker: ensStatusWriteState.blocker,
+    policyEnabled: livePolicy?.[7],
+    statusText: agentStatusText
+  });
   const displayRecoveredSigner = storedRecoveredSigner(lastPayload);
   /**
    * Keeps stale localStorage payloads from driving the active revocation proof surface.
@@ -255,29 +278,48 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }
 
   /**
+   * Guards public resolver writes so wrapped names do not submit transactions that the resolver rejects.
+   */
+  function requireEnsStatusWrite(): Hex {
+    if (ensStatusWriteState.blocker) {
+      throw new Error(ensStatusWriteState.blocker);
+    }
+
+    return requireLiveResolverAddress();
+  }
+
+  /**
    * Disables the policy in AgentPolicyExecutor so new and old intents are blocked.
    */
   async function handleRevokePolicy() {
     try {
+      if (revocationActionState.blocker) {
+        throw new Error(revocationActionState.blocker);
+      }
       const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
-      const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
-      const [policyTxHash, statusTxHash] = await Promise.all([
-        writeContractAsync({
-          address: executorAddress,
-          abi: AGENT_POLICY_EXECUTOR_ABI,
-          functionName: "revokePolicy",
-          args: [writeAgentNode]
-        }),
-        writeContractAsync({
-          address: resolver,
-          abi: PUBLIC_RESOLVER_ABI,
-          functionName: "setText",
-          args: [writeAgentNode, "agent.status", "disabled"]
-        })
-      ]);
-      setTxHashes((hashes) => [...hashes, policyTxHash, statusTxHash]);
-      setStatusMessage("Revoke policy and disable ENS status transactions submitted");
+      const statusTxHash = revocationActionState.shouldWriteEnsStatus
+        ? await writeContractAsync({
+            address: requireEnsStatusWrite(),
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [writeAgentNode, "agent.status", "disabled"]
+          })
+        : null;
+      if (statusTxHash) {
+        if (!publicClient) {
+          throw new Error("Sepolia public client is not ready");
+        }
+        await publicClient.waitForTransactionReceipt({ hash: statusTxHash });
+      }
+      const policyTxHash = await writeContractAsync({
+        address: executorAddress,
+        abi: AGENT_POLICY_EXECUTOR_ABI,
+        functionName: "revokePolicy",
+        args: [writeAgentNode]
+      });
+      setTxHashes((hashes) => [...hashes, ...[statusTxHash, policyTxHash].filter(Boolean) as Hex[]]);
+      setStatusMessage("Policy revocation and ENS status disable transactions submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Policy revocation failed");
     }
@@ -320,10 +362,9 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
    */
   async function handleSetStatusDisabled() {
     try {
-      const resolver = requireLiveResolverAddress();
       const writeAgentNode = requireAgentNode();
       const txHash = await writeContractAsync({
-        address: resolver,
+        address: requireEnsStatusWrite(),
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setText",
         args: [writeAgentNode, "agent.status", "disabled"]
@@ -433,6 +474,10 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
               <input readOnly title={liveAgentAddress ?? undefined} value={liveAgentAddress ?? "Unknown"} />
             </label>
             <label>
+              <span>Agent registry owner</span>
+              <input readOnly title={agentRegistryOwner ?? undefined} value={agentRegistryOwner ?? "Unknown"} />
+            </label>
+            <label>
               <span>Policy enabled</span>
               <input readOnly value={livePolicy?.[7] === false ? "Disabled" : livePolicy?.[7] ? "Enabled" : "Unknown"} />
             </label>
@@ -445,9 +490,16 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
             <h2>Disable executor policy</h2>
           </div>
           <div className="register-form__actions register-form__actions--flush">
-            <button onClick={handleRevokePolicy} type="button">Revoke policy</button>
-            <button onClick={handleSetStatusDisabled} type="button">Set status disabled</button>
+            <button disabled={!revocationActionState.canRevoke} onClick={handleRevokePolicy} type="button">
+              Revoke policy
+            </button>
+            <button disabled={!ensStatusWriteState.canWrite} onClick={handleSetStatusDisabled} type="button">
+              Set status disabled
+            </button>
           </div>
+          {revocationActionState.blocker ? (
+            <small className="field-help field-help--warning">{revocationActionState.blocker}</small>
+          ) : null}
         </div>
 
         <form className="register-form__section" onSubmit={handleWithdrawGasBudget}>

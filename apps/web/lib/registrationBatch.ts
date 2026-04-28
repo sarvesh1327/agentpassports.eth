@@ -2,6 +2,7 @@ import { taskLogRecordTaskSelector, type Hex } from "@agentpassport/config";
 import { encodeFunctionData, labelhash } from "viem";
 import { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, NAME_WRAPPER_ABI, PUBLIC_RESOLVER_ABI } from "./contracts.ts";
 import { requireAddress, safeBigInt } from "./registerAgent.ts";
+import type { PolicyContractResult } from "./contracts.ts";
 
 export type RegistrationBatchCall = {
   data: Hex;
@@ -20,6 +21,8 @@ export type RegistrationBatchInput = {
   agentNode: Hex;
   connectedWallet: Hex;
   ensRegistryAddress?: Hex | null;
+  existingGasBudgetWei?: bigint | null;
+  existingPolicy?: PolicyContractResult | null;
   executorAddress: Hex;
   gasBudgetWei: string;
   isOwnerWrapped: boolean;
@@ -51,8 +54,11 @@ export function buildRegistrationBatch(input: RegistrationBatchInput): Registrat
   calls.push(buildResolverMulticall(input));
   summary.push(`multicall(setAddr, ${input.textRecords.length} text records)`);
 
-  calls.push(buildPolicyCall(input));
-  summary.push("setPolicy(..., with gas budget)");
+  const policyCall = buildPolicyOrBudgetCall(input);
+  if (policyCall) {
+    calls.push(policyCall.call);
+    summary.push(policyCall.summary);
+  }
 
   return { calls, summary };
 }
@@ -135,6 +141,73 @@ function buildPolicyCall(input: RegistrationBatchInput): RegistrationBatchCall {
     }),
     label: "setPolicy",
     to: input.executorAddress,
-    value: safeBigInt(input.gasBudgetWei)
+    value: requiredBudgetTopUp(input)
   };
+}
+
+/**
+ * Encodes only the policy or budget change that is still missing from live executor state.
+ */
+function buildPolicyOrBudgetCall(input: RegistrationBatchInput): { call: RegistrationBatchCall; summary: string } | null {
+  if (!policyMatchesDesiredInput(input) || input.existingPolicy?.[7] === false) {
+    return {
+      call: buildPolicyCall(input),
+      summary: "setPolicy(..., with gas budget)"
+    };
+  }
+
+  const topUpWei = requiredBudgetTopUp(input);
+  if (topUpWei === 0n) {
+    return null;
+  }
+
+  return {
+    call: buildDepositGasBudgetCall(input, topUpWei),
+    summary: "depositGasBudget(top up)"
+  };
+}
+
+/**
+ * Encodes a budget-only top-up when the live policy already matches the requested policy.
+ */
+function buildDepositGasBudgetCall(input: RegistrationBatchInput, topUpWei: bigint): RegistrationBatchCall {
+  return {
+    data: encodeFunctionData({
+      abi: AGENT_POLICY_EXECUTOR_ABI,
+      functionName: "depositGasBudget",
+      args: [input.agentNode]
+    }),
+    label: "depositGasBudget",
+    to: input.executorAddress,
+    value: topUpWei
+  };
+}
+
+/**
+ * Returns the additional budget needed to reach the requested gas budget, not the full requested budget.
+ */
+function requiredBudgetTopUp(input: RegistrationBatchInput): bigint {
+  const requestedBudgetWei = safeBigInt(input.gasBudgetWei);
+  const existingBudgetWei = input.existingGasBudgetWei ?? 0n;
+
+  return requestedBudgetWei > existingBudgetWei ? requestedBudgetWei - existingBudgetWei : 0n;
+}
+
+/**
+ * Compares the live executor policy against the policy the registration form would create.
+ */
+function policyMatchesDesiredInput(input: RegistrationBatchInput): boolean {
+  const policy = input.existingPolicy;
+  if (!policy || policy[1] === "0x0000000000000000000000000000000000000000") {
+    return false;
+  }
+
+  return (
+    policy[0].toLowerCase() === input.ownerNode.toLowerCase() &&
+    policy[2].toLowerCase() === input.taskLogAddress.toLowerCase() &&
+    policy[3].toLowerCase() === taskLogRecordTaskSelector().toLowerCase() &&
+    policy[4] === safeBigInt(input.maxValueWei) &&
+    policy[5] === safeBigInt(input.maxGasReimbursementWei) &&
+    policy[6] === safeBigInt(input.policyExpiresAt)
+  );
 }

@@ -83,6 +83,27 @@ test("register preview keeps partially typed form values safe without throwing",
   assert.deepEqual(preview.textRecords, []);
 });
 
+test("register preview does not show owner ENS as agent ENS before label entry", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+
+  const preview = buildRegisterPreview({
+    agentAddress: "",
+    agentLabel: "",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "sarvesh.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+
+  assert.equal(preview.agentName, "");
+  assert.equal(preview.policyHash, null);
+  assert.deepEqual(preview.textRecords, []);
+});
+
 test("register preview does not expose placeholder ENS text records", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
 
@@ -425,6 +446,143 @@ test("registration batch skips subname setup when the live resolver already exis
     batch.calls.map((call) => call.label),
     ["multicall", "setPolicy"]
   );
+});
+
+test("registration batch skips policy writes when the live enabled policy already matches", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+  const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
+
+  const preview = buildRegisterPreview({
+    agentAddress: OWNER_WALLET,
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "200000000000000",
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const batch = buildRegistrationBatch({
+    agentLabel: "assistant",
+    agentNode: preview.agentNode,
+    connectedWallet: OWNER_WALLET,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    existingGasBudgetWei: 200000000000000n,
+    existingPolicy: [preview.ownerNode, OWNER_WALLET, TASK_LOG_ADDRESS, "0x36736d1e", 0n, 200000000000000n, 1790000000n, true],
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: preview.gasBudgetWei,
+    isOwnerWrapped: false,
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    nameWrapperAddress: null,
+    normalizedAgentAddress: OWNER_WALLET,
+    ownerNode: preview.ownerNode,
+    policyExpiresAt: "1790000000",
+    publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    resolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    shouldCreateSubnameRecord: false,
+    taskLogAddress: TASK_LOG_ADDRESS,
+    textRecords: preview.textRecords
+  });
+
+  assert.deepEqual(
+    batch.calls.map((call) => call.label),
+    ["multicall"]
+  );
+});
+
+test("registration batch tops up budget without resetting a matching enabled policy", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+  const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
+
+  const preview = buildRegisterPreview({
+    agentAddress: OWNER_WALLET,
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "200000000000000",
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const batch = buildRegistrationBatch({
+    agentLabel: "assistant",
+    agentNode: preview.agentNode,
+    connectedWallet: OWNER_WALLET,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    existingGasBudgetWei: 50000000000000n,
+    existingPolicy: [preview.ownerNode, OWNER_WALLET, TASK_LOG_ADDRESS, "0x36736d1e", 0n, 200000000000000n, 1790000000n, true],
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: preview.gasBudgetWei,
+    isOwnerWrapped: false,
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    nameWrapperAddress: null,
+    normalizedAgentAddress: OWNER_WALLET,
+    ownerNode: preview.ownerNode,
+    policyExpiresAt: "1790000000",
+    publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    resolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    shouldCreateSubnameRecord: false,
+    taskLogAddress: TASK_LOG_ADDRESS,
+    textRecords: preview.textRecords
+  });
+
+  assert.deepEqual(
+    batch.calls.map((call) => call.label),
+    ["multicall", "depositGasBudget"]
+  );
+  assert.equal(batch.calls[1].value, 150000000000000n);
+});
+
+test("registration batch resets a matching disabled policy so it becomes active again", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+  const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
+
+  const preview = buildRegisterPreview({
+    agentAddress: OWNER_WALLET,
+    agentLabel: "assistant",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "200000000000000",
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "",
+    taskLogAddress: TASK_LOG_ADDRESS
+  });
+  const batch = buildRegistrationBatch({
+    agentLabel: "assistant",
+    agentNode: preview.agentNode,
+    connectedWallet: OWNER_WALLET,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    existingGasBudgetWei: 200000000000000n,
+    existingPolicy: [preview.ownerNode, OWNER_WALLET, TASK_LOG_ADDRESS, "0x36736d1e", 0n, 200000000000000n, 1790000000n, false],
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: preview.gasBudgetWei,
+    isOwnerWrapped: false,
+    maxGasReimbursementWei: "200000000000000",
+    maxValueWei: "0",
+    nameWrapperAddress: null,
+    normalizedAgentAddress: OWNER_WALLET,
+    ownerNode: preview.ownerNode,
+    policyExpiresAt: "1790000000",
+    publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    resolverAddress: PUBLIC_RESOLVER_ADDRESS,
+    shouldCreateSubnameRecord: false,
+    taskLogAddress: TASK_LOG_ADDRESS,
+    textRecords: preview.textRecords
+  });
+
+  assert.deepEqual(
+    batch.calls.map((call) => call.label),
+    ["multicall", "setPolicy"]
+  );
+  assert.equal(batch.calls[1].value, 0n);
 });
 
 test("registration submission falls back when the wallet does not support sendCalls", async () => {
