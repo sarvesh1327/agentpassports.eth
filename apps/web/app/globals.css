@@ -2098,3 +2098,541 @@ label.register-field-stack {
     grid-template-columns: 1fr;
   }
 }
+
+/* Mockup alignment layer: richer SaaS-style dashboard surfaces shared by landing, owner, agent, and MCP pages. */
+:root {
+  --surface-raised: #ffffff;
+  --surface-muted: #f1f5ff;
+  --accent-blue: #2563eb;
+  --accent-indigo: #4f46e5;
+  --accent-cyan: #06b6d4;
+  --shadow-soft: 0 24px 70px rgb(15 23 42 / 0.12);
+  --shadow-card: 0 14px 34px rgb(37 99 235 / 0.10);
+  --radius-xl: 24px;
+  --radius-lg: 18px;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgb(219 234 254 / 0.78), transparent 34rem),
+    linear-gradient(135deg, #f8fbff 0%, #eef4ff 48%, #f8fafc 100%);
+}
+
+.glass-panel,
+.app-card,
+.content-card,
+.agent-panel,
+.management-panel,
+.owner-agents-panel,
+.owner-index-card,
+.empty-state {
+  background: rgb(255 255 255 / 0.88);
+  border: 1px solid rgb(191 219 254 / 0.86);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+
+.site-header {
+  backdrop-filter: blur(18px);
+  background: rgb(255 255 255 / 0.82);
+  border-bottom-color: rgb(191 219 254 / 0.7);
+  box-shadow: 0 10px 30px rgb(15 23 42 / 0.06);
+}
+
+.site-header__nav a {
+  border-radius: 999px;
+  border-bottom-width: 1px;
+}
+
+.site-header__nav a[aria-current="page"],
+.site-header__nav a:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: var(--accent-blue);
+}
+
+.wallet-identity {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.wallet-identity button,
+.wallet-placeholder {
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.wallet-identity__chain {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+  padding: 9px 12px;
+}
+
+.wallet-identity__account,
+.wallet-placeholder--active {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
+  border: 1px solid transparent;
+  color: white;
+  display: grid;
+  line-height: 1.1;
+  padding: 9px 14px;
+  text-align: left;
+}
+
+.wallet-identity__address {
+  color: rgb(255 255 255 / 0.72);
+  font-size: 0.72rem;
+}
+
+.action-button,
+.owner-entry button,
+.agent-detail__actions a,
+.agent-detail__actions button,
+.owner-agent-row__actions a,
+.owner-agent-row__actions button,
+.management-panel button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: center;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
+.action-button--primary,
+.owner-entry button,
+.owner-dashboard__add {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
+  color: #ffffff;
+}
+
+.action-button--secondary,
+.agent-detail__actions a,
+.agent-detail__actions button,
+.owner-agent-row__actions a,
+.owner-agent-row__actions button {
+  background: #ffffff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.action-button--danger,
+.agent-detail__delete-link,
+.agent-delete-band__button,
+.owner-agent-row__delete {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.status-pill,
+.policy-source-badge,
+.code-pill {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 850;
+  gap: 6px;
+  line-height: 1;
+  padding: 7px 10px;
+  width: fit-content;
+}
+
+.status-pill--success,
+.policy-source-badge {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-pill--danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-pill--neutral {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.status-pill--info,
+.code-pill {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.code-pill {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.metric-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.metric-card span,
+.metric-card small {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  color: #0f172a;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+}
+
+.home-shell {
+  max-width: 1240px;
+}
+
+.landing-product-preview {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.landing-product-preview__header,
+.landing-product-preview__agent {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.landing-product-preview__header > div,
+.landing-product-preview__agent > div {
+  display: grid;
+  gap: 3px;
+  margin-right: auto;
+}
+
+.landing-product-preview__header span,
+.landing-product-preview__agent span {
+  color: #64748b;
+}
+
+.landing-product-preview__icon {
+  align-items: center;
+  background: linear-gradient(135deg, #dbeafe, #e0e7ff);
+  border-radius: 16px;
+  color: var(--accent-blue);
+  display: inline-flex;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.landing-product-preview__metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-product-preview__metrics .metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+}
+
+.landing-product-preview__agent {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.landing-product-preview__flow,
+.code-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-product-preview__flow span {
+  align-items: center;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  border-radius: 999px;
+  color: #0e7490;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.owner-summary-strip {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  gap: 14px;
+}
+
+.owner-summary-strip__cell {
+  padding: 16px;
+}
+
+.owner-agent-row,
+.agent-detail__hero {
+  background: linear-gradient(135deg, rgb(255 255 255 / 0.92), rgb(239 246 255 / 0.86));
+  border-radius: var(--radius-xl);
+}
+
+.agent-detail__hero .agent-detail__back {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  box-shadow: 0 8px 20px rgb(37 99 235 / 0.08);
+  color: var(--accent-blue);
+  display: inline-flex;
+  font-weight: 900;
+  gap: 7px;
+  justify-self: start;
+  padding: 9px 12px;
+}
+
+.agent-detail__hero .agent-detail__back:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.owner-agent-row__actions {
+  gap: 8px;
+}
+
+.mcp-setup-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcp-setup-grid article,
+.mcp-page .content-card,
+.mcp-page .page-heading {
+  padding: 24px;
+}
+
+.mcp-page .page-heading h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.05;
+}
+
+.mcp-page .page-heading p + h1 + p {
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.record-table__icon {
+  align-items: center;
+  background: #dcfce7;
+  border-radius: 999px;
+  color: #166534;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  margin-right: 8px;
+  width: 22px;
+}
+
+/* Agent detail layout cleanup: keep cards aligned in predictable rows. */
+.agent-detail {
+  gap: 20px;
+}
+
+.agent-detail__grid {
+  align-items: stretch;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agent-panel {
+  display: grid;
+  align-content: start;
+  height: 100%;
+}
+
+.agent-history-card {
+  grid-column: 1 / -1;
+}
+
+.management-panel {
+  padding: 22px;
+}
+
+.management-panel__grid {
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.management-panel__grid > section,
+.management-panel__grid > form {
+  background: #ffffff;
+  border-color: #bfdbfe;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+  padding: 18px;
+}
+
+@media (max-width: 1080px) {
+  .management-panel__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .agent-detail__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tx-progress-modal {
+  align-items: center;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.tx-progress-modal__backdrop {
+  background: rgb(15 23 42 / 0.42);
+  backdrop-filter: blur(5px);
+  inset: 0;
+  position: absolute;
+}
+
+.tx-progress-modal__card {
+  display: grid;
+  gap: 18px;
+  max-height: min(720px, calc(100vh - 40px));
+  max-width: 560px;
+  overflow: auto;
+  padding: 24px;
+  position: relative;
+  width: min(100%, 560px);
+}
+
+.tx-progress-modal__header {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.tx-progress-modal__header h2 {
+  font-size: 1.35rem;
+  margin: 10px 0 0;
+}
+
+.tx-progress-modal__close {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #0f172a;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.3rem;
+  height: 34px;
+  justify-content: center;
+  line-height: 1;
+  width: 34px;
+}
+
+.tx-progress-modal__steps {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tx-progress-step {
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 14px;
+}
+
+.tx-progress-step__icon {
+  align-items: center;
+  background: #e2e8f0;
+  border-radius: 999px;
+  color: #334155;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.tx-progress-step--active {
+  border-color: #60a5fa;
+  box-shadow: 0 12px 28px rgb(37 99 235 / 0.14);
+}
+
+.tx-progress-step--active .tx-progress-step__icon {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.tx-progress-step--complete .tx-progress-step__icon {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.tx-progress-step--error {
+  border-color: #fecaca;
+}
+
+.tx-progress-step--error .tx-progress-step__icon {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tx-progress-step strong {
+  color: #0f172a;
+  display: block;
+}
+
+.tx-progress-step p {
+  color: #475569;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.tx-progress-step code {
+  background: #eff6ff;
+  border-radius: 999px;
+  color: #1d4ed8;
+  display: inline-flex;
+  font-size: 0.8rem;
+  margin-top: 8px;
+  padding: 5px 8px;
+}

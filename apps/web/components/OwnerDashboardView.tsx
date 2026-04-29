@@ -106,10 +106,10 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
             <h1 id="owner-index-title">{props.ownerName} agents</h1>
           </div>
         </div>
-        <a className="owner-dashboard__add" href={registerHref}><UiIcon name="plus" size={18} /> Add agent</a>
+        <a className="owner-dashboard__add action-button action-button--primary" href={registerHref}><UiIcon name="plus" size={18} /> Add agent</a>
       </section>
 
-      <section className="owner-summary-strip" aria-label="Owner ENS summary">
+      <section className="owner-summary-strip owner-dashboard__preview" aria-label="Owner ENS summary">
         <SummaryCell label="Owner ENS" value={props.ownerName} />
         <SummaryCell
           label="Resolver"
@@ -173,7 +173,7 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
 
 function SummaryCell(props: { detail?: string; label: string; title?: string; tone?: "success" | "danger"; value: string }) {
   return (
-    <div className="owner-summary-strip__cell">
+    <div className="owner-summary-strip__cell metric-card">
       <span>{props.label}</span>
       <strong className={props.tone ? `owner-summary-strip__value--${props.tone}` : undefined} title={props.title}>
         {props.value}
@@ -305,7 +305,7 @@ function OwnerDashboardAgentCard(props: {
         <div>
           <div className="owner-agent-row__heading">
             <h3>{props.agentName}</h3>
-            <span className={`pill pill--${status === "active" ? "success" : status === "disabled" ? "warning" : "neutral"}`}>
+            <span className={`status-pill status-pill--${status === "active" ? "success" : status === "disabled" ? "warning" : "neutral"}`}>
               {status === "active" ? "Active" : status === "disabled" ? "Disabled" : "Unknown"}
             </span>
           </div>
@@ -340,7 +340,7 @@ function OwnerDashboardAgentCard(props: {
       </div>
 
       <div className="owner-agent-row__actions">
-        <a href={`/agent/${encodeURIComponent(props.agentName)}`}><UiIcon name="eye" size={16} /> View</a>
+        <a className="action-button action-button--secondary" href={`/agent/${encodeURIComponent(props.agentName)}`}><UiIcon name="eye" size={16} /> View</a>
         <button type="button" onClick={() => void setStatus(status === "disabled" ? "active" : "disabled")}>
           <UiIcon name={status === "disabled" ? "check" : "shield"} size={16} /> {status === "disabled" ? "Enable" : "Revoke"}
         </button>

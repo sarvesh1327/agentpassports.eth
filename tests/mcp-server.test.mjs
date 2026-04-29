@@ -85,6 +85,24 @@ test("MCP package exposes stdio and localhost HTTP entrypoints", async () => {
   assert.match(httpSource, /127\.0\.0\.1/);
   assert.match(httpSource, /3333/);
   assert.match(httpSource, /\/mcp/);
+  assert.match(httpSource, /readJsonBody/);
+  assert.match(httpSource, /handleRequest\(req, res, parsedBody\)/);
+  assert.match(httpSource, /fresh transport per[\s\S]*request/i);
+});
+
+test("MCP JSON tool formatter serializes BigInt values instead of throwing", async () => {
+  const { jsonToolResult } = await import("../packages/mcp-server/src/server.ts");
+
+  const result = jsonToolResult({
+    nested: {
+      expiresAt: 123n,
+      nonce: 7n
+    }
+  });
+
+  assert.equal(result.content[0].type, "text");
+  assert.match(result.content[0].text, /"expiresAt": "123"/);
+  assert.match(result.content[0].text, /"nonce": "7"/);
 });
 
 test("MCP package does not own agent private-key signing scripts", async () => {
@@ -119,4 +137,3 @@ test("MCP package documents setup, environment, and tool safety flow", async () 
   assert.match(readme, /Never sign/i);
   assert.match(readme, /agent\.status.*exactly.*active/i);
 });
-

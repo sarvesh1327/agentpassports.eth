@@ -6,19 +6,18 @@ import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData } from "viem";
 import { usePublicClient, useReadContract, useSendTransaction } from "wagmi";
 import {
-  AGENT_ENS_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
   NAME_WRAPPER_ABI,
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
 } from "../lib/contracts";
-import { parseEthInputToWei, parseEthInputToWeiString } from "../lib/ethAmount";
 import { buildAgentDeletePlan } from "../lib/agentDelete";
 import { OWNER_INDEX_AGENTS_KEY, parseOwnerAgentIndex } from "../lib/ownerIndex";
 import type { SerializableAgentProfile } from "../lib/demoProfile";
 import { StatusBanner } from "./StatusBanner";
-import { formatWei, shortenHex } from "./EnsProofPanel";
+import { shortenHex } from "./EnsProofPanel";
 import { UiIcon } from "./icons/UiIcons";
+import { TransactionProgressModal, type TransactionProgressStep } from "./TransactionProgressModal";
 
 type AgentManagementPanelProps = {
   gasBudgetWei: bigint;
@@ -46,8 +45,9 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
   const [statusMessage, setStatusMessage] = useState("Management actions are ready when ENS and executor addresses are configured.");
   const [policyUri, setPolicyUri] = useState(props.initialProfile.policyUri);
   const [signerAddress, setSignerAddress] = useState(props.liveAgentAddress ?? "");
-  const [gasAmountEth, setGasAmountEth] = useState("");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteProgressSteps, setDeleteProgressSteps] = useState<TransactionProgressStep[]>([]);
+  const [isDeleteProgressOpen, setIsDeleteProgressOpen] = useState(false);
 
   const ownerResolver = useReadContract({
     address: props.initialProfile.ensRegistryAddress ?? undefined,
@@ -135,6 +135,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     try {
       await action();
     } catch (error) {
+      setDeleteProgressSteps((steps) => markActiveDeleteStepError(steps));
       setStatus("error");
       setStatusMessage(error instanceof Error ? error.message : "Management action failed.");
     }
@@ -214,27 +215,6 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     });
   }
 
-  async function handleGasSubmit(event: FormEvent<HTMLFormElement>, mode: "deposit" | "withdraw") {
-    event.preventDefault();
-    const amountWei = parseEthInputToWei(gasAmountEth);
-    if (amountWei === 0n) {
-      setStatus("error");
-      setStatusMessage("Enter a nonzero ETH amount before changing gas.");
-      return;
-    }
-
-    await sendManagementCall({
-      data: encodeFunctionData({
-        abi: AGENT_ENS_EXECUTOR_ABI,
-        functionName: mode === "deposit" ? "depositGasBudget" : "withdrawGasBudget",
-        args: mode === "deposit" ? [props.initialProfile.agentNode] : [props.initialProfile.agentNode, amountWei]
-      }),
-      label: mode === "deposit" ? "Add gas" : "Withdraw gas",
-      to: props.initialProfile.executorAddress,
-      value: mode === "deposit" ? amountWei : undefined
-    });
-  }
-
   async function handleDelete() {
     if (deleteConfirmation !== props.initialProfile.agentName) {
       setStatus("error");
@@ -250,11 +230,32 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
     setStatus("loading");
     setStatusMessage("Awaiting wallet approval for Delete agent");
-    for (const call of deletePlan.calls) {
+    setDeleteProgressSteps(deletePlan.calls.map((call) => ({
+      description: describeDeleteCall(call.label),
+      label: readableDeleteCallLabel(call.label),
+      status: "pending"
+    })));
+    setIsDeleteProgressOpen(true);
+
+    for (const [index, call] of deletePlan.calls.entries()) {
+      setDeleteProgressSteps((steps) => updateDeleteProgressStep(steps, index, {
+        description: "Open your wallet and approve this transaction.",
+        status: "active"
+      }));
       const hash = await sendTransactionAsync({ data: call.data, to: call.to });
+      setDeleteProgressSteps((steps) => updateDeleteProgressStep(steps, index, {
+        description: "Transaction submitted. Waiting for confirmation.",
+        hash,
+        status: "active"
+      }));
       if (publicClient) {
         await publicClient.waitForTransactionReceipt({ hash });
       }
+      setDeleteProgressSteps((steps) => updateDeleteProgressStep(steps, index, {
+        description: "Transaction confirmed onchain.",
+        hash,
+        status: "complete"
+      }));
     }
     await props.onRefresh();
     setStatus("success");
@@ -305,6 +306,12 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
   return (
     <>
+      <TransactionProgressModal
+        isOpen={isDeleteProgressOpen}
+        onClose={() => setIsDeleteProgressOpen(false)}
+        steps={deleteProgressSteps}
+        title="Delete agent transactions"
+      />
       <section className="management-panel" aria-labelledby="agent-management-status-title">
         <div className="management-panel__header">
           <h2 id="agent-management-status-title">Agent management</h2>
@@ -322,7 +329,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
             <p>Current policy status: {props.policyEnabled ? "enabled" : "disabled or unknown"}</p>
             <div className="management-panel__actions">
               <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("disabled"))}>Disable policy</button>
-              <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("active"))}>Enable policy</button>
+              <button className="action-button action-button--secondary" type="button" onClick={() => void runManagementAction(() => handleStatusWrite("active"))}>Enable policy</button>
             </div>
           </section>
 
@@ -342,19 +349,6 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
               <input aria-label="ENS addr(agent)" value={signerAddress} onChange={(event) => setSignerAddress(event.target.value)} />
             </label>
             <button type="submit">Update signer address</button>
-          </form>
-
-          <form onSubmit={(event) => void runManagementAction(() => handleGasSubmit(event, "deposit"))}>
-            <h3 id="agent-management-gas-title">Add gas</h3>
-            <p>Current budget: {formatWei(props.gasBudgetWei)}</p>
-            <input aria-label="Gas amount ETH" value={gasAmountEth} onChange={(event) => setGasAmountEth(event.target.value)} />
-            <button type="submit">Add gas</button>
-          </form>
-
-          <form onSubmit={(event) => void runManagementAction(() => handleGasSubmit(event, "withdraw"))}>
-            <h3 id="agent-management-withdraw-title">Withdraw gas</h3>
-            <p>Prepared amount: {parseEthInputToWeiString(gasAmountEth)} wei</p>
-            <button type="submit">Withdraw gas</button>
           </form>
         </div>
       </section>
@@ -393,4 +387,54 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
       </section>
     </>
   );
+}
+
+function readableDeleteCallLabel(label: string): string {
+  switch (label) {
+    case "withdrawGasBudget":
+      return "Withdraw remaining gas budget";
+    case "deleteSubname":
+      return "Delete agent ENS subname";
+    case "setOwnerIndex":
+      return "Update owner dashboard index";
+    default:
+      return label;
+  }
+}
+
+function describeDeleteCall(label: string): string {
+  switch (label) {
+    case "withdrawGasBudget":
+      return "Returns the executor-held gas budget before ENS records are removed.";
+    case "deleteSubname":
+      return "Clears the agent subname owner and resolver in the ENS registry.";
+    case "setOwnerIndex":
+      return "Removes the agent label from the owner ENS dashboard index.";
+    default:
+      return "Wallet transaction required for deletion.";
+  }
+}
+
+function updateDeleteProgressStep(
+  steps: TransactionProgressStep[],
+  targetIndex: number,
+  patch: Partial<TransactionProgressStep>
+): TransactionProgressStep[] {
+  return steps.map((step, index) => {
+    if (index < targetIndex) {
+      return { ...step, status: "complete" };
+    }
+
+    return index === targetIndex ? { ...step, ...patch } : step;
+  });
+}
+
+function markActiveDeleteStepError(steps: TransactionProgressStep[]): TransactionProgressStep[] {
+  if (steps.length === 0) {
+    return steps;
+  }
+
+  const activeIndex = steps.findIndex((step) => step.status === "active");
+  const errorIndex = activeIndex >= 0 ? activeIndex : steps.findLastIndex((step) => step.status !== "complete");
+  return steps.map((step, index) => index === errorIndex ? { ...step, status: "error" } : step);
 }

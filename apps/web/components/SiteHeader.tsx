@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useAccount, useEnsName } from "wagmi";
 import { WalletConnection } from "./WalletConnection";
 import { AgentPassportsLogo, UiIcon } from "./icons/UiIcons";
 
@@ -12,9 +13,12 @@ import { AgentPassportsLogo, UiIcon } from "./icons/UiIcons";
 export function SiteHeader() {
   const pathname = usePathname();
   const [queryOwnerName, setQueryOwnerName] = useState<string | null>(null);
-  const ownerName = readOwnerName(pathname, queryOwnerName);
+  const { address } = useAccount();
+  const connectedEns = useEnsName({ address });
+  const connectedOwnerName = connectedEns.data?.trim().toLowerCase() ?? null;
+  const ownerName = readOwnerName(pathname, queryOwnerName) ?? connectedOwnerName;
   const dashboardHref = ownerName ? `/owner/${encodeURIComponent(ownerName)}` : "/";
-  const registerHref = ownerName ? `/register?owner=${encodeURIComponent(ownerName)}` : "/";
+  const registerHref = ownerName ? `/register?owner=${encodeURIComponent(ownerName)}` : "/register";
   const activeSection = pathname.startsWith("/register")
     ? "register"
     : pathname.startsWith("/owner") || pathname.startsWith("/agent")
@@ -34,8 +38,8 @@ export function SiteHeader() {
       <nav className="site-header__nav" aria-label="Primary navigation">
         <Link aria-current={activeSection === "dashboard" ? "page" : undefined} href={dashboardHref}>Dashboard</Link>
         <Link aria-current={activeSection === "register" ? "page" : undefined} href={registerHref}>Register Agent</Link>
-        <Link href="/">MCP</Link>
-        <Link href="/">Docs <UiIcon name="external" size={14} /></Link>
+        <Link href="/mcp">MCP</Link>
+        <Link href="https://github.com/sarvesh1327/agentpassports.eth">Docs <UiIcon name="external" size={14} /></Link>
       </nav>
       <WalletConnection />
     </header>

@@ -18,7 +18,7 @@ export function OwnerDashboardEntry() {
       return;
     }
 
-    router.push(`/owner/${encodeURIComponent(ownerName)}`);
+    router.push(`/owner/${encodeURIComponent(normalizedOwnerName)}`);
   }
 
   return (
@@ -28,7 +28,7 @@ export function OwnerDashboardEntry() {
         <input
           name="ownerName"
           onChange={(event) => setOwnerName(event.target.value)}
-          placeholder="alice.eth"
+          placeholder="owner.eth"
           value={ownerName}
         />
       </label>

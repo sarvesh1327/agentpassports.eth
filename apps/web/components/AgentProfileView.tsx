@@ -213,7 +213,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
 
   return (
     <div className="agent-detail">
-      <section className="agent-detail__topbar" aria-labelledby="agent-title">
+      <section className="agent-detail__topbar agent-detail__hero glass-panel" aria-labelledby="agent-title">
         <a className="agent-detail__back" href={`/owner/${encodeURIComponent(initialProfile.ownerName)}`}>
           <UiIcon name="arrow-left" size={15} /> Back to dashboard
         </a>
@@ -223,7 +223,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
             <div>
               <div className="agent-detail__name-row">
                 <h1 id="agent-title">{initialProfile.agentName}</h1>
-                <span className={`pill pill--${passportStatus === "active" ? "success" : passportStatus === "disabled" ? "warning" : "neutral"}`}>
+                <span className={`status-pill status-pill--${passportStatus === "active" ? "success" : passportStatus === "disabled" ? "warning" : "neutral"}`}>
                   {passportStatus === "active" ? "Active" : passportStatus === "disabled" ? "Disabled" : "Unknown"}
                 </span>
               </div>
@@ -234,19 +234,17 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
                 </div>
                 <div>
                   <dt>Policy Source</dt>
-                  <dd><span className="pill pill--success">ENS</span></dd>
+                  <dd><span className="status-pill status-pill--success">ENS</span></dd>
                 </div>
               </dl>
             </div>
           </div>
           <div className="agent-detail__actions" aria-label="Agent quick actions">
-            <button type="button" onClick={() => void writeAgentStatus(nextStatusAction)}>
+            <button className="action-button action-button--secondary" type="button" onClick={() => void writeAgentStatus(nextStatusAction)}>
               <UiIcon name={nextStatusAction === "active" ? "check" : "shield"} size={16} /> {nextStatusAction === "active" ? "Enable" : "Disable"}
             </button>
-            <a href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
-            <a href="#agent-gas-add-input"><UiIcon name="plus" size={16} /> Add gas</a>
-            <a href="#agent-gas-withdraw-input"><UiIcon name="download" size={16} /> Withdraw gas</a>
-            <a className="agent-detail__delete-link" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
+            <a className="action-button action-button--secondary" href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
+            <a className="agent-detail__delete-link action-button action-button--danger" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
           </div>
         </div>
         <StatusBanner
@@ -344,7 +342,7 @@ function AgentProofPanel(props: {
   ];
 
   return (
-    <section className="agent-panel agent-proof-card" aria-labelledby="agent-proof-title">
+    <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-proof-title">
       <h2 id="agent-proof-title"><UiIcon name="shield" size={18} /> Agent proof</h2>
       <dl className="agent-fact-table">
         {rows.map((row) => (

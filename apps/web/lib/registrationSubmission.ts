@@ -38,7 +38,15 @@ export type RegistrationSubmissionInput = {
   sendTransaction: (request: RegistrationSendTransactionRequest) => Promise<Hex>;
   waitForCallsStatus?: (request: { id: string }) => Promise<RegistrationCallsStatus>;
   waitForTransactionReceipt: (request: { hash: Hex }) => Promise<unknown>;
+  onProgress?: (event: RegistrationSubmissionProgressEvent) => void;
 };
+
+export type RegistrationSubmissionProgressEvent =
+  | { kind: "batch-submitted"; id: string }
+  | { index: number; kind: "preflight"; label: string; total: number }
+  | { index: number; kind: "wallet"; label: string; total: number }
+  | { hash: Hex; index: number; kind: "submitted"; label: string; total: number }
+  | { hash: Hex; index: number; kind: "confirmed"; label: string; total: number };
 
 const GAS_LIMIT_BUFFER_NUMERATOR = 120n;
 const GAS_LIMIT_BUFFER_DENOMINATOR = 100n;
@@ -62,6 +70,7 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       chainId: input.chainId,
       forceAtomic: true
     });
+    input.onProgress?.({ id: result.id, kind: "batch-submitted" });
 
     return finalizeCallBatch(input.waitForCallsStatus, result.id);
   } catch (error) {
@@ -71,7 +80,8 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
   }
 
   const transactionIds: string[] = [];
-  for (const call of calls) {
+  for (const [index, call] of calls.entries()) {
+    input.onProgress?.({ index, kind: "preflight", label: call.label, total: calls.length });
     await preflightRegistrationCall(input.call, {
       account: input.account,
       chainId: input.chainId,
@@ -87,13 +97,16 @@ export async function submitRegistrationBatch(input: RegistrationSubmissionInput
       to: call.to,
       value: call.value
     };
+    input.onProgress?.({ index, kind: "wallet", label: call.label, total: calls.length });
     const hash = await input.sendTransaction({
       ...request,
       gas: await estimateBufferedGas(input.estimateGas, request)
     });
 
     transactionIds.push(hash);
+    input.onProgress?.({ hash, index, kind: "submitted", label: call.label, total: calls.length });
     await input.waitForTransactionReceipt({ hash });
+    input.onProgress?.({ hash, index, kind: "confirmed", label: call.label, total: calls.length });
   }
 
   return {

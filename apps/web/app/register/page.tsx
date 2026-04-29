@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { RegisterAgentForm } from "../../components/RegisterAgentForm";
 import { UiIcon } from "../../components/icons/UiIcons";
 import { buildDemoAgentProfile } from "../../lib/demoProfile";
@@ -15,10 +14,6 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const profile = buildDemoAgentProfile();
   const defaultOwnerName = decodeURIComponent((await searchParams)?.owner ?? "").trim().toLowerCase();
 
-  if (!defaultOwnerName) {
-    redirect("/");
-  }
-
   return (
     <main className="page-shell">
       <section className="page-heading page-heading--register" aria-labelledby="register-title">
@@ -31,9 +26,11 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
             </span>
           </div>
         </div>
-        <Link className="sr-only" href={`/owner/${encodeURIComponent(defaultOwnerName)}`}>
-          Back to owner dashboard
-        </Link>
+        {defaultOwnerName ? (
+          <Link className="sr-only" href={`/owner/${encodeURIComponent(defaultOwnerName)}`}>
+            Back to owner dashboard
+          </Link>
+        ) : null}
       </section>
 
       <RegisterAgentForm

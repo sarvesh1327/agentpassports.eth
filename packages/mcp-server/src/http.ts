@@ -17,9 +17,6 @@ const PATHNAME = "/mcp";
  * on the operator-controlled MCP process rather than in the agent prompt.
  */
 async function main() {
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await createAgentPassportsMcpServer().connect(transport);
-
   const httpServer = createServer(async (req, res) => {
     if (!req.url?.startsWith(PATHNAME)) {
       res.writeHead(404, { "content-type": "application/json" });
@@ -28,7 +25,13 @@ async function main() {
     }
 
     try {
-      await transport.handleRequest(req, res);
+      // In stateless mode the current MCP SDK requires a fresh transport per
+      // request. Reusing one transport works for initialize, then fails later
+      // requests such as tools/list with an HTTP 500.
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await createAgentPassportsMcpServer().connect(transport);
+      const parsedBody = req.method === "POST" ? await readJsonBody(req) : undefined;
+      await transport.handleRequest(req, res, parsedBody);
     } catch (error) {
       console.error(error);
       if (!res.headersSent) {
@@ -41,6 +44,20 @@ async function main() {
   httpServer.listen(PORT, HOST, () => {
     console.error(`AgentPassports MCP server listening at http://${HOST}:${PORT}${PATHNAME}`);
   });
+}
+
+/**
+ * The Node streamable HTTP adapter accepts an optional pre-parsed body. Passing
+ * it explicitly keeps MCP clients such as mcporter compatible with the current
+ * SDK and avoids 500s caused by an unconsumed IncomingMessage body.
+ */
+async function readJsonBody(req: Parameters<StreamableHTTPServerTransport["handleRequest"]>[0]): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const text = Buffer.concat(chunks).toString("utf8").trim();
+  return text ? JSON.parse(text) : undefined;
 }
 
 main().catch((error) => {

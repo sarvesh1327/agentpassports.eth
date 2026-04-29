@@ -55,7 +55,7 @@ export function EnsProofPanel(props: EnsProofPanelProps) {
       title: props.recoveredSigner ?? undefined,
       value: formatNullableHex(props.recoveredSigner)
     },
-    { label: "Policy source: ENS", value: "Live ENS text records" },
+    { label: "Policy source: ENS", value: "Live ENS text records", title: "Policy source: ENS" },
     { label: "Policy hash", fullValue: props.policyHash, title: props.policyHash ?? undefined, value: formatNullableHex(props.policyHash) },
     { label: "Policy enabled", value: formatBoolean(props.policyEnabled) },
     { label: "Gas budget", value: formatWei(props.gasBudgetWei) }
@@ -77,12 +77,14 @@ export function EnsProofPanel(props: EnsProofPanelProps) {
           <div className="proof-panel__row" key={row.label}>
             <dt>{row.label}</dt>
             <dd title={row.title}>
-              <CopyableValue
-                explorerKind={row.explorerKind}
-                fullValue={row.fullValue}
-                label={row.label}
-                value={row.value}
-              />
+              {row.label === "Policy source: ENS" ? <span className="policy-source-badge">Policy source: ENS</span> : (
+                <CopyableValue
+                  explorerKind={row.explorerKind}
+                  fullValue={row.fullValue}
+                  label={row.label}
+                  value={row.value}
+                />
+              )}
             </dd>
           </div>
         ))}

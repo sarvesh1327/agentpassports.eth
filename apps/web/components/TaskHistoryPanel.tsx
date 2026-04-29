@@ -28,7 +28,7 @@ export function TaskHistoryPanel(props: TaskHistoryPanelProps) {
         <div className="record-table" role="table" aria-label="Task history">
           {props.tasks.map((task) => (
             <div className="record-table__row" role="row" key={task.id}>
-              <span role="cell">{task.timestamp}</span>
+              <span role="cell"><span className="record-table__icon" aria-hidden="true">✓</span>{task.timestamp}</span>
               <strong role="cell">
                 <CopyableValue explorerKind="tx" fullValue={task.txHash} label="transaction hash" value={shortenHex(task.txHash)} />
                 <span className="record-table__meta">

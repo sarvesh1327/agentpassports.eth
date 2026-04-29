@@ -125,7 +125,7 @@ test("home page renders the dashboard-first owner workflow", async () => {
   assert.match(source, /OwnerDashboardEntry/);
   assert.match(source, /Start from the owner ENS/);
   assert.match(entrySource, /Open owner dashboard/);
-  assert.match(entrySource, /router\.push\(`\/owner\/\$\{encodeURIComponent\(ownerName\)\}`\)/);
+  assert.match(entrySource, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
   assert.doesNotMatch(source, /Register agent/);
   assert.doesNotMatch(source, /Run task/);
   assert.doesNotMatch(source, /Revoke access/);
@@ -340,7 +340,7 @@ test("web layout configures wallet providers for Sepolia", async () => {
   assert.match(providerSource, /RainbowKitProvider/);
   assert.match(providerSource, /QueryClientProvider/);
   assert.match(walletSource, /ConnectButton/);
-  assert.match(walletSource, /accountStatus="full"/);
+  assert.match(walletSource, /ConnectButton\.Custom/);
   assert.doesNotMatch(walletSource, /accountStatus="address"/);
   assert.match(configSource, /sepolia/);
   assert.match(configSource, /createConfig/);

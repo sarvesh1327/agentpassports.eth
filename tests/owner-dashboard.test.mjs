@@ -172,7 +172,7 @@ test("primary UI flow points owners through the dashboard instead of legacy stan
 
   assert.match(homeSource, /OwnerDashboardEntry/);
   assert.match(source, /Open owner dashboard/);
-  assert.match(source, /router\.push\(`\/owner\/\$\{encodeURIComponent\(ownerName\)\}`\)/);
+  assert.match(source, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
   assert.doesNotMatch(headerSource, /href="\/run"/);
   assert.doesNotMatch(headerSource, /href="\/revoke"/);
   assert.doesNotMatch(headerSource, /href="\/register"/);

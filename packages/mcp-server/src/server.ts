@@ -39,8 +39,17 @@ export function jsonToolResult(value: unknown) {
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify(value, null, 2)
+        // MCP tool responses are JSON text so agents can save, inspect, and feed
+        // exact payloads into local signing scripts. Some viem/EIP-712 helpers
+        // keep chain ids, nonces, and expiries as bigint values, which native
+        // JSON.stringify cannot encode. Convert them at the final MCP boundary
+        // so individual handlers can keep using type-safe bigint internally.
+        text: JSON.stringify(value, bigintJsonReplacer, 2)
       }
     ]
   };
+}
+
+function bigintJsonReplacer(_key: string, value: unknown) {
+  return typeof value === "bigint" ? value.toString() : value;
 }

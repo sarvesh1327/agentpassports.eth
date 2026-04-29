@@ -37,11 +37,13 @@ import { buildRegistrationBatch, type RegistrationBatchInput } from "../lib/regi
 import { OWNER_INDEX_AGENTS_KEY, parseOwnerAgentIndex } from "../lib/ownerIndex";
 import {
   submitRegistrationBatch,
+  type RegistrationSubmissionProgressEvent,
   type RegistrationSubmissionResult
 } from "../lib/registrationSubmission";
 import { shortenHex } from "./EnsProofPanel";
 import { UiIcon } from "./icons/UiIcons";
 import { StatusBanner } from "./StatusBanner";
+import { TransactionProgressModal, type TransactionProgressStep } from "./TransactionProgressModal";
 
 export type RegisterAgentFormProps = {
   chainId: bigint;
@@ -91,6 +93,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const [status, setStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("Draft not prepared");
   const [submittedTxHashes, setSubmittedTxHashes] = useState<string[]>([]);
+  const [progressSteps, setProgressSteps] = useState<TransactionProgressStep[]>([]);
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const gasBudgetWei = parseEthInputToWeiString(gasBudgetEth);
   const maxGasReimbursementWei = parseEthInputToWeiString(maxReimbursementEth);
   const preview = useMemo(
@@ -431,11 +435,54 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       estimateGas: ({ account, data, to, value }) => publicClient.estimateGas({ account, data, to, value }),
       sendCalls: (request) => sendCallsAsync(request),
       sendTransaction: (request) => sendTransactionAsync(request),
+      onProgress: handleRegistrationProgress,
       waitForCallsStatus: walletClient.data
         ? (request) => waitForCallsStatus(walletClient.data, { id: request.id, throwOnFailure: true, timeout: 180_000 })
         : undefined,
       waitForTransactionReceipt: (request) => publicClient.waitForTransactionReceipt(request)
     });
+  }
+
+  function handleRegistrationProgress(event: RegistrationSubmissionProgressEvent) {
+    if (event.kind === "batch-submitted") {
+      setProgressSteps((steps) => steps.map((step) => ({
+        ...step,
+        description: "Wallet batch submitted. Waiting for the bundled transaction to finalize.",
+        hash: event.id,
+        status: "active"
+      })));
+      return;
+    }
+
+    setProgressSteps((steps) => steps.map((step, index) => {
+      if (index < event.index) {
+        return { ...step, status: "complete" };
+      }
+
+      if (index > event.index) {
+        return step;
+      }
+
+      if (event.kind === "confirmed") {
+        return {
+          ...step,
+          description: "Transaction confirmed onchain.",
+          hash: event.hash,
+          status: "complete"
+        };
+      }
+
+      return {
+        ...step,
+        description: event.kind === "preflight"
+          ? "Checking this transaction before wallet signing."
+          : event.kind === "wallet"
+            ? "Open your wallet and approve this transaction."
+            : "Transaction submitted. Waiting for confirmation.",
+        hash: event.kind === "submitted" ? event.hash : step.hash,
+        status: "active"
+      };
+    }));
   }
 
   /**
@@ -570,6 +617,13 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
       setStatusMessage("Awaiting wallet approval");
       const submissionInput = readSubmissionInput(generatedPreview.textRecords);
+      const registrationBatch = buildRegistrationBatch(submissionInput);
+      setProgressSteps(registrationBatch.calls.map((call) => ({
+        description: describeRegistrationCall(call.label),
+        label: readableRegistrationCallLabel(call.label),
+        status: "pending"
+      })));
+      setIsProgressModalOpen(true);
       const submitted = await submitRegistrationTransactions(submissionInput);
       const directoryIndexed = await indexRegisteredAgentWithRetry({
         agentAddress: normalizedAgentAddress,
@@ -579,6 +633,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         await unpinOldPolicyMetadata(oldPolicyUriValue, generatedPolicy.policyUri);
       }
       setSubmittedTxHashes(submitted.transactionIds);
+      setProgressSteps((steps) => steps.map((step) => ({ ...step, status: "complete" })));
       setStatus("submitted");
       setStatusMessage(
         [
@@ -589,12 +644,20 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         ].join(". ")
       );
     } catch (error) {
+      setProgressSteps((steps) => markActiveOrLastStepError(steps));
       setStatus("error");
       setStatusMessage(error instanceof Error ? error.message : "Registration failed");
     }
   }
 
   return (
+    <>
+    <TransactionProgressModal
+      isOpen={isProgressModalOpen}
+      onClose={() => setIsProgressModalOpen(false)}
+      steps={progressSteps}
+      title="Register agent transactions"
+    />
     <form className="register-form register-workspace" onSubmit={handleSubmit}>
       <div className="register-workspace__main">
         <section className="register-step" aria-labelledby="register-owner-title">
@@ -807,6 +870,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         </div>
       ) : null}
     </form>
+    </>
   );
 }
 
@@ -834,6 +898,46 @@ function PreviewRow(props: { label: string; title?: string; value: string }) {
  */
 function formatNullableHex(value?: Hex | null): string {
   return value ? shortenHex(value) : "Unknown";
+}
+
+function readableRegistrationCallLabel(label: string): string {
+  switch (label) {
+    case "setSubnodeRecord":
+      return "Create agent ENS subname";
+    case "multicall":
+      return "Write agent ENS records";
+    case "depositGasBudget":
+      return "Fund gas budget";
+    case "setOwnerIndex":
+      return "Update owner dashboard index";
+    default:
+      return label;
+  }
+}
+
+function describeRegistrationCall(label: string): string {
+  switch (label) {
+    case "setSubnodeRecord":
+      return "Creates the agent subname and points it at the public resolver.";
+    case "multicall":
+      return "Publishes addr(agent), policy metadata, capabilities, executor, and status in ENS.";
+    case "depositGasBudget":
+      return "Deposits the owner-funded execution budget into the executor contract.";
+    case "setOwnerIndex":
+      return "Adds the new agent label to the owner ENS dashboard index.";
+    default:
+      return "Wallet transaction required for registration.";
+  }
+}
+
+function markActiveOrLastStepError(steps: TransactionProgressStep[]): TransactionProgressStep[] {
+  if (steps.length === 0) {
+    return steps;
+  }
+
+  const activeIndex = steps.findIndex((step) => step.status === "active");
+  const errorIndex = activeIndex >= 0 ? activeIndex : steps.findLastIndex((step) => step.status !== "complete");
+  return steps.map((step, index) => index === errorIndex ? { ...step, status: "error" } : step);
 }
 
 /**
