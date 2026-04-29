@@ -1,8 +1,7 @@
-import { taskLogRecordTaskSelector, type Hex } from "@agentpassport/config";
+import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData, labelhash } from "viem";
 import { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, NAME_WRAPPER_ABI, PUBLIC_RESOLVER_ABI } from "./contracts.ts";
 import { requireAddress, safeBigInt } from "./registerAgent.ts";
-import type { PolicyContractResult } from "./contracts.ts";
 import {
   OWNER_INDEX_AGENTS_KEY,
   OWNER_INDEX_VERSION,
@@ -29,7 +28,7 @@ export type RegistrationBatchInput = {
   connectedWallet: Hex;
   ensRegistryAddress?: Hex | null;
   existingGasBudgetWei?: bigint | null;
-  existingPolicy?: PolicyContractResult | null;
+  existingPolicy?: unknown;
   executorAddress: Hex;
   gasBudgetWei: string;
   isOwnerWrapped: boolean;
@@ -63,10 +62,10 @@ export function buildRegistrationBatch(input: RegistrationBatchInput): Registrat
   calls.push(buildResolverMulticall(input));
   summary.push(`multicall(setAddr, ${input.textRecords.length} text records)`);
 
-  const policyCall = buildPolicyOrBudgetCall(input);
-  if (policyCall) {
-    calls.push(policyCall.call);
-    summary.push(policyCall.summary);
+  const budgetCall = buildBudgetTopUpCall(input);
+  if (budgetCall) {
+    calls.push(budgetCall.call);
+    summary.push(budgetCall.summary);
   }
 
   const ownerIndexCall = buildOwnerIndexCall(input);
@@ -173,40 +172,9 @@ function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCa
 }
 
 /**
- * Encodes policy creation and sends the initial gas budget as setPolicy msg.value.
+ * Encodes only the budget top-up that is still missing from live executor state.
  */
-function buildPolicyCall(input: RegistrationBatchInput): RegistrationBatchCall {
-  return {
-    data: encodeFunctionData({
-      abi: AGENT_POLICY_EXECUTOR_ABI,
-      functionName: "setPolicy",
-      args: [
-        input.ownerNode,
-        input.agentLabel,
-        input.taskLogAddress,
-        taskLogRecordTaskSelector(),
-        safeBigInt(input.maxValueWei),
-        safeBigInt(input.maxGasReimbursementWei),
-        safeBigInt(input.policyExpiresAt)
-      ]
-    }),
-    label: "setPolicy",
-    to: input.executorAddress,
-    value: requiredBudgetTopUp(input)
-  };
-}
-
-/**
- * Encodes only the policy or budget change that is still missing from live executor state.
- */
-function buildPolicyOrBudgetCall(input: RegistrationBatchInput): { call: RegistrationBatchCall; summary: string } | null {
-  if (!policyMatchesDesiredInput(input) || input.existingPolicy?.[7] === false) {
-    return {
-      call: buildPolicyCall(input),
-      summary: "setPolicy(..., with gas budget)"
-    };
-  }
-
+function buildBudgetTopUpCall(input: RegistrationBatchInput): { call: RegistrationBatchCall; summary: string } | null {
   const topUpWei = requiredBudgetTopUp(input);
   if (topUpWei === 0n) {
     return null;
@@ -214,7 +182,7 @@ function buildPolicyOrBudgetCall(input: RegistrationBatchInput): { call: Registr
 
   return {
     call: buildDepositGasBudgetCall(input, topUpWei),
-    summary: "depositGasBudget(top up)"
+    summary: (input.existingGasBudgetWei ?? 0n) > 0n ? "depositGasBudget(top up)" : "depositGasBudget(initial budget)"
   };
 }
 
@@ -242,23 +210,4 @@ function requiredBudgetTopUp(input: RegistrationBatchInput): bigint {
   const existingBudgetWei = input.existingGasBudgetWei ?? 0n;
 
   return requestedBudgetWei > existingBudgetWei ? requestedBudgetWei - existingBudgetWei : 0n;
-}
-
-/**
- * Compares the live executor policy against the policy the registration form would create.
- */
-function policyMatchesDesiredInput(input: RegistrationBatchInput): boolean {
-  const policy = input.existingPolicy;
-  if (!policy || policy[1] === "0x0000000000000000000000000000000000000000") {
-    return false;
-  }
-
-  return (
-    policy[0].toLowerCase() === input.ownerNode.toLowerCase() &&
-    policy[2].toLowerCase() === input.taskLogAddress.toLowerCase() &&
-    policy[3].toLowerCase() === taskLogRecordTaskSelector().toLowerCase() &&
-    policy[4] === safeBigInt(input.maxValueWei) &&
-    policy[5] === safeBigInt(input.maxGasReimbursementWei) &&
-    policy[6] === safeBigInt(input.policyExpiresAt)
-  );
 }
