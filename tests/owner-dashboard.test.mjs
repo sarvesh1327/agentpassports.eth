@@ -257,6 +257,31 @@ test("agent management page exposes policy, gas, signer, delete, and persistent 
   assert.match(viewSource, /TaskHistoryPanel/);
 });
 
+test("new owner and agent UI controls are wired to concrete interactions", async () => {
+  const dashboardSource = await readText("apps/web/components/OwnerDashboardView.tsx");
+  const agentSource = await readText("apps/web/components/AgentProfileView.tsx");
+
+  assert.match(dashboardSource, /setViewMode\("grid"\)/);
+  assert.match(dashboardSource, /setViewMode\("list"\)/);
+  assert.match(dashboardSource, /aria-pressed=\{viewMode === "grid"\}/);
+  assert.match(dashboardSource, /aria-pressed=\{viewMode === "list"\}/);
+  assert.match(dashboardSource, /status === "disabled" \? "Enable" : "Revoke"/);
+  assert.match(dashboardSource, /#agent-management-delete-title/);
+
+  for (const token of [
+    "useSendTransaction",
+    "writeAgentStatus",
+    "promptPolicyUriUpdate",
+    "depositGasBudget",
+    "withdrawGasBudget",
+    "agent-gas-add-input",
+    "agent-gas-withdraw-input",
+    "Max"
+  ]) {
+    assert.match(agentSource, new RegExp(token), `${token} should be wired in the agent page`);
+  }
+});
+
 test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion", async () => {
   const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
   const { ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } = await import("../apps/web/lib/contracts.ts");

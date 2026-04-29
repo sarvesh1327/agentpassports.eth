@@ -76,6 +76,7 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
   const ownerAgentLabels = parseOwnerAgentIndex(rawAgentIndex);
   const ownerAgents = buildOwnerAgentNames(props.ownerName, ownerAgentLabels);
   const registerHref = `/register?owner=${encodeURIComponent(props.ownerName)}`;
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   return (
     <div className="owner-dashboard">
@@ -104,12 +105,12 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
       </section>
 
       {ownerAgents.length > 0 ? (
-        <section className="owner-agents-panel" aria-labelledby="owner-agents-title">
+        <section className="owner-agents-panel" aria-labelledby="owner-agents-title" data-view={viewMode}>
           <div className="owner-agents-panel__header">
             <h2 id="owner-agents-title">Agents ({ownerAgents.length})</h2>
             <div aria-label="View mode" className="owner-agents-panel__toggles">
-              <button type="button" aria-label="Grid view"><UiIcon name="grid" size={17} /></button>
-              <button type="button" aria-label="List view"><UiIcon name="list" size={17} /></button>
+              <button type="button" aria-label="Grid view" aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}><UiIcon name="grid" size={17} /></button>
+              <button type="button" aria-label="List view" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}><UiIcon name="list" size={17} /></button>
             </div>
           </div>
           {ownerAgents.map((agent) => (
@@ -313,9 +314,10 @@ function OwnerDashboardAgentCard(props: {
 
       <div className="owner-agent-row__actions">
         <a href={`/agent/${encodeURIComponent(props.agentName)}`}><UiIcon name="eye" size={16} /> View</a>
-        <button type="button" onClick={() => void setStatus("disabled")}><UiIcon name="shield" size={16} /> Revoke</button>
-        <button type="button" onClick={() => void setStatus("active")}><UiIcon name="check" size={16} /> Enable</button>
-        <a className="owner-agent-row__delete" href={`/agent/${encodeURIComponent(props.agentName)}#agent-management-title`}><UiIcon name="trash" size={16} /> Delete</a>
+        <button type="button" onClick={() => void setStatus(status === "disabled" ? "active" : "disabled")}>
+          <UiIcon name={status === "disabled" ? "check" : "shield"} size={16} /> {status === "disabled" ? "Enable" : "Revoke"}
+        </button>
+        <a className="owner-agent-row__delete" href={`/agent/${encodeURIComponent(props.agentName)}#agent-management-delete-title`}><UiIcon name="trash" size={16} /> Delete</a>
       </div>
     </section>
   );
