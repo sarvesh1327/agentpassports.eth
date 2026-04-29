@@ -15,6 +15,15 @@ contract AgentEnsExecutorTest is TestBase {
     uint256 private constant SECP256K1_N =
         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
+    event AgentTaskExecuted(
+        bytes32 indexed agentNode,
+        address indexed target,
+        bytes4 selector,
+        bytes32 callDataHash,
+        bytes32 policyDigest,
+        uint256 nonce
+    );
+
     uint256 private agentKey = 0xA6E17;
     uint256 private relayerKey = 0xBEEF;
     uint256 private wrongKey = 0xBAD;
@@ -224,6 +233,90 @@ contract AgentEnsExecutorTest is TestBase {
 
         assertEq(valueTarget.received(agentNode), 0.2 ether, "target value");
         assertEq(executor.gasBudgetWei(agentNode), 0.8 ether, "value debited");
+    }
+
+    /// @notice Verifies V2 generic execution can call a policy-approved non-TaskLog target.
+    function testGenericPolicyApprovedTargetExecutesAndEmitsProof() public {
+        AgentEnsExecutor.PolicySnapshot memory policy = AgentEnsExecutor.PolicySnapshot({
+            target: address(valueTarget),
+            selector: MockValueTarget.recordValue.selector,
+            maxValueWei: uint96(0.1 ether),
+            maxGasReimbursementWei: 0,
+            expiresAt: uint64(block.timestamp + 1 days),
+            enabled: true
+        });
+        _publishPolicy(policy);
+        vm.prank(owner);
+        executor.depositGasBudget{ value: 1 ether }(agentNode);
+
+        bytes memory callData = abi.encodeCall(MockValueTarget.recordValue, (agentNode));
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, callData, 0.1 ether, block.timestamp + 1 hours);
+
+        vm.expectEmit(true, true, false, true);
+        emit AgentTaskExecuted(
+            agentNode,
+            address(valueTarget),
+            MockValueTarget.recordValue.selector,
+            keccak256(callData),
+            executor.hashPolicySnapshot(agentNode, policy),
+            0
+        );
+        executor.execute(intent, policy, callData, _sign(agentKey, intent));
+
+        assertEq(valueTarget.received(agentNode), 0.1 ether, "generic target value");
+        assertEq(executor.nextNonce(agentNode), 1, "generic nonce consumed");
+    }
+
+    /// @notice Verifies policy target binding prevents signed intents from calling other targets.
+    function testGenericExecutionRejectsWrongTarget() public {
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveTaskLogPolicy(0, 0.01 ether);
+        vm.prank(owner);
+        executor.depositGasBudget{ value: 1 ether }(agentNode);
+
+        bytes memory callData = _taskCallData("ipfs://demo");
+        AgentEnsExecutor.TaskIntent memory intent = AgentEnsExecutor.TaskIntent(
+            agentNode,
+            executor.hashPolicySnapshot(agentNode, policy),
+            address(valueTarget),
+            keccak256(callData),
+            0,
+            executor.nextNonce(agentNode),
+            uint64(block.timestamp + 1 hours)
+        );
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.expectRevert(AgentEnsExecutor.TargetNotAllowed.selector);
+        executor.execute(intent, policy, callData, signature);
+    }
+
+    /// @notice Verifies selector binding blocks calldata for non-approved functions on the same target.
+    function testGenericExecutionRejectsWrongSelector() public {
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveTaskLogPolicy(0, 0.01 ether);
+        vm.prank(owner);
+        executor.depositGasBudget{ value: 1 ether }(agentNode);
+
+        bytes memory callData = abi.encodeCall(TaskLog.recordTask, (agentNode, ownerNode, keccak256("wrong"), "ipfs://demo"));
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, callData, 0, block.timestamp + 1 hours);
+        bytes memory wrongSelectorCallData = abi.encodeCall(MockValueTarget.recordValue, (agentNode));
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.expectRevert(AgentEnsExecutor.SelectorNotAllowed.selector);
+        executor.execute(intent, policy, wrongSelectorCallData, signature);
+    }
+
+    /// @notice Verifies agents sign the exact calldata hash, not only target and selector.
+    function testGenericExecutionRejectsWrongCalldataHash() public {
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveTaskLogPolicy(0, 0.01 ether);
+        vm.prank(owner);
+        executor.depositGasBudget{ value: 1 ether }(agentNode);
+
+        bytes memory signedCallData = _taskCallData("ipfs://demo-a");
+        bytes memory submittedCallData = _taskCallData("ipfs://demo-b");
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, signedCallData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.expectRevert(AgentEnsExecutor.BadCalldataHash.selector);
+        executor.execute(intent, policy, submittedCallData, signature);
     }
 
     /// @notice Verifies malleated high-s signatures cannot pass onchain recovery.

@@ -112,6 +112,48 @@ test("Policy helpers produce deterministic metadata and hashes", () => {
   assert.equal(utilities.hashPolicyMetadata(metadata), "0x25d8cf6943e62236be9c527f4896664a057b825fe65eef1072a1dacbc01ad8f6");
 });
 
+test("V2 swap policy helpers normalize Uniswap execution constraints", () => {
+  const swapPolicy = {
+    allowedChainId: 11155111n,
+    allowedTokensIn: ["0x1111111111111111111111111111111111111111", "0x1111111111111111111111111111111111111111"],
+    allowedTokensOut: ["0x2222222222222222222222222222222222222222"],
+    deadlineSeconds: 900n,
+    enabled: true,
+    maxAmountInWei: 100000000000000000n,
+    maxSlippageBps: 100n,
+    recipient: "0x3333333333333333333333333333333333333333",
+    router: "0x4444444444444444444444444444444444444444",
+    selector: "0x04e45aaf",
+  };
+
+  assert.deepEqual(utilities.buildSwapPolicyMetadata(swapPolicy), {
+    allowedChainId: "11155111",
+    allowedTokensIn: ["0x1111111111111111111111111111111111111111"],
+    allowedTokensOut: ["0x2222222222222222222222222222222222222222"],
+    deadlineSeconds: "900",
+    enabled: true,
+    maxAmountInWei: "100000000000000000",
+    maxSlippageBps: "100",
+    recipient: "0x3333333333333333333333333333333333333333",
+    router: "0x4444444444444444444444444444444444444444",
+    schema: "agentpassport.swapPolicy.v2",
+    selector: "0x04e45aaf",
+  });
+  assert.deepEqual(utilities.swapPolicyToExecutableSnapshot({
+    expiresAt: 1790000000n,
+    maxGasReimbursementWei: 1000000000000000n,
+    swapPolicy,
+  }), {
+    enabled: true,
+    expiresAt: 1790000000n,
+    maxGasReimbursementWei: 1000000000000000n,
+    maxValueWei: 0n,
+    selector: "0x04e45aaf",
+    target: "0x4444444444444444444444444444444444444444",
+  });
+  assert.throws(() => utilities.normalizeSwapPolicy({ ...swapPolicy, maxSlippageBps: 10001n }), /maxSlippageBps/);
+});
+
 test("ENS and hex validation rejects malformed inputs before they reach clients", () => {
   assert.throws(() => utilities.namehashEnsName("alice..eth"), /Invalid ENS name/);
   assert.throws(() => utilities.computeSubnode(OWNER_NODE, "bad.label"), /Invalid ENS label/);

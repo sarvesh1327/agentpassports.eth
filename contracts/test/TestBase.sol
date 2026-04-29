@@ -17,6 +17,9 @@ interface Vm {
     /// @param revertData Expected revert selector.
     function expectRevert(bytes4 revertData) external;
 
+    /// @notice Expects the next emitted event to match selected indexed/data fields.
+    function expectEmit(bool checkTopic1, bool checkTopic2, bool checkTopic3, bool checkData) external;
+
     /// @notice Sets msg.sender for the next call.
     /// @param sender Sender address to impersonate.
     function prank(address sender) external;
