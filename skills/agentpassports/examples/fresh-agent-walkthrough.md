@@ -128,3 +128,28 @@ If any step fails, explain the exact failed condition and safe next step, such a
 - Policy digest mismatch; ask the user to republish or refresh the ENS policy.
 - Local signer does not match ENS signer; ask the user to register the correct public address in the UI or switch `.agentPassports/keys.txt`.
 - Task is outside policy; ask the user to update the request or policy.
+
+## Optional: V2 Swapper flow
+
+If the user registers this agent as a `Swapper`, the passport should include the `uniswap-swap` capability and ENS records such as:
+
+```text
+agent.policy.uniswap.allowedTokenIn
+agent.policy.uniswap.allowedTokenOut
+agent.policy.uniswap.maxInputAmount
+agent.policy.uniswap.maxSlippageBps
+```
+
+For a swap request, do not use the generic `check_task_against_policy` flow alone. Use the Swapper-specific MCP order:
+
+```text
+resolve_agent_passport
+get_agent_policy
+uniswap_validate_swap_against_ens_policy
+uniswap_check_approval
+uniswap_quote
+uniswap_execute_swap
+uniswap_record_swap_proof
+```
+
+Stop if the requested chain, token pair, amount, or slippage is outside the ENS Uniswap policy, or if the policy digest changes before execution.

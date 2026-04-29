@@ -181,3 +181,27 @@ test("MCP safety flow skill teaches exact AgentPassports MCP tool order and refu
   assert.match(skill, /outside.*policy|policy violation/i, "MCP skill should reject tasks outside policy");
   assert.match(skill, /digest mismatch/i, "MCP skill should reject policy digest mismatches");
 });
+
+test("MCP safety flow skill teaches V2 Uniswap Swapper tool order", async () => {
+  const skill = await readText("skills/agentpassports/SKILL.md");
+  const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
+  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
+  const source = `${skill}\n${flow}\n${walkthrough}`;
+
+  for (const label of [
+    "uniswap-swap",
+    "Swapper",
+    "uniswap_validate_swap_against_ens_policy",
+    "uniswap_check_approval",
+    "uniswap_quote",
+    "uniswap_execute_swap",
+    "uniswap_record_swap_proof",
+    "agent.policy.uniswap.allowedTokenIn",
+    "agent.policy.uniswap.maxSlippageBps"
+  ]) {
+    assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented in the skill`);
+  }
+
+  assert.match(flow, /Never call Uniswap/i);
+  assert.match(flow, /policy digest/i);
+});

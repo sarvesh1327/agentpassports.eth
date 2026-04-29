@@ -1,6 +1,6 @@
 # AgentPassports Skill
 
-Use this skill when a user asks an agent to act through AgentPassports.eth, prove it is authorized by an ENS owner, check an ENS policy, sign a task intent, or submit work through the AgentPassports MCP server.
+Use this skill when a user asks an agent to act through AgentPassports.eth, prove it is authorized by an ENS owner, check an ENS policy, sign a task intent, submit work through the AgentPassports MCP server, or operate as a V2 Uniswap `Swapper` agent with the `uniswap-swap` capability.
 
 AgentPassports is an ENS-native authorization protocol for agents. An owner publishes an agent passport under ENS, including the agent signer address, exact lifecycle status, and an owner-defined policy. The agent must treat ENS as the source of truth before signing or submitting any task.
 
@@ -11,4 +11,4 @@ This skill has two operating parts:
 
 ## Core rule
 
-Never sign or submit work just because the user asks. First confirm the agent is registered, active, policy-authorized, and controlled by the local private key that will sign the intent.
+Never sign, submit, quote, or execute work just because the user asks. First confirm the agent is registered, active, policy-authorized, and controlled by the local private key or wallet flow that will sign the intent or swap. For Swapper agents, also confirm the requested token pair, amount, slippage, chain, and proof metadata are allowed by the ENS-published Uniswap policy.

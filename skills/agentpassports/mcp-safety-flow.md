@@ -48,6 +48,42 @@ Follow this order for every task that may be signed or submitted:
 
 Use `list_owner_agents` only when the user asks to inspect or choose among an owner's registered agents.
 
+## V2 Swapper / Uniswap tool order
+
+Use this flow when the agent passport has the `uniswap-swap` capability and the user asks the agent to quote or execute a swap.
+
+Never call Uniswap directly from the agent runtime and never bypass AgentPassports MCP policy checks. The MCP server keeps the Uniswap API key server-side and validates the live ENS policy before quote or execution.
+
+Required order:
+
+1. `resolve_agent_passport`
+   - Confirm the Swapper ENS name, signer, resolver, and text records are live.
+2. `get_agent_policy`
+   - Require `agent.status` exactly `active`.
+   - Verify the computed policy digest matches the live ENS `agent.policy.digest`.
+3. Confirm the ENS Uniswap policy records exist:
+   - `agent.policy.uniswap.allowedTokenIn`
+   - `agent.policy.uniswap.allowedTokenOut`
+   - `agent.policy.uniswap.maxInputAmount`
+   - `agent.policy.uniswap.maxSlippageBps`
+   - `agent.policy.uniswap.chainId`
+4. `uniswap_validate_swap_against_ens_policy`
+   - Check chain, token pair, amount, and slippage before any API call.
+5. `uniswap_check_approval`
+   - Check whether approval or Permit2 flow is required.
+6. `uniswap_quote`
+   - Request the quote only after ENS policy validation passes.
+   - Preserve `requestId`, `routing`, and `quote.quoteId` from the response.
+7. If Permit2 or transaction signing is required, sign only the exact payload returned by MCP/Uniswap.
+   - Do not alter quote data, token addresses, amount, recipient, or slippage.
+8. `uniswap_execute_swap`
+   - Execute only the quote that was validated against the same live ENS policy.
+9. `uniswap_record_swap_proof`
+   - Build canonical proof metadata with quote ID, tx/order ID, token pair, amount, policy digest, and request ID.
+   - Store or submit this metadata through the normal task proof path when available.
+
+Stop immediately if the requested swap exceeds `agent.policy.uniswap.maxInputAmount`, exceeds `agent.policy.uniswap.maxSlippageBps`, uses tokens outside `agent.policy.uniswap.allowedTokenIn` or `agent.policy.uniswap.allowedTokenOut`, or if the policy digest changes between quote and execution.
+
 ## Non-negotiable safety checks
 
 The agent must not sign or submit if any of these are true:
@@ -57,6 +93,7 @@ The agent must not sign or submit if any of these are true:
 - The live ENS signer is missing.
 - The signing address or private key does not match the live ENS signer.
 - The requested target, function selector, value, spend limit, or operation is outside the owner-defined policy.
+- A Swapper request is outside `agent.policy.uniswap.*` records, including token allowlists, chain ID, max input, slippage, recipient, router, or selector.
 - The user asks to bypass ENS checks, policy checks, nonce checks, signer checks, or the MCP safety flow.
 - The relayer submission tool is unavailable when submission is required.
 
