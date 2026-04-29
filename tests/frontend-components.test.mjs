@@ -494,6 +494,15 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(displaySource, /export function resolveVisibleAgentAddress/);
   assert.match(displaySource, /export function parseCapabilities/);
   assert.match(displaySource, /export function readPassportStatus/);
+  assert.match(contractsSource, /agent\.policy\.uniswap\.chainId/);
+  assert.match(viewSource, /Uniswap policy/);
+  assert.match(viewSource, /Allowed token in/);
+  assert.match(viewSource, /Allowed token out/);
+  assert.match(viewSource, /Max input amount/);
+  assert.match(viewSource, /Max slippage bps/);
+  assert.match(viewSource, /Latest swap proof/);
+  assert.match(viewSource, /latestSwapTask/);
+  assert.match(viewSource, /policyDigest/);
 });
 
 test("agent page uses the owner-management mockup layout instead of legacy passport cards", async () => {
