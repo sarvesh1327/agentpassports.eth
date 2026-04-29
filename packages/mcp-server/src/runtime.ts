@@ -24,7 +24,15 @@ import {
 } from "@agentpassport/sdk";
 import { createPublicClient, defineChain, encodeFunctionData, http, keccak256, stringToHex } from "viem";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
-import { buildUniswapApprovalPayload, buildUniswapQuotePayload, callUniswapApi, validateSwapRequestAgainstPolicy } from "./uniswap.ts";
+import {
+  buildSwapProofMetadata,
+  buildUniswapApprovalPayload,
+  buildUniswapQuotePayload,
+  callUniswapApi,
+  normalizeUniswapQuoteResponse,
+  normalizeUniswapSwapResponse,
+  validateSwapRequestAgainstPolicy
+} from "./uniswap.ts";
 
 const AGENT_TEXT_KEYS = [
   "agent.v",
@@ -266,16 +274,25 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
       if (!validation.allowed) throw new Error("Quote request is not allowed by ENS Uniswap policy");
       const payload = buildUniswapQuotePayload(policy.agentAddress, args as any);
-      return { agentName: policy.agentName, payload, policyValidation: validation, uniswap: await callUniswapApi("/quote", payload, uniswapRuntimeConfig(config)) };
+      const uniswap = await callUniswapApi("/quote", payload, uniswapRuntimeConfig(config));
+      return { agentName: policy.agentName, payload, policyValidation: validation, summary: normalizeUniswapQuoteResponse(uniswap), uniswap };
     },
     uniswap_execute_swap: async (args: ToolArgs<"uniswap_execute_swap">) => {
       const policy = await getSwapPolicy(args.agentName);
       const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
       if (!validation.allowed) throw new Error("Swap request is not allowed by ENS Uniswap policy");
       const payload = { ...buildUniswapQuotePayload(policy.agentAddress, args as any), permit2Signature: args.permit2Signature, quote: args.quote, quoteId: args.quoteId };
-      return { agentName: policy.agentName, payload, policyValidation: validation, uniswap: await callUniswapApi("/swap", payload, uniswapRuntimeConfig(config)) };
+      const uniswap = await callUniswapApi("/swap", payload, uniswapRuntimeConfig(config));
+      return { agentName: policy.agentName, payload, policyValidation: validation, summary: normalizeUniswapSwapResponse(uniswap), uniswap };
     },
-    uniswap_validate_swap_against_ens_policy: validateUniswapSwap
+    uniswap_validate_swap_against_ens_policy: validateUniswapSwap,
+    uniswap_record_swap_proof: async (args: ToolArgs<"uniswap_record_swap_proof">) => {
+      const passport = await resolvePassport(args.agentName);
+      return {
+        agentName: passport.agentName,
+        metadata: buildSwapProofMetadata({ ...(args as any), agentName: passport.agentName, agentNode: passport.agentNode })
+      };
+    }
   };
 }
 

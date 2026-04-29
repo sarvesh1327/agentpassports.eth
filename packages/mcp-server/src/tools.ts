@@ -51,7 +51,8 @@ export type AgentPassportToolName =
   | "uniswap_check_approval"
   | "uniswap_quote"
   | "uniswap_validate_swap_against_ens_policy"
-  | "uniswap_execute_swap";
+  | "uniswap_execute_swap"
+  | "uniswap_record_swap_proof";
 
 export type AgentPassportToolDefinition = {
   description: string;
@@ -139,6 +140,23 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
       permit2Signature: hex.optional(),
       quote: z.record(z.string(), z.unknown()),
       quoteId: z.string().optional()
+    }
+  },
+  {
+    name: "uniswap_record_swap_proof",
+    description:
+      "Build canonical swap proof metadata after a Uniswap API quote or swap so the agent can persist quote ID, transaction/order ID, token pair, amount, and ENS policy digest in TaskLog or external storage.",
+    inputShape: {
+      agentName: ensName,
+      amount: uintString,
+      chainId: uintString,
+      policyDigest: bytes32,
+      quoteId: z.string().optional(),
+      requestId: z.string().optional(),
+      routing: z.string().optional(),
+      tokenIn: address,
+      tokenOut: address,
+      txHashOrOrderId: z.string().optional()
     }
   }
 ];
