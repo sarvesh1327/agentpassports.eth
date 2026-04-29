@@ -705,8 +705,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
             </label>
             <label>
               <span>Policy digest (preview)</span>
-              <span className="sr-only">Policy hash</span>
-              <input readOnly value={preview.policyHash ?? "Pending"} />
+              <input readOnly value={preview.policyDigest ?? "Pending"} />
             </label>
           </div>
         </section>
@@ -752,7 +751,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
             <PreviewRow label="Subname action" value={preview.agentName ? `create ${preview.agentName}` : "Waiting for agent label"} />
             <PreviewRow label="Resolver writes" value={`addr + ${preview.textRecords.length} text records`} />
             <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${normalizedAgentLabel || "label"}`} />
-            <PreviewRow label="Budget transaction" value={preparedBatchSummary.some((step) => step.includes("depositGasBudget")) ? "depositGasBudget" : "setPolicy"} />
+            <PreviewRow label="Budget transaction" value="depositGasBudget" />
           </dl>
 
           <div className="transaction-queue" aria-labelledby="register-transactions-title">

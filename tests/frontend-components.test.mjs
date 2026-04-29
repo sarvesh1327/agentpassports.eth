@@ -205,7 +205,7 @@ test("register page renders the ENS registration workflow", async () => {
     "Resolver",
     "Policy target",
     "TaskLog",
-    "Policy hash",
+    "Policy digest",
     "Gas budget",
     "Policy URI",
     "ENS text records",
@@ -223,7 +223,10 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(helperSource, /safeNamehash/);
   assert.match(helperSource, /computeSubnode/);
   assert.match(source, /agent\.policy\.hash/);
-  assert.match(batchSource, /setPolicy/);
+  assert.match(source, /agent\.policy\.digest/);
+  assert.match(formSource, /preview\.policyDigest \?\? "Pending"/);
+  assert.doesNotMatch(batchSource, /setPolicy/);
+  assert.match(batchSource, /depositGasBudget/);
   assert.match(formSource, /depositGasBudget/);
   assert.match(formSource, /publicResolverAddress/);
   assert.match(formSource, /registrationDraftStatus/);
@@ -374,7 +377,8 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(batchSource, /setAddr/);
   assert.match(batchSource, /setText/);
   assert.match(batchSource, /setSubnodeRecord/);
-  assert.match(batchSource, /setPolicy/);
+  assert.doesNotMatch(batchSource, /setPolicy/);
+  assert.match(batchSource, /depositGasBudget/);
   assert.match(formSource, /depositGasBudget/);
   assert.match(formSource, /submitRegistrationTransactions/);
   assert.match(formSource, /submitRegistrationBatch/);

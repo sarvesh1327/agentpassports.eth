@@ -7,6 +7,7 @@ import {
 } from "@agentpassport/config";
 import { normalizeAddressInput } from "./addressInput.ts";
 import { buildAgentName, safeNamehash, safeSubnode } from "./ensPreview.ts";
+import { hashTaskLogPolicySnapshot } from "./policySnapshot.ts";
 
 export type RegisterPreviewInput = {
   agentAddress: string;
@@ -26,6 +27,7 @@ export type RegisterPreview = {
   agentNode: Hex;
   gasBudgetWei: string;
   ownerNode: Hex;
+  policyDigest: Hex | null;
   policyHash: Hex | null;
   textRecords: readonly { key: string; value: string }[];
 };
@@ -100,18 +102,28 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
     ownerNode,
     taskLogAddress: input.taskLogAddress
   });
+  const policyDigest = buildPreviewPolicyDigest({
+    agentNode,
+    expiresAt: input.policyExpiresAt,
+    hasCompleteEnsInput,
+    maxGasReimbursementWei: input.maxGasReimbursementWei,
+    maxValueWei: input.maxValueWei,
+    taskLogAddress: input.taskLogAddress
+  });
 
   return {
     agentName,
     agentNode,
     gasBudgetWei: safeBigInt(input.gasBudgetWei).toString(),
     ownerNode,
+    policyDigest,
     policyHash,
     textRecords: buildAgentTextRecords({
       executorAddress: input.executorAddress,
       hasCompleteEnsInput,
       normalizedAgentAddress,
       normalizedOwnerName,
+      policyDigest,
       policyHash,
       policyUri: input.policyUri
     })
@@ -225,6 +237,30 @@ function buildPreviewPolicyHash(input: {
       target: input.taskLogAddress
     })
   );
+}
+
+/**
+ * Builds the exact policy snapshot digest that AgentEnsExecutor verifies against ENS.
+ */
+function buildPreviewPolicyDigest(input: {
+  agentNode: Hex;
+  expiresAt: string;
+  hasCompleteEnsInput: boolean;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
+  taskLogAddress?: Hex | null;
+}): Hex | null {
+  if (!input.hasCompleteEnsInput || !input.taskLogAddress) {
+    return null;
+  }
+
+  return hashTaskLogPolicySnapshot({
+    agentNode: input.agentNode,
+    expiresAt: safeBigInt(input.expiresAt),
+    maxGasReimbursementWei: safeBigInt(input.maxGasReimbursementWei),
+    maxValueWei: safeBigInt(input.maxValueWei),
+    target: input.taskLogAddress
+  });
 }
 
 /**
@@ -347,18 +383,27 @@ function buildAgentTextRecords(input: {
   hasCompleteEnsInput: boolean;
   normalizedAgentAddress: Hex | null;
   normalizedOwnerName: string;
+  policyDigest: Hex | null;
   policyHash: Hex | null;
   policyUri: string;
 }): readonly { key: string; value: string }[] {
-  if (!input.hasCompleteEnsInput || !input.normalizedAgentAddress || !input.executorAddress || !input.policyHash) {
+  if (
+    !input.hasCompleteEnsInput ||
+    !input.normalizedAgentAddress ||
+    !input.executorAddress ||
+    !input.policyHash ||
+    !input.policyDigest
+  ) {
     return [];
   }
 
   const records = [
-    { key: "agent.v", value: "1" },
+    { key: "agent.v", value: "2" },
     { key: "agent.owner", value: input.normalizedOwnerName },
     { key: "agent.kind", value: "personal-assistant" },
     { key: "agent.capabilities", value: "task-log,sponsored-execution" },
+    { key: "agent.policy.schema", value: "agentpassport.policy.v1" },
+    { key: "agent.policy.digest", value: input.policyDigest },
     { key: "agent.policy.hash", value: input.policyHash },
     { key: "agent.executor", value: input.executorAddress },
     { key: "agent.status", value: "active" },

@@ -173,9 +173,9 @@ async function preflightRegistrationCall(
  */
 function readRegistrationPreflightMessage(error: unknown, label: string, data: Hex): string {
   const message = readNestedErrorMessage(error);
-  if (label === "setPolicy" || data.startsWith("0xd879609b")) {
+  if (label === "depositGasBudget") {
     if (message.includes("0x42f058b4") || message.toLowerCase().includes("execution reverted")) {
-      return "Connected wallet cannot set policy for this owner ENS. Make sure the connected wallet manages the owner ENS name, then try again.";
+      return "Agent ENS subname must exist before funding its gas budget. Create or restore the subname, then try again.";
     }
   }
 

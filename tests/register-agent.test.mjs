@@ -180,6 +180,10 @@ test("register preview emits only concrete ENS text records for complete input",
     preview.textRecords.find((record) => record.key === "agent.policy.uri"),
     { key: "agent.policy.uri", value: "ipfs://agentpassports-policy" }
   );
+  assert.match(
+    preview.textRecords.find((record) => record.key === "agent.policy.digest")?.value ?? "",
+    /^0x[0-9a-f]{64}$/u
+  );
 });
 
 test("register draft allows blank metadata URI when every required field is ready", async () => {
@@ -385,7 +389,7 @@ test("register draft blocks resolver fallback when an existing subname has no re
   assert.equal(status.blocker, "Agent ENS resolver is not configured for record writes");
 });
 
-test("registration batch creates the subname, writes resolver records through resolver multicall, and funds policy", async () => {
+test("registration batch creates the subname, writes resolver records through resolver multicall, and funds gas budget", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
   const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
 
@@ -428,7 +432,7 @@ test("registration batch creates the subname, writes resolver records through re
   assert.equal(batch.calls[0].to, ENS_REGISTRY_ADDRESS);
   assert.equal(batch.calls[1].label, "multicall");
   assert.equal(batch.calls[1].to, PUBLIC_RESOLVER_ADDRESS);
-  assert.equal(batch.calls[2].label, "setPolicy");
+  assert.equal(batch.calls[2].label, "depositGasBudget");
   assert.equal(batch.calls[2].to, EXECUTOR_ADDRESS);
   assert.equal(batch.calls[2].value, 10000000000000000n);
   assert.equal(batch.calls[3].label, "setOwnerIndex");
@@ -436,7 +440,7 @@ test("registration batch creates the subname, writes resolver records through re
   assert.deepEqual(batch.summary, [
     "setSubnodeRecord(owner ENS, agent label, connected wallet, public resolver)",
     `multicall(setAddr, ${preview.textRecords.length} text records)`,
-    "setPolicy(..., with gas budget)",
+    "depositGasBudget(initial budget)",
     "set owner index text records"
   ]);
   for (const call of batch.calls) {
@@ -484,7 +488,7 @@ test("registration batch skips subname setup when the live resolver already exis
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall", "setPolicy", "setOwnerIndex"]
+    ["multicall", "depositGasBudget", "setOwnerIndex"]
   );
 });
 
@@ -581,7 +585,7 @@ test("registration batch tops up budget without resetting a matching enabled pol
   assert.equal(batch.calls[1].value, 150000000000000n);
 });
 
-test("registration batch resets a matching disabled policy so it becomes active again", async () => {
+test("registration batch re-enables disabled ENS policy through resolver records without executor policy writes", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
   const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
 
@@ -623,9 +627,8 @@ test("registration batch resets a matching disabled policy so it becomes active 
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall", "setPolicy", "setOwnerIndex"]
+    ["multicall", "setOwnerIndex"]
   );
-  assert.equal(batch.calls[1].value, 0n);
 });
 
 test("registration submission falls back when the wallet does not support sendCalls", async () => {
@@ -706,7 +709,7 @@ test("registration submission waits for wallet call batches before treating them
   const batch = {
     calls: [
       { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
-      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+      { data: "0xabcdef01", label: "depositGasBudget", to: EXECUTOR_ADDRESS, value: 0n }
     ],
     summary: []
   };
@@ -858,7 +861,7 @@ test("registration fallback preflights each transaction before wallet signing", 
   const batch = {
     calls: [
       { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
-      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 1n }
+      { data: "0xabcdef01", label: "depositGasBudget", to: EXECUTOR_ADDRESS, value: 1n }
     ],
     summary: []
   };
@@ -884,7 +887,7 @@ test("registration fallback preflights each transaction before wallet signing", 
       waitForTransactionReceipt: async () => {
       }
     }),
-    /Connected wallet cannot set policy for this owner ENS/
+    /Agent ENS subname must exist before funding its gas budget/
   );
 
   assert.deepEqual(
@@ -898,7 +901,7 @@ test("registration fallback passes public gas estimates to wallet transactions",
   const batch = {
     calls: [
       { data: "0x1234", label: "multicall", to: PUBLIC_RESOLVER_ADDRESS },
-      { data: "0xd879609b", label: "setPolicy", to: EXECUTOR_ADDRESS, value: 0n }
+      { data: "0xabcdef01", label: "depositGasBudget", to: EXECUTOR_ADDRESS, value: 0n }
     ],
     summary: []
   };
