@@ -2,6 +2,7 @@ export type Hex = `0x${string}`;
 
 export type TaskIntentMessage = {
   agentNode: Hex;
+  policyDigest: Hex;
   target: Hex;
   callDataHash: Hex;
   value: bigint;
@@ -11,7 +12,7 @@ export type TaskIntentMessage = {
 
 export type TaskIntentTypedData = {
   domain: {
-    name: "AgentPolicyExecutor";
+    name: "AgentEnsExecutor";
     version: "1";
     chainId: bigint;
     verifyingContract: Hex;
@@ -20,6 +21,7 @@ export type TaskIntentTypedData = {
   types: {
     TaskIntent: readonly [
       { readonly name: "agentNode"; readonly type: "bytes32" },
+      { readonly name: "policyDigest"; readonly type: "bytes32" },
       { readonly name: "target"; readonly type: "address" },
       { readonly name: "callDataHash"; readonly type: "bytes32" },
       { readonly name: "value"; readonly type: "uint256" },
@@ -28,6 +30,15 @@ export type TaskIntentTypedData = {
     ];
   };
   message: TaskIntentMessage;
+};
+
+export type PolicySnapshot = {
+  target: Hex;
+  selector: Hex;
+  maxValueWei: bigint;
+  maxGasReimbursementWei: bigint;
+  expiresAt: bigint;
+  enabled: boolean;
 };
 
 export type PolicyMetadataInput = {

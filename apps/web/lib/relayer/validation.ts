@@ -2,7 +2,9 @@ import type { Hex, TaskIntentMessage } from "../../../../packages/config/src/ind
 import {
   ZERO_ADDRESS,
   hashCallData,
+  hashPolicySnapshot,
   hashTaskIntent,
+  normalizePolicySnapshot,
   recoverSignerAddress
 } from "../../../../packages/config/src/index.ts";
 import {
@@ -17,6 +19,7 @@ import { RelayerValidationError } from "./errors.ts";
 import type {
   RelayerExecuteBody,
   RelayerExecutePayload,
+  RelayerPolicySnapshotBody,
   RelayerPrecheckContext,
   ValidatedRelayerExecution
 } from "./types.ts";
@@ -27,16 +30,26 @@ import type {
 export function parseRelayerExecuteRequest(body: unknown): RelayerExecutePayload {
   const request = readObject(body, "body") as Partial<RelayerExecuteBody>;
   const intent = readObject(request.intent, "intent");
+  const policySnapshot = readObject(request.policySnapshot, "policySnapshot") as Partial<RelayerPolicySnapshotBody>;
 
   return {
     intent: {
       agentNode: normalizeBytes32(readHex(intent.agentNode, "intent.agentNode")),
+      policyDigest: normalizeBytes32(readHex(intent.policyDigest, "intent.policyDigest")),
       target: normalizeAddress(readHex(intent.target, "intent.target"), "preserve"),
       callDataHash: normalizeBytes32(readHex(intent.callDataHash, "intent.callDataHash")),
       value: readUint256(intent.value, "intent.value"),
       nonce: readUint256(intent.nonce, "intent.nonce"),
       expiresAt: readUint64(intent.expiresAt, "intent.expiresAt")
     },
+    policySnapshot: normalizePolicySnapshot({
+      enabled: readBoolean(policySnapshot.enabled, "policySnapshot.enabled"),
+      expiresAt: readUint64(policySnapshot.expiresAt, "policySnapshot.expiresAt"),
+      maxGasReimbursementWei: readUint256(policySnapshot.maxGasReimbursementWei, "policySnapshot.maxGasReimbursementWei"),
+      maxValueWei: readUint256(policySnapshot.maxValueWei, "policySnapshot.maxValueWei"),
+      selector: normalizeSelector(readHex(policySnapshot.selector, "policySnapshot.selector")),
+      target: normalizeAddress(readHex(policySnapshot.target, "policySnapshot.target"), "preserve")
+    }),
     callData: readHex(request.callData, "callData"),
     signature: readHex(request.signature, "signature", 65)
   };
@@ -60,24 +73,31 @@ export function validateRelayerExecution(input: {
   if (now > payload.intent.expiresAt) {
     throw new RelayerValidationError("IntentExpired", "Signed intent is expired");
   }
-  if (!context.policy.enabled) {
+  if (context.ensPolicy.status !== "active") {
     throw new RelayerValidationError("PolicyDisabled", "Policy is disabled or does not exist");
   }
-  if (now > context.policy.expiresAt) {
+  const policyDigest = hashPolicySnapshot(payload.intent.agentNode, payload.policySnapshot);
+  if (policyDigest !== payload.intent.policyDigest || policyDigest !== context.ensPolicy.digest) {
+    throw new RelayerValidationError("PolicyDigestMismatch", "Submitted policy snapshot does not match ENS policy digest");
+  }
+  if (!payload.policySnapshot.enabled) {
+    throw new RelayerValidationError("PolicyDisabled", "Policy is disabled or does not exist");
+  }
+  if (now > payload.policySnapshot.expiresAt) {
     throw new RelayerValidationError("PolicyExpired", "Policy is expired");
   }
   if (payload.intent.nonce !== context.nextNonce) {
     throw new RelayerValidationError("BadNonce", "Intent nonce does not match executor nextNonce");
   }
-  if (!sameAddress(payload.intent.target, context.policy.target)) {
+  if (!sameAddress(payload.intent.target, payload.policySnapshot.target)) {
     throw new RelayerValidationError("TargetNotAllowed", "Intent target does not match the policy target");
   }
 
   const selector = selectorFromCalldata(payload.callData);
-  if (selector !== context.policy.selector) {
+  if (selector !== payload.policySnapshot.selector) {
     throw new RelayerValidationError("SelectorNotAllowed", "Calldata selector does not match the policy selector");
   }
-  if (payload.intent.value > context.policy.maxValueWei) {
+  if (payload.intent.value > payload.policySnapshot.maxValueWei) {
     throw new RelayerValidationError("ValueTooHigh", "Intent value exceeds the policy value cap");
   }
   if (context.gasBudgetWei !== undefined && context.gasBudgetWei < payload.intent.value) {
@@ -99,9 +119,17 @@ export function validateRelayerExecution(input: {
     ...payload,
     calldataHash,
     digest,
+    policyDigest,
     recoveredSigner,
     selector
   };
+}
+
+function readBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new RelayerValidationError("InvalidRequest", `${field} must be a boolean`);
+  }
+  return value;
 }
 
 function readObject(value: unknown, field: string): Record<string, unknown> {

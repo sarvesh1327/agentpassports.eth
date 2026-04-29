@@ -577,8 +577,9 @@ test("run page signs task intents and submits them to the relayer", async () => 
       componentSource.indexOf('setStatus("submitted")'),
     "run page must advance the next nonce before allowing another submission",
   );
-  assert.match(componentSource, /hashPolicyContractResult/);
-  assert.match(componentSource, /policyHash={livePolicyHash}/);
+  assert.match(componentSource, /policySnapshotFromTextRecords/);
+  assert.match(componentSource, /policySnapshot: draft\.policySnapshot/);
+  assert.match(componentSource, /policyHash={livePolicyState\.policyDigest \?\? null}/);
   assert.doesNotMatch(componentSource, /policyHash={null}/);
   assert.match(componentSource, /taskGasBudgetStatus/);
   assert.match(componentSource, /runSubmitBlocker/);

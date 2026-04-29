@@ -77,6 +77,13 @@ export function encodeAddress(address: Hex): Uint8Array {
 }
 
 /**
+ * ABI-encodes a fixed bytes4 value into a right-padded 32-byte word.
+ */
+export function encodeBytes4(value: Hex): Uint8Array {
+  return concatBytes(hexToBytes(assertHex(value, 4)), new Uint8Array(28));
+}
+
+/**
  * ABI-encodes a uint256 into a 32-byte word.
  */
 export function encodeUint256(value: bigint): Uint8Array {

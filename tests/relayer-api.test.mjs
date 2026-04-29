@@ -10,11 +10,39 @@ const EXECUTOR_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const ENS_REGISTRY_ADDRESS = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const TASK_LOG_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const RESOLVER_ADDRESS = "0x0000000000000000000000000000000000000002";
-const RESOLVED_AGENT_ADDRESS = "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c";
 const CALL_DATA = "0x36736d1e";
 const CALL_DATA_HASH = "0x1d9a6570b4147a41f00c51af3f304ef8ed803c660c2ff922ef8304b1373c9fd2";
-const SIGNATURE =
-  "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069d533580f7728d00643630e708367046eab3ef2359d1e499f8e19e2b1df8d197411c";
+const AGENT_PRIVATE_KEY = `0x${"11".repeat(32)}`;
+const POLICY_SNAPSHOT_VALUES = {
+  enabled: true,
+  expiresAt: 1790000100n,
+  maxGasReimbursementWei: 1000000000000000n,
+  maxValueWei: 0n,
+  selector: "0x36736d1e",
+  target: TASK_LOG_ADDRESS,
+};
+const POLICY_SNAPSHOT = {
+  enabled: true,
+  expiresAt: "1790000100",
+  maxGasReimbursementWei: "1000000000000000",
+  maxValueWei: "0",
+  selector: "0x36736d1e",
+  target: TASK_LOG_ADDRESS,
+};
+const { buildTaskIntentTypedData, hashPolicySnapshot } = await import("../packages/config/src/index.ts");
+const { privateKeyToAccount } = await import("../apps/web/node_modules/viem/_esm/accounts/index.js");
+const POLICY_DIGEST = hashPolicySnapshot(AGENT_NODE, POLICY_SNAPSHOT_VALUES);
+const agentAccount = privateKeyToAccount(AGENT_PRIVATE_KEY);
+const RESOLVED_AGENT_ADDRESS = agentAccount.address;
+const SIGNATURE = await agentAccount.signTypedData(buildTaskIntentTypedData({
+  agentNode: AGENT_NODE,
+  callDataHash: CALL_DATA_HASH,
+  expiresAt: 1790000000n,
+  nonce: 0n,
+  policyDigest: POLICY_DIGEST,
+  target: TASK_LOG_ADDRESS,
+  value: 0n,
+}, 11155111n, EXECUTOR_ADDRESS));
 const RELAYER_PRIVATE_KEY = `0x${"22".repeat(32)}`;
 const TX_HASH = `0x${"33".repeat(32)}`;
 const RESERVATION_STORE_URL = "https://redis.example";
@@ -33,6 +61,7 @@ function requestBody(overrides = {}) {
   return {
     intent: {
       agentNode: AGENT_NODE,
+      policyDigest: POLICY_DIGEST,
       target: TASK_LOG_ADDRESS,
       callDataHash: CALL_DATA_HASH,
       value: "0",
@@ -40,6 +69,7 @@ function requestBody(overrides = {}) {
       expiresAt: 1790000000,
       ...overrides.intent,
     },
+    policySnapshot: POLICY_SNAPSHOT,
     callData: CALL_DATA,
     signature: SIGNATURE,
     ...overrides,
@@ -52,15 +82,9 @@ function precheckContext(overrides = {}) {
     executorAddress: EXECUTOR_ADDRESS,
     gasBudgetWei: 1000000000000000n,
     nextNonce: 0n,
-    policy: {
-      enabled: true,
-      expiresAt: 1790000100n,
-      maxGasReimbursementWei: 1000000000000000n,
-      maxValueWei: 0n,
-      ownerNode: OWNER_NODE,
-      ownerWallet: "0x0000000000000000000000000000000000000003",
-      selector: "0x36736d1e",
-      target: TASK_LOG_ADDRESS,
+    ensPolicy: {
+      digest: POLICY_DIGEST,
+      status: "active",
     },
     resolvedAgentAddress: RESOLVED_AGENT_ADDRESS,
     resolverAddress: RESOLVER_ADDRESS,
@@ -87,8 +111,17 @@ test("relayer helpers normalize request bodies and validate signed task intents"
     callDataHash: CALL_DATA_HASH,
     expiresAt: 1790000000n,
     nonce: 0n,
+    policyDigest: POLICY_DIGEST,
     target: TASK_LOG_ADDRESS,
     value: 0n,
+  });
+  assert.deepEqual(payload.policySnapshot, {
+    enabled: true,
+    expiresAt: 1790000100n,
+    maxGasReimbursementWei: 1000000000000000n,
+    maxValueWei: 0n,
+    selector: "0x36736d1e",
+    target: TASK_LOG_ADDRESS,
   });
 
   const result = validateRelayerExecution({
@@ -98,7 +131,7 @@ test("relayer helpers normalize request bodies and validate signed task intents"
   });
 
   assert.equal(result.calldataHash, CALL_DATA_HASH);
-  assert.equal(result.digest, "0x28133eef788c4579d3f97f81863aef1e16c961c3719a7c3190fc6682d50a8bff");
+  assert.equal(result.policyDigest, POLICY_DIGEST);
   assert.equal(result.recoveredSigner, RESOLVED_AGENT_ADDRESS);
   assert.equal(result.selector, "0x36736d1e");
 });
@@ -125,22 +158,33 @@ test("relayer helpers reject requests before the relayer spends gas", async () =
   assertRelayerCode(
     () =>
       validateRelayerExecution({
+        context: precheckContext({ ensPolicy: { digest: `0x${"55".repeat(32)}`, status: "active" } }),
+        now: 1700000000n,
+        payload,
+      }),
+    "PolicyDigestMismatch",
+  );
+  assertRelayerCode(
+    () => {
+      const highValuePolicy = { ...POLICY_SNAPSHOT_VALUES, maxValueWei: 10n };
+      const highValueDigest = hashPolicySnapshot(AGENT_NODE, highValuePolicy);
+      return validateRelayerExecution({
         context: precheckContext({
+          ensPolicy: { digest: highValueDigest, status: "active" },
           gasBudgetWei: 0n,
-          policy: {
-            ...precheckContext().policy,
-            maxValueWei: 10n
-          }
         }),
         now: 1700000000n,
         payload: {
           ...payload,
+          policySnapshot: highValuePolicy,
           intent: {
             ...payload.intent,
+            policyDigest: highValueDigest,
             value: 1n
           }
         }
-      }),
+      });
+    },
     "InsufficientGasBudget",
   );
   assertRelayerCode(
@@ -316,20 +360,18 @@ test("relayer estimate failures are not reported as gas budget validation errors
 });
 
 test("relayer contract adapters map executor reads into validation input", async () => {
-  const { policyFromContractResult } = await import("../apps/web/lib/relayer/contracts.ts");
+  const { normalizePolicySnapshot } = await import("../apps/web/lib/relayer/contracts.ts");
 
   assert.deepEqual(
-    policyFromContractResult([
-      OWNER_NODE,
-      "0x0000000000000000000000000000000000000003",
-      TASK_LOG_ADDRESS,
-      "0x36736d1e",
-      0n,
-      1000000000000000n,
-      1790000100n,
-      true,
-    ]),
-    precheckContext().policy,
+    normalizePolicySnapshot({
+      enabled: true,
+      expiresAt: 1790000100n,
+      maxGasReimbursementWei: 1000000000000000n,
+      maxValueWei: 0n,
+      selector: "0x36736d1e",
+      target: TASK_LOG_ADDRESS,
+    }),
+    POLICY_SNAPSHOT_VALUES,
   );
 });
 
@@ -525,6 +567,7 @@ test("relayer route submits validated executor transactions from a thin API hand
   assert.match(source, /getBlock/);
   assert.match(source, /timestamp/);
   assert.match(source, /writeContract/);
+  assert.match(source, /policySnapshot/);
   assert.match(source, /waitForTransactionReceipt/);
   assert.match(source, /estimateContractGas/);
   assert.match(source, /getGasPrice/);
@@ -549,5 +592,6 @@ test("relayer route submits validated executor transactions from a thin API hand
     "submitted cache entries should only be written after a successful receipt",
   );
   assert.doesNotMatch(source, /NEXT_PUBLIC_RELAYER_PRIVATE_KEY/);
+  assert.doesNotMatch(source, /functionName: "policies"/);
   assert.doesNotMatch(validationSource, /Date\.now/);
 });

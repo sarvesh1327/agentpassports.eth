@@ -2,18 +2,16 @@
 
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { type Hex } from "@agentpassport/config";
+import { policySnapshotFromTextRecords, type Hex } from "@agentpassport/config";
 import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useSignTypedData } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
-import { hashPolicyContractResult } from "../lib/policyProof";
 import {
   buildStoredSignedTaskPayload,
   buildFreshTaskRunDraft,
@@ -136,13 +134,6 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       : [],
     query: { enabled: Boolean(resolverAddress) }
   });
-  const policyRead = useReadContract({
-    address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
-    functionName: "policies",
-    args: [agentNode],
-    query: { enabled: Boolean(props.executorAddress) }
-  });
   const gasBudgetRead = useReadContract({
     address: props.executorAddress ?? undefined,
     abi: AGENT_POLICY_EXECUTOR_ABI,
@@ -163,6 +154,28 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     () => mapAgentTextRecords(textRecordReads.data as AgentTextReadResult[] | undefined),
     [textRecordReads.data]
   );
+  const textRecordMap = useMemo(
+    () =>
+      Object.fromEntries(
+        textRecords.map((record) => [record.key, record.value === "Unknown" ? "" : record.value])
+      ),
+    [textRecords]
+  );
+  const livePolicyState = useMemo(() => {
+    try {
+      return {
+        error: null,
+        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policySnapshot: policySnapshotFromTextRecords(agentNode, textRecordMap)
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Waiting for ENS policy snapshot",
+        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policySnapshot: null
+      };
+    }
+  }, [agentNode, textRecordMap]);
 
   useEffect(() => {
     if (agentEnsAutofill) {
@@ -291,6 +304,9 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     if (!nextNonceRead.isSuccess) {
       throw new Error("Waiting for executor nextNonce");
     }
+    if (!livePolicyState.policySnapshot) {
+      throw new Error(livePolicyState.error ?? "Waiting for ENS policy snapshot");
+    }
     return buildFreshTaskRunDraft({
       agentName: normalizedAgentName,
       chainId: props.chainId,
@@ -299,6 +315,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       nonce: effectiveNextNonce,
       nowSeconds,
       ownerName: normalizedOwnerName,
+      policySnapshot: livePolicyState.policySnapshot,
       taskDescription,
       taskLogAddress: props.taskLogAddress,
       ttlSeconds: INTENT_TTL_SECONDS
@@ -338,6 +355,8 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     effectiveNextNonce,
     metadataURI,
     nextNonceRead.isSuccess,
+    livePolicyState.error,
+    livePolicyState.policySnapshot,
     normalizedAgentName,
     normalizedOwnerName,
     previewRefreshKey,
@@ -347,18 +366,16 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     taskDescription
   ]);
   const liveAgentAddress = nonZeroAddress(agentAddressRead.data as Hex | undefined);
-  const livePolicy = policyRead.data as PolicyContractResult | undefined;
-  const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = safeBigInt(gasBudgetRead.data as bigint | undefined);
   const gasBudgetStatus = taskGasBudgetStatus({
     gasBudgetWei: liveGasBudget,
-    maxGasReimbursementWei: livePolicy?.[5],
-    maxValueWei: livePolicy?.[4]
+    maxGasReimbursementWei: livePolicyState.policySnapshot?.maxGasReimbursementWei,
+    maxValueWei: livePolicyState.policySnapshot?.maxValueWei
   });
   const runSubmitBlocker = draftState.error ?? gasBudgetStatus.blocker;
   const authorization = taskAuthorizationResult({
     liveAgentAddress,
-    policyEnabled: livePolicy?.[7],
+    policyEnabled: livePolicyState.policySnapshot?.enabled,
     recoveredSigner
   });
 
@@ -413,6 +430,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     const relayerPayload = serializeRelayerExecutePayload({
       callData: draft.callData,
       intent: draft.intent,
+      policySnapshot: draft.policySnapshot,
       signature: signed as Hex
     });
     const storedPayload = buildStoredSignedTaskPayload({
@@ -421,6 +439,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
       digest: draft.digest,
       intent: draft.intent,
       ownerName: normalizedOwnerName,
+      policySnapshot: draft.policySnapshot,
       recoveredSigner: recovered,
       signature: signed as Hex,
       taskHash: draft.taskHash,
@@ -574,8 +593,8 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           gasBudgetWei={liveGasBudget}
           isReverseEnsSettled={!connectedWallet || agentReverseName.isSuccess || agentReverseName.isError}
           nextNonce={nextNonceRead.isSuccess ? effectiveNextNonce : null}
-          policy={livePolicy}
-          policyHash={livePolicyHash}
+          policy={undefined}
+          policyHash={livePolicyState.policyDigest ?? null}
           resolverAddress={resolverAddress}
           reverseEnsName={agentReverseName.data ?? null}
           textRecords={textRecords}
@@ -589,8 +608,8 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           gasBudgetWei={liveGasBudget}
           ownerName={ownerName}
           ownerNode={ownerNode}
-          policyEnabled={livePolicy?.[7]}
-          policyHash={livePolicyHash}
+          policyEnabled={livePolicyState.policySnapshot?.enabled}
+          policyHash={livePolicyState.policyDigest ?? null}
           recoveredSigner={recoveredSigner}
           resolverAddress={resolverAddress}
         />
@@ -604,7 +623,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
         <DemoReadinessPanel
           agentAddress={liveAgentAddress}
           gasBudgetWei={liveGasBudget}
-          policyEnabled={livePolicy?.[7]}
+          policyEnabled={livePolicyState.policySnapshot?.enabled}
           relayerReady={Boolean(props.executorAddress)}
           resolverAddress={resolverAddress}
           taskLogAddress={props.taskLogAddress}

@@ -4,6 +4,7 @@ export type RelayerErrorCode =
   | "InvalidConfig"
   | "PolicyDisabled"
   | "PolicyExpired"
+  | "PolicyDigestMismatch"
   | "IntentExpired"
   | "IntentAlreadyPending"
   | "TransactionReverted"
