@@ -84,6 +84,35 @@ test("registration batch updates owner ENS index after agent registration", asyn
   );
 });
 
+test("registration batch requires the owner resolver because dashboard membership is ENS-backed", async () => {
+  const { buildRegistrationBatch } = await import("../apps/web/lib/registrationBatch.ts");
+
+  assert.throws(
+    () => buildRegistrationBatch({
+      agentLabel: "assistant",
+      agentNode: AGENT_NODE,
+      connectedWallet: CONNECTED_WALLET,
+      ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+      executorAddress: EXECUTOR_ADDRESS,
+      gasBudgetWei: "10000000000000000",
+      isOwnerWrapped: false,
+      maxGasReimbursementWei: "1000000000000000",
+      maxValueWei: "0",
+      normalizedAgentAddress: CONNECTED_WALLET,
+      ownerAgentLabels: ["worker"],
+      ownerNode: OWNER_NODE,
+      ownerResolverAddress: null,
+      policyExpiresAt: "1790000000",
+      publicResolverAddress: RESOLVER_ADDRESS,
+      resolverAddress: RESOLVER_ADDRESS,
+      shouldCreateSubnameRecord: true,
+      taskLogAddress: TASK_LOG_ADDRESS,
+      textRecords: [{ key: "agent.status", value: "active" }]
+    }),
+    /Owner resolver address is required/
+  );
+});
+
 test("owner dashboard route renders owner index, multiple agent cards, and quick actions", async () => {
   await assertFile("apps/web/app/owner/[name]/page.tsx");
   await assertFile("apps/web/components/OwnerDashboardView.tsx");
@@ -111,6 +140,26 @@ test("owner dashboard route renders owner index, multiple agent cards, and quick
   assert.match(dashboardSource, /buildOwnerAgentNames/);
   assert.match(dashboardSource, /loadTaskHistory/);
   assert.match(dashboardSource, /\/register\?owner=/);
+});
+
+test("owner dashboard aggregates live agent state instead of showing placeholder summary values", async () => {
+  const dashboardSource = await readText("apps/web/components/OwnerDashboardView.tsx");
+
+  for (const token of [
+    "agentSnapshots",
+    "totalGasBudgetWei",
+    "activeAgentCount",
+    "disabledAgentCount",
+    "onSnapshot",
+    "waitForTransactionReceipt",
+    "refetch"
+  ]) {
+    assert.match(dashboardSource, new RegExp(token), `${token} should be used for live dashboard aggregation`);
+  }
+
+  assert.doesNotMatch(dashboardSource, /label="Total Gas Budget" value="Live"/);
+  assert.doesNotMatch(dashboardSource, /label="Disabled" value="0"/);
+  assert.doesNotMatch(dashboardSource, /countStatusHint/);
 });
 
 test("primary UI flow points owners through the dashboard instead of legacy standalone pages", async () => {
@@ -257,6 +306,47 @@ test("agent management page exposes policy, gas, signer, delete, and persistent 
   assert.match(viewSource, /TaskHistoryPanel/);
 });
 
+test("agent page exposes visible signer and policy management and refreshes after wallet transactions", async () => {
+  const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const managementSource = await readText("apps/web/components/AgentManagementPanel.tsx");
+  const source = `${viewSource}\n${managementSource}`;
+
+  for (const token of [
+    "Policy metadata",
+    "Policy URI",
+    "agent.policy.hash",
+    "Update signer address",
+    "waitForTransactionReceipt",
+    "refreshAgentReads",
+    "generatePolicyMetadata",
+    "unpinOldPolicyMetadata"
+  ]) {
+    assert.match(source, new RegExp(token), `${token} should be part of visible agent management`);
+  }
+
+  assert.doesNotMatch(managementSource, /agent-management-utility sr-only/);
+  assert.doesNotMatch(viewSource, /window\.prompt/);
+});
+
+test("agent page keeps explicit ENS proof and demo route intent visible in source", async () => {
+  const agentSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const runPageSource = await readText("apps/web/app/run/page.tsx");
+  const revokePageSource = await readText("apps/web/app/revoke/page.tsx");
+
+  for (const token of [
+    "Agent proof",
+    "Recovered signer",
+    "Live resolver",
+    "agentNode",
+    "ownerNode"
+  ]) {
+    assert.match(agentSource, new RegExp(token), `${token} should be visible in agent proof UI`);
+  }
+
+  assert.match(runPageSource, /Intentional demo route/);
+  assert.match(revokePageSource, /Intentional demo route/);
+});
+
 test("new owner and agent UI controls are wired to concrete interactions", async () => {
   const dashboardSource = await readText("apps/web/components/OwnerDashboardView.tsx");
   const agentSource = await readText("apps/web/components/AgentProfileView.tsx");
@@ -271,7 +361,7 @@ test("new owner and agent UI controls are wired to concrete interactions", async
   for (const token of [
     "useSendTransaction",
     "writeAgentStatus",
-    "promptPolicyUriUpdate",
+    "#agent-management-policy-title",
     "depositGasBudget",
     "withdrawGasBudget",
     "agent-gas-add-input",
@@ -284,7 +374,7 @@ test("new owner and agent UI controls are wired to concrete interactions", async
 
 test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion", async () => {
   const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
-  const { ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } = await import("../apps/web/lib/contracts.ts");
+  const { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } = await import("../apps/web/lib/contracts.ts");
 
   const blocked = buildAgentDeletePlan({
     agentLabel: "assistant",
@@ -303,19 +393,27 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
     agentLabel: "assistant",
     agentNode: AGENT_NODE,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: 123n,
     isOwnerWrapped: false,
     ownerAgentLabels: ["assistant", "worker"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS
   });
   assert.equal(plan.canDelete, true);
-  assert.equal(plan.calls.length, 2);
+  assert.equal(plan.calls.length, 3);
 
-  const registryCall = decodeFunctionData({ abi: ENS_REGISTRY_ABI, data: plan.calls[0].data });
+  const withdrawCall = decodeFunctionData({ abi: AGENT_POLICY_EXECUTOR_ABI, data: plan.calls[0].data });
+  assert.equal(withdrawCall.functionName, "withdrawGasBudget");
+  assert.deepEqual(withdrawCall.args, [AGENT_NODE, 123n]);
+  assert.equal(plan.calls[0].label, "withdrawGasBudget");
+  assert.equal(plan.calls[0].to, EXECUTOR_ADDRESS);
+
+  const registryCall = decodeFunctionData({ abi: ENS_REGISTRY_ABI, data: plan.calls[1].data });
   assert.equal(registryCall.functionName, "setSubnodeRecord");
   assert.deepEqual(registryCall.args, [OWNER_NODE, labelhash("assistant"), ZERO_ADDRESS, ZERO_ADDRESS, 0n]);
 
-  const resolverCall = decodeFunctionData({ abi: PUBLIC_RESOLVER_ABI, data: plan.calls[1].data });
+  const resolverCall = decodeFunctionData({ abi: PUBLIC_RESOLVER_ABI, data: plan.calls[2].data });
   assert.equal(resolverCall.functionName, "multicall");
   const textCalls = resolverCall.args[0].map((data) => decodeFunctionData({ abi: PUBLIC_RESOLVER_ABI, data }));
   assert.deepEqual(
@@ -325,4 +423,64 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
       [OWNER_NODE, "agentpassports.agents", "worker"]
     ]
   );
+});
+
+test("delete flow skips gas withdrawal when there is no remaining agent budget", async () => {
+  const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
+
+  const plan = buildAgentDeletePlan({
+    agentLabel: "assistant",
+    agentNode: AGENT_NODE,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: 0n,
+    isOwnerWrapped: false,
+    ownerAgentLabels: ["assistant"],
+    ownerNode: OWNER_NODE,
+    ownerResolverAddress: RESOLVER_ADDRESS
+  });
+
+  assert.equal(plan.canDelete, true);
+  assert.deepEqual(plan.calls.map((call) => call.label), ["deleteSubname", "setOwnerIndex"]);
+});
+
+test("delete flow blocks positive gas budget deletion without executor withdrawal target", async () => {
+  const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
+
+  const plan = buildAgentDeletePlan({
+    agentLabel: "assistant",
+    agentNode: AGENT_NODE,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    gasBudgetWei: 1n,
+    isOwnerWrapped: false,
+    ownerAgentLabels: ["assistant"],
+    ownerNode: OWNER_NODE,
+    ownerResolverAddress: RESOLVER_ADDRESS
+  });
+
+  assert.equal(plan.canDelete, false);
+  assert.match(plan.reason ?? "", /gas budget withdrawal/i);
+  assert.deepEqual(plan.calls, []);
+});
+
+test("delete flow blocks wrapped agent subnames and waits for deletion receipts before reporting success", async () => {
+  const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
+  const managementSource = await readText("apps/web/components/AgentManagementPanel.tsx");
+
+  const blocked = buildAgentDeletePlan({
+    agentLabel: "assistant",
+    agentNode: AGENT_NODE,
+    ensRegistryAddress: ENS_REGISTRY_ADDRESS,
+    isAgentWrapped: true,
+    isOwnerWrapped: false,
+    ownerAgentLabels: ["assistant"],
+    ownerNode: OWNER_NODE,
+    ownerResolverAddress: RESOLVER_ADDRESS
+  });
+  assert.equal(blocked.canDelete, false);
+  assert.match(blocked.reason ?? "", /wrapped agent/i);
+
+  for (const token of ["waitForTransactionReceipt", "onDeleted", "Delete agent transactions confirmed"]) {
+    assert.match(managementSource, new RegExp(token), `${token} should be used by the delete UI`);
+  }
 });

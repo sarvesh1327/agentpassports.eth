@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
 import { usePublicClient, useReadContract, useReadContracts, useSendTransaction } from "wagmi";
 import { encodeFunctionData } from "viem";
@@ -40,6 +40,13 @@ type TextReadResult = {
   status?: string;
 };
 
+type AgentDashboardSnapshot = {
+  gasBudgetWei: bigint;
+  latestTaskTimestamp: string | null;
+  policyEnabled: boolean | null;
+  status: string;
+};
+
 /**
  * Renders the live owner ENS dashboard backed by agentpassports.v and agentpassports.agents.
  */
@@ -77,6 +84,18 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
   const ownerAgents = buildOwnerAgentNames(props.ownerName, ownerAgentLabels);
   const registerHref = `/register?owner=${encodeURIComponent(props.ownerName)}`;
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [agentSnapshots, setAgentSnapshots] = useState<Record<string, AgentDashboardSnapshot>>({});
+  const dashboardSnapshots = ownerAgents.map((agent) => agentSnapshots[agent.name]).filter(Boolean);
+  const totalGasBudgetWei = dashboardSnapshots.reduce((total, snapshot) => total + snapshot.gasBudgetWei, 0n);
+  const activeAgentCount = dashboardSnapshots.filter((snapshot) => snapshot.status === "active").length;
+  const disabledAgentCount = dashboardSnapshots.filter((snapshot) => snapshot.status === "disabled").length;
+
+  const handleAgentSnapshot = useCallback((agentName: string, snapshot: AgentDashboardSnapshot) => {
+    setAgentSnapshots((current) => ({
+      ...current,
+      [agentName]: snapshot
+    }));
+  }, []);
 
   return (
     <div className="owner-dashboard">
@@ -99,9 +118,9 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
           value={ownerResolverAddress ? shortenHex(ownerResolverAddress) : "Unknown"}
         />
         <SummaryCell label="Agents" value={ownerAgents.length.toString()} detail="Total" />
-        <SummaryCell label="Total Gas Budget" value="Live" detail="Per agent below" />
-        <SummaryCell label="Active" value={countStatusHint(ownerAgents.length, "active")} detail={version ? `v${version}` : "ENS index"} tone="success" />
-        <SummaryCell label="Disabled" value="0" detail="Live status" tone="danger" />
+        <SummaryCell label="Total Gas Budget" value={formatWei(totalGasBudgetWei)} detail="Live aggregate" />
+        <SummaryCell label="Active" value={activeAgentCount.toString()} detail={version ? `v${version}` : "ENS index"} tone="success" />
+        <SummaryCell label="Disabled" value={disabledAgentCount.toString()} detail="Live status" tone="danger" />
       </section>
 
       {ownerAgents.length > 0 ? (
@@ -123,6 +142,7 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
               key={agent.name}
               ownerName={props.ownerName}
               ownerNode={props.ownerNode}
+              onSnapshot={handleAgentSnapshot}
               taskLogAddress={props.taskLogAddress}
               taskLogStartBlock={props.taskLogStartBlock}
             />
@@ -164,16 +184,13 @@ function SummaryCell(props: { detail?: string; label: string; title?: string; to
   );
 }
 
-function countStatusHint(count: number, status: "active"): string {
-  return status === "active" ? count.toString() : "0";
-}
-
 function OwnerDashboardAgentCard(props: {
   agentLabel: string;
   agentName: string;
   chainId: string;
   ensRegistryAddress: Hex | null;
   executorAddress: Hex | null;
+  onSnapshot: (agentName: string, snapshot: AgentDashboardSnapshot) => void;
   ownerName: string;
   ownerNode: Hex;
   taskLogAddress: Hex | null;
@@ -233,6 +250,15 @@ function OwnerDashboardAgentCard(props: {
   const gasBudgetWei = typeof gasBudget.data === "bigint" ? gasBudget.data : 0n;
 
   useEffect(() => {
+    props.onSnapshot(props.agentName, {
+      gasBudgetWei,
+      latestTaskTimestamp: tasks[0]?.timestamp ?? null,
+      policyEnabled: typeof policyState?.[7] === "boolean" ? policyState[7] : null,
+      status
+    });
+  }, [gasBudgetWei, policyState, props.agentName, props.onSnapshot, status, tasks]);
+
+  useEffect(() => {
     let cancelled = false;
     loadTaskHistory({
       agentNode,
@@ -259,7 +285,7 @@ function OwnerDashboardAgentCard(props: {
       return;
     }
 
-    await sendTransactionAsync({
+    const hash = await sendTransactionAsync({
       data: encodeFunctionData({
         abi: PUBLIC_RESOLVER_ABI,
         functionName: "setText",
@@ -267,6 +293,17 @@ function OwnerDashboardAgentCard(props: {
       }),
       to: resolverAddress
     });
+
+    // The dashboard summary is derived from live reads, so wait for the write and
+    // refresh the card before presenting the new aggregate counts.
+    if (publicClient) {
+      await publicClient.waitForTransactionReceipt({ hash });
+    }
+    await Promise.all([
+      textRecordReads.refetch(),
+      policy.refetch(),
+      gasBudget.refetch()
+    ]);
   }
 
   return (

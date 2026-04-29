@@ -260,7 +260,10 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     }),
     taskLogAddress: props.taskLogAddress
   });
-  const submitBlocker = ownerEnsStatus.blocker ?? registrationDraftStatus.blocker;
+  const ownerIndexBlocker = ownerResolver.isSuccess && !ownerResolverAddress
+    ? "Owner resolver address is required for owner dashboard index updates"
+    : null;
+  const submitBlocker = ownerEnsStatus.blocker ?? ownerIndexBlocker ?? registrationDraftStatus.blocker;
   const hasPreparedTransactions = registrationDraftStatus.canSubmit;
   const preparedBatchSummary = useMemo(
     () => buildPreparedBatchSummary(),
@@ -346,6 +349,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     if (safeBigInt(preview.gasBudgetWei) === 0n) {
       throw new Error("Enter a nonzero gas budget before submitting registration");
     }
+    if (!ownerResolverAddress) {
+      throw new Error("Owner resolver address is required for owner dashboard index updates");
+    }
 
     const resolverAddress = requireLiveResolverAddress();
 
@@ -387,6 +393,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       !normalizedAgentAddress ||
       !props.executorAddress ||
       !props.taskLogAddress ||
+      !ownerResolverAddress ||
       !resolverWriteAddress
     ) {
       return [];

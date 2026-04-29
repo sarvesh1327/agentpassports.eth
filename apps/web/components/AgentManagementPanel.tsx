@@ -1,10 +1,10 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData } from "viem";
-import { useReadContract, useSendTransaction } from "wagmi";
+import { usePublicClient, useReadContract, useSendTransaction } from "wagmi";
 import {
   AGENT_POLICY_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
@@ -24,14 +24,23 @@ type AgentManagementPanelProps = {
   gasBudgetWei: bigint;
   initialProfile: SerializableAgentProfile;
   liveAgentAddress: Hex | null;
+  onDeleted: () => void;
+  onRefresh: () => Promise<void>;
   policyEnabled?: boolean;
   resolverAddress: Hex | null;
+};
+
+type GeneratedPolicyMetadataResponse = {
+  policyHash?: Hex;
+  policyUri?: string;
+  status?: string;
 };
 
 /**
  * Provides reversible owner management actions for an ENS-backed agent passport.
  */
 export function AgentManagementPanel(props: AgentManagementPanelProps) {
+  const publicClient = usePublicClient({ chainId: Number(props.initialProfile.chainId) });
   const { sendTransactionAsync } = useSendTransaction();
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("Management actions are ready when ENS and executor addresses are configured.");
@@ -75,6 +84,19 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     args: [BigInt(props.initialProfile.ownerNode)],
     query: { enabled: ownerIsWrapped }
   });
+  const agentRegistryOwner = useReadContract({
+    address: props.initialProfile.ensRegistryAddress ?? undefined,
+    abi: ENS_REGISTRY_ABI,
+    functionName: "owner",
+    args: [props.initialProfile.agentNode],
+    query: { enabled: Boolean(props.initialProfile.ensRegistryAddress) }
+  });
+  const agentRegistryOwnerAddress = nonZeroAddress(agentRegistryOwner.data as Hex | undefined);
+  const agentIsWrapped = Boolean(
+    agentRegistryOwnerAddress &&
+      props.initialProfile.nameWrapperAddress &&
+      agentRegistryOwnerAddress.toLowerCase() === props.initialProfile.nameWrapperAddress.toLowerCase()
+  );
 
   const ownerAgentLabels = parseOwnerAgentIndex(typeof ownerAgentIndex.data === "string" ? ownerAgentIndex.data : "");
   const deletePlan = useMemo(
@@ -83,6 +105,9 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
         agentLabel: props.initialProfile.agentLabel,
         agentNode: props.initialProfile.agentNode,
         ensRegistryAddress: props.initialProfile.ensRegistryAddress,
+        executorAddress: props.initialProfile.executorAddress,
+        gasBudgetWei: props.gasBudgetWei,
+        isAgentWrapped: agentIsWrapped,
         isOwnerWrapped: ownerIsWrapped,
         ownerAgentLabels,
         ownerNode: props.initialProfile.ownerNode,
@@ -92,12 +117,28 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
       ownerAgentLabels,
       ownerIsWrapped,
       ownerResolverAddress,
+      agentIsWrapped,
       props.initialProfile.agentLabel,
       props.initialProfile.agentNode,
       props.initialProfile.ensRegistryAddress,
-      props.initialProfile.ownerNode
+      props.initialProfile.executorAddress,
+      props.initialProfile.ownerNode,
+      props.gasBudgetWei
     ]
   );
+
+  useEffect(() => {
+    setSignerAddress(props.liveAgentAddress ?? "");
+  }, [props.liveAgentAddress]);
+
+  async function runManagementAction(action: () => Promise<void>) {
+    try {
+      await action();
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(error instanceof Error ? error.message : "Management action failed.");
+    }
+  }
 
   async function sendManagementCall(input: { data: Hex; label: string; to?: Hex | null; value?: bigint }) {
     if (!input.to) {
@@ -106,9 +147,13 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
     setStatus("loading");
     setStatusMessage(`Awaiting wallet approval for ${input.label}`);
-    await sendTransactionAsync({ data: input.data, to: input.to, value: input.value });
+    const hash = await sendTransactionAsync({ data: input.data, to: input.to, value: input.value });
+    if (publicClient) {
+      await publicClient.waitForTransactionReceipt({ hash });
+    }
+    await props.onRefresh();
     setStatus("success");
-    setStatusMessage(`${input.label} transaction submitted`);
+    setStatusMessage(`${input.label} transaction confirmed`);
   }
 
   async function handleStatusWrite(nextStatus: "active" | "disabled") {
@@ -125,15 +170,29 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
   async function handlePolicyMetadataSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const generatedPolicy = await generatePolicyMetadata();
     await sendManagementCall({
       data: encodeFunctionData({
         abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [props.initialProfile.agentNode, "agent.policy.uri", policyUri]
+        functionName: "multicall",
+        args: [[
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [props.initialProfile.agentNode, "agent.policy.uri", generatedPolicy.policyUri]
+          }),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [props.initialProfile.agentNode, "agent.policy.hash", generatedPolicy.policyHash]
+          })
+        ]]
       }),
       label: "Edit policy metadata",
       to: props.resolverAddress
     });
+    await unpinOldPolicyMetadata(policyUri, generatedPolicy.policyUri);
+    setPolicyUri(generatedPolicy.policyUri);
   }
 
   async function handleSignerSubmit(event: FormEvent<HTMLFormElement>) {
@@ -192,20 +251,121 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     setStatus("loading");
     setStatusMessage("Awaiting wallet approval for Delete agent");
     for (const call of deletePlan.calls) {
-      await sendTransactionAsync({ data: call.data, to: call.to });
+      const hash = await sendTransactionAsync({ data: call.data, to: call.to });
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash });
+      }
     }
+    await props.onRefresh();
     setStatus("success");
-    setStatusMessage("Delete agent transactions submitted. Historical task history remains visible.");
+    setStatusMessage("Delete agent transactions confirmed. Historical task history remains visible.");
+    props.onDeleted();
+  }
+
+  async function generatePolicyMetadata(): Promise<{ policyHash: Hex; policyUri: string }> {
+    const response = await fetch("/api/policy-metadata", {
+      body: JSON.stringify({
+        agentAddress: props.liveAgentAddress,
+        agentName: props.initialProfile.agentName,
+        agentNode: props.initialProfile.agentNode,
+        capabilities: props.initialProfile.capabilities,
+        chainId: props.initialProfile.chainId,
+        executorAddress: props.initialProfile.executorAddress,
+        expiresAt: props.initialProfile.policyExpiresAt,
+        maxGasReimbursementWei: props.initialProfile.maxGasReimbursementWei,
+        maxValueWei: props.initialProfile.maxValueWei,
+        ownerName: props.initialProfile.ownerName,
+        ownerNode: props.initialProfile.ownerNode,
+        status: props.policyEnabled === false ? "disabled" : "active",
+        target: props.initialProfile.taskLogAddress
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    });
+    const body = (await response.json().catch(() => ({}))) as GeneratedPolicyMetadataResponse;
+
+    if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
+      throw new Error("Policy metadata Pinata upload failed");
+    }
+
+    return { policyHash: body.policyHash, policyUri: body.policyUri };
+  }
+
+  async function unpinOldPolicyMetadata(oldPolicyUri: string, newPolicyUri: string): Promise<void> {
+    if (!oldPolicyUri.trim() || oldPolicyUri.trim() === newPolicyUri.trim()) {
+      return;
+    }
+
+    await fetch("/api/policy-metadata", {
+      body: JSON.stringify({ policyUri: oldPolicyUri }),
+      headers: { "content-type": "application/json" },
+      method: "DELETE"
+    }).catch(() => undefined);
   }
 
   return (
     <>
+      <section className="management-panel" aria-labelledby="agent-management-status-title">
+        <div className="management-panel__header">
+          <h2 id="agent-management-status-title">Agent management</h2>
+          <StatusBanner
+            details={`Resolver ${props.resolverAddress ? shortenHex(props.resolverAddress) : "not configured"}`}
+            message={statusMessage}
+            title="Management status"
+            variant={status}
+          />
+        </div>
+
+        <div className="management-panel__grid">
+          <section aria-labelledby="agent-management-policy-status-title">
+            <h3 id="agent-management-policy-status-title">Disable policy</h3>
+            <p>Current policy status: {props.policyEnabled ? "enabled" : "disabled or unknown"}</p>
+            <div className="management-panel__actions">
+              <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("disabled"))}>Disable policy</button>
+              <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("active"))}>Enable policy</button>
+            </div>
+          </section>
+
+          <form onSubmit={(event) => void runManagementAction(() => handlePolicyMetadataSubmit(event))}>
+            <h3 id="agent-management-policy-title">Edit policy metadata <span className="sr-only">Policy metadata</span></h3>
+            <label>
+              <span>Policy URI</span>
+              <input aria-label="Policy URI" readOnly value={policyUri || "Generated on save"} />
+            </label>
+            <button type="submit">Regenerate policy metadata</button>
+          </form>
+
+          <form onSubmit={(event) => void runManagementAction(() => handleSignerSubmit(event))}>
+            <h3>Update signer address</h3>
+            <label>
+              <span>ENS addr(agent)</span>
+              <input aria-label="ENS addr(agent)" value={signerAddress} onChange={(event) => setSignerAddress(event.target.value)} />
+            </label>
+            <button type="submit">Update signer address</button>
+          </form>
+
+          <form onSubmit={(event) => void runManagementAction(() => handleGasSubmit(event, "deposit"))}>
+            <h3 id="agent-management-gas-title">Add gas</h3>
+            <p>Current budget: {formatWei(props.gasBudgetWei)}</p>
+            <input aria-label="Gas amount ETH" value={gasAmountEth} onChange={(event) => setGasAmountEth(event.target.value)} />
+            <button type="submit">Add gas</button>
+          </form>
+
+          <form onSubmit={(event) => void runManagementAction(() => handleGasSubmit(event, "withdraw"))}>
+            <h3 id="agent-management-withdraw-title">Withdraw gas</h3>
+            <p>Prepared amount: {parseEthInputToWeiString(gasAmountEth)} wei</p>
+            <button type="submit">Withdraw gas</button>
+          </form>
+        </div>
+      </section>
+
       <section className="agent-delete-band" aria-labelledby="agent-management-delete-title" id="agent-management-title">
         <div className="agent-delete-band__copy">
           <span className="agent-delete-band__icon" aria-hidden="true"><UiIcon name="warning" size={34} /></span>
           <div>
             <h2 id="agent-management-delete-title">Delete agent</h2>
             <p>This will permanently remove the agent's subname and dashboard index.</p>
+            <p>Remaining gas budget is withdrawn to the owner manager before deletion.</p>
             <p>Task history remains on-chain and cannot be deleted.</p>
           </div>
         </div>
@@ -222,7 +382,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
                   onChange={(event) => setDeleteConfirmation(event.target.value)}
                 />
               </label>
-              <button type="button" className="agent-delete-band__button" onClick={() => void handleDelete()}>
+              <button type="button" className="agent-delete-band__button" onClick={() => void runManagementAction(handleDelete)}>
                 <UiIcon name="trash" size={18} /> Delete agent
               </button>
             </>
@@ -230,43 +390,6 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
             <p className="field-help field-help--warning">{deletePlan.reason}</p>
           )}
         </div>
-      </section>
-
-      <section className="agent-management-utility sr-only" aria-labelledby="agent-management-status-title">
-        <h2>Agent management</h2>
-        <section aria-labelledby="agent-management-status-title">
-          <h3 id="agent-management-status-title">Disable policy</h3>
-          <p>Current policy status: {props.policyEnabled ? "enabled" : "disabled or unknown"}</p>
-          <button type="button" onClick={() => void handleStatusWrite("disabled")}>Disable policy</button>
-          <button type="button" onClick={() => void handleStatusWrite("active")}>Enable policy</button>
-        </section>
-        <form onSubmit={handlePolicyMetadataSubmit}>
-          <h3 id="agent-management-policy-title">Edit policy metadata</h3>
-          <input aria-label="Policy URI" value={policyUri} onChange={(event) => setPolicyUri(event.target.value)} />
-          <button type="submit">Save policy URI</button>
-        </form>
-        <form onSubmit={(event) => void handleGasSubmit(event, "deposit")}>
-          <h3 id="agent-management-gas-title">Add gas</h3>
-          <p>Current budget: {formatWei(props.gasBudgetWei)}</p>
-          <input aria-label="Gas amount ETH" value={gasAmountEth} onChange={(event) => setGasAmountEth(event.target.value)} />
-          <button type="submit">Add gas</button>
-        </form>
-        <form onSubmit={(event) => void handleGasSubmit(event, "withdraw")}>
-          <h3 id="agent-management-withdraw-title">Withdraw gas</h3>
-          <p>Prepared amount: {parseEthInputToWeiString(gasAmountEth)} wei</p>
-          <button type="submit">Withdraw gas</button>
-        </form>
-        <form onSubmit={handleSignerSubmit}>
-          <h3>Update signer address</h3>
-          <input aria-label="ENS addr(agent)" value={signerAddress} onChange={(event) => setSignerAddress(event.target.value)} />
-          <button type="submit">Update signer address</button>
-        </form>
-        <StatusBanner
-          details={`Resolver ${props.resolverAddress ? shortenHex(props.resolverAddress) : "not configured"}`}
-          message={statusMessage}
-          title="Management status"
-          variant={status}
-        />
       </section>
     </>
   );

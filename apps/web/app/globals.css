@@ -1200,6 +1200,55 @@ input {
   background: #ffffff;
 }
 
+.management-panel {
+  display: grid;
+  gap: 16px;
+  padding: 18px 22px;
+}
+
+.management-panel__header {
+  display: grid;
+  gap: 12px;
+}
+
+.management-panel__grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.management-panel__grid > section,
+.management-panel__grid > form {
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.management-panel__grid h3 {
+  color: #0f172a;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.management-panel__grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.management-panel__grid input {
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 9px 10px;
+}
+
+.management-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .owner-index-card {
   display: grid;
   gap: 16px;
@@ -2021,6 +2070,7 @@ label.register-field-stack {
   .detail-grid,
   .field-grid,
   .fact-grid,
+  .management-panel__grid,
   .readiness-panel__grid {
     grid-template-columns: 1fr;
   }
