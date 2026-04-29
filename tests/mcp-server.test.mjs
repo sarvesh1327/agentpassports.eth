@@ -32,7 +32,11 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "get_agent_policy",
     "check_task_against_policy",
     "build_task_intent",
-    "submit_task"
+    "submit_task",
+    "uniswap_check_approval",
+    "uniswap_validate_swap_against_ens_policy",
+    "uniswap_quote",
+    "uniswap_execute_swap"
   ]);
 
   for (const tool of AGENTPASSPORT_MCP_TOOLS) {
@@ -55,6 +59,10 @@ test("MCP tools use zod schemas with the required public arguments", async () =>
   assert.deepEqual(Object.keys(byName.check_task_against_policy.inputShape), ["agentName", "task"]);
   assert.deepEqual(Object.keys(byName.build_task_intent.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds"]);
   assert.deepEqual(Object.keys(byName.submit_task.inputShape), ["agentName", "intent", "policySnapshot", "callData", "signature"]);
+  assert.deepEqual(Object.keys(byName.uniswap_check_approval.inputShape), ["agentName", "amount", "chainId", "token"]);
+  assert.deepEqual(Object.keys(byName.uniswap_validate_swap_against_ens_policy.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
+  assert.deepEqual(Object.keys(byName.uniswap_quote.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
+  assert.deepEqual(Object.keys(byName.uniswap_execute_swap.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type", "permit2Signature", "quote", "quoteId"]);
 });
 
 test("MCP safety helpers reject missing or non-exact ENS active status before signing", async () => {

@@ -171,6 +171,24 @@ export function swapPolicyToExecutableSnapshot(input: {
   });
 }
 
+/**
+ * Reads V2 Uniswap policy constraints from ENS text records.
+ */
+export function swapPolicyFromTextRecords(records: Record<string, string>): SwapPolicy {
+  return normalizeSwapPolicy({
+    allowedChainId: readUnsignedText(records, "agent.policy.uniswap.chainId"),
+    allowedTokensIn: readAddressListText(records, "agent.policy.uniswap.allowedTokenIn"),
+    allowedTokensOut: readAddressListText(records, "agent.policy.uniswap.allowedTokenOut"),
+    deadlineSeconds: readUnsignedText(records, "agent.policy.uniswap.deadlineSeconds"),
+    enabled: (records["agent.policy.uniswap.enabled"] ?? "true").trim().toLowerCase() !== "false",
+    maxAmountInWei: readUnsignedText(records, "agent.policy.uniswap.maxInputAmount"),
+    maxSlippageBps: readUnsignedText(records, "agent.policy.uniswap.maxSlippageBps"),
+    recipient: readRequiredText(records, "agent.policy.uniswap.recipient") as Hex,
+    router: readRequiredText(records, "agent.policy.uniswap.router") as Hex,
+    selector: readRequiredText(records, "agent.policy.uniswap.selector") as Hex
+  });
+}
+
 function assertUint96(value: bigint, label: string): bigint {
   const normalized = assertUint256(value);
   if (normalized >= 1n << 96n) {
@@ -209,4 +227,11 @@ function normalizeAddressList(values: readonly Hex[]): readonly Hex[] {
     throw new Error("Expected at least one allowed token");
   }
   return normalized;
+}
+
+function readAddressListText(records: Record<string, string>, key: string): readonly Hex[] {
+  return readRequiredText(records, key)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean) as Hex[];
 }
