@@ -201,6 +201,22 @@ test("AgentPolicyExecutor owner actions use the current ENS manager instead of s
   assert.doesNotMatch(revokeBody, /policy\.ownerWallet/);
 });
 
+test("AgentEnsExecutor keeps V1 policy source of truth in ENS instead of executor storage", async () => {
+  const source = await readText("contracts/src/AgentEnsExecutor.sol");
+
+  assert.match(source, /struct PolicySnapshot/);
+  assert.match(source, /bytes32 policyDigest/);
+  assert.match(source, /_readEnsPolicyDigest\(resolver, intent\.agentNode\)/);
+  assert.match(source, /ITextResolverV1\(resolver\)\.text\(agentNode, "agent\.policy\.digest"\)/);
+  assert.match(source, /ITextResolverV1\(resolver\)\.text\(intent\.agentNode, "agent\.status"\)/);
+  assert.match(source, /function hashPolicySnapshot/);
+  assert.match(source, /mapping\(bytes32 => uint256\) public gasBudgetWei/);
+  assert.match(source, /mapping\(bytes32 => uint256\) public nextNonce/);
+  assert.doesNotMatch(source, /mapping\(bytes32 => Policy\) public policies/);
+  assert.doesNotMatch(source, /function setPolicy\b/);
+  assert.doesNotMatch(source, /function revokePolicy\b/);
+});
+
 test("Foundry deployment script reads environment addresses and emits deployed contract addresses", async () => {
   await assertFile("contracts/script/Deploy.s.sol");
   const source = await readText("contracts/script/Deploy.s.sol");
@@ -220,6 +236,7 @@ test("contract behavior tests and ENS mocks are present for Foundry", async () =
   for (const file of [
     "contracts/test/TaskLog.t.sol",
     "contracts/test/AgentPolicyExecutor.t.sol",
+    "contracts/test/AgentEnsExecutor.t.sol",
     "contracts/test/mocks/MockENSRegistry.sol",
     "contracts/test/mocks/MockResolver.sol",
     "contracts/test/mocks/MockNameWrapper.sol",
