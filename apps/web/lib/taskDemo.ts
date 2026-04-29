@@ -4,15 +4,20 @@ import {
   hashPolicySnapshot,
   hashTaskIntent,
   namehashEnsName,
+  normalizeEnsName,
   normalizePolicySnapshot,
   recoverSignerAddress,
+  serializePolicySnapshot,
+  serializeTaskIntent,
   type Hex,
   type PolicySnapshot,
   type TaskIntentMessage,
   type TaskIntentTypedData
-} from "@agentpassport/config";
+} from "@agentpassport/sdk";
 import { encodeFunctionData, keccak256, toHex } from "viem";
 import { TASK_LOG_ABI } from "./contracts.ts";
+
+export { serializePolicySnapshot } from "@agentpassport/sdk";
 
 export const LAST_SIGNED_TASK_STORAGE_KEY = "agentpassport:lastSignedTask";
 
@@ -313,30 +318,6 @@ export function serializeTypedData(typedData: TaskIntentTypedData) {
   };
 }
 
-function serializeTaskIntent(intent: TaskIntentMessage): SerializableRelayerExecutePayload["intent"] {
-  return {
-    agentNode: intent.agentNode,
-    callDataHash: intent.callDataHash,
-    expiresAt: intent.expiresAt.toString(),
-    nonce: intent.nonce.toString(),
-    policyDigest: intent.policyDigest,
-    target: intent.target,
-    value: intent.value.toString()
-  };
-}
-
-export function serializePolicySnapshot(policySnapshot: PolicySnapshot): SerializedPolicySnapshot {
-  const normalized = normalizePolicySnapshot(policySnapshot);
-  return {
-    enabled: normalized.enabled,
-    expiresAt: normalized.expiresAt.toString(),
-    maxGasReimbursementWei: normalized.maxGasReimbursementWei.toString(),
-    maxValueWei: normalized.maxValueWei.toString(),
-    selector: normalized.selector,
-    target: normalized.target
-  };
-}
-
 function validateImmediateOwnerName(agentName: string, ownerName: string): string {
   const normalizedOwnerName = normalizeEnsName(ownerName, "Owner ENS");
   const immediateParentName = agentName.split(".").slice(1).join(".");
@@ -344,14 +325,6 @@ function validateImmediateOwnerName(agentName: string, ownerName: string): strin
     throw new Error("Owner ENS must match the agent immediate parent");
   }
   return normalizedOwnerName;
-}
-
-function normalizeEnsName(value: string, label: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized || !normalized.includes(".")) {
-    throw new Error(`${label} must be a complete ENS name`);
-  }
-  return normalized;
 }
 
 function normalizeRequiredText(value: string, label: string): string {

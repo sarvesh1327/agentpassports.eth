@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@agentpassport/config": "workspace:*",
+    "@agentpassport/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.0",
     "viem": "^2.21.0",

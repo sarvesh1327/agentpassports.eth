@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@agentpassport/config": "workspace:*",
+    "@agentpassport/sdk": "workspace:*",
     "dotenv": "^16.4.0",
     "viem": "^2.21.0"
   },

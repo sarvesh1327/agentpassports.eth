@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@agentpassport/config": "workspace:*",
+    "@agentpassport/sdk": "workspace:*",
     "@rainbow-me/rainbowkit": "^2.2.0",
     "@tanstack/react-query": "^5.100.5",
     "next": "^15.0.0",

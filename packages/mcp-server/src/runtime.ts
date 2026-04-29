@@ -8,15 +8,20 @@ import {
   hashPolicySnapshot,
   hashTaskIntent,
   namehashEnsName,
+  normalizeEnsName,
+  parentEnsName,
+  parseOwnerAgentLabels,
   policySnapshotFromTextRecords,
+  serializePolicySnapshot,
+  serializeTaskIntent,
   taskLogRecordTaskSelector,
+  assertExactActiveStatus,
+  assertPolicyDigestMatches,
   type ContractReadClient,
   type Hex,
-  type PolicySnapshot,
   type TaskIntentMessage
-} from "@agentpassport/config";
+} from "@agentpassport/sdk";
 import { createPublicClient, defineChain, encodeFunctionData, http, keccak256, stringToHex } from "viem";
-import { assertExactActiveStatus, assertPolicyDigestMatches } from "./safety.ts";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
 
 const AGENT_TEXT_KEYS = [
@@ -166,7 +171,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       callData,
       chainId: config.chainId.toString(),
       executorAddress: config.executorAddress,
-      intent: serializeIntent(intent),
+      intent: serializeTaskIntent(intent),
       metadataURI: args.metadataURI,
       ownerName,
       ownerNode,
@@ -174,7 +179,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       signingPayload: {
         chainId: config.chainId.toString(),
         executorAddress: config.executorAddress,
-        intent: serializeIntent(intent),
+        intent: serializeTaskIntent(intent),
         typedData: buildTaskIntentTypedData(intent, config.chainId, config.executorAddress)
       },
       taskHash
@@ -188,7 +193,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       const ownerNode = namehashEnsName(ownerName);
       const resolverAddress = await getResolverAddress({ client, ensRegistryAddress: config.ensRegistryAddress, node: ownerNode });
       const records = await getAgentTextRecords({ agentNode: ownerNode, client, keys: OWNER_INDEX_KEYS, resolverAddress });
-      const labels = parseOwnerLabels(records["agentpassports.agents"] ?? "");
+      const labels = parseOwnerAgentLabels(records["agentpassports.agents"] ?? "");
       const agents = await Promise.all(labels.map((label) => resolvePassport(`${label}.${ownerName}`)));
       return { agents, ownerName, ownerNode, resolverAddress, version: records["agentpassports.v"] ?? "" };
     },
@@ -226,34 +231,6 @@ export function schemaFor<TName extends AgentPassportToolName>(name: TName): Rec
 
 function readExecutorBigint(client: ContractReadClient, executorAddress: Hex, functionName: "nextNonce" | "gasBudgetWei", agentNode: Hex): Promise<bigint> {
   return client.readContract({ address: executorAddress, abi: EXECUTOR_READ_ABI, functionName, args: [agentNode] }) as Promise<bigint>;
-}
-
-function parseIntent(intent: Record<string, string>): TaskIntentMessage {
-  return { agentNode: intent.agentNode as Hex, policyDigest: intent.policyDigest as Hex, target: intent.target as Hex, callDataHash: intent.callDataHash as Hex, value: BigInt(intent.value), nonce: BigInt(intent.nonce), expiresAt: BigInt(intent.expiresAt) };
-}
-
-function serializeIntent(intent: TaskIntentMessage) {
-  return { agentNode: intent.agentNode, policyDigest: intent.policyDigest, target: intent.target, callDataHash: intent.callDataHash, value: intent.value.toString(), nonce: intent.nonce.toString(), expiresAt: intent.expiresAt.toString() };
-}
-
-function serializePolicySnapshot(policy: PolicySnapshot) {
-  return { target: policy.target, selector: policy.selector, maxValueWei: policy.maxValueWei.toString(), maxGasReimbursementWei: policy.maxGasReimbursementWei.toString(), expiresAt: policy.expiresAt.toString(), enabled: policy.enabled };
-}
-
-function parseOwnerLabels(value: string): string[] {
-  return value.split(",").map((label) => label.trim().toLowerCase()).filter(Boolean);
-}
-
-function parentEnsName(agentName: string): string {
-  return normalizeEnsName(agentName).split(".").slice(1).join(".");
-}
-
-function normalizeEnsName(name: string): string {
-  const normalized = name.trim().toLowerCase();
-  if (!normalized || !normalized.includes(".") || normalized.split(".").some((label) => !label)) {
-    throw new Error("Expected a valid ENS name");
-  }
-  return normalized;
 }
 
 function readAddress(value: string | undefined, name: string): Hex {

@@ -3,6 +3,8 @@ packages:
   - "apps/web"
   # Shared TypeScript constants consumed by app and runner packages.
   - "packages/config"
+  # Stable AgentPassports SDK shared by web, runner, MCP, and future agent integrations.
+  - "packages/agentpassport-sdk"
   # MCP server used by autonomous agents to resolve passports and execute tasks.
   - "packages/mcp-server"
   # Local agent signing CLI.

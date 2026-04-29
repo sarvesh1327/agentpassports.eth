@@ -1,10 +1,9 @@
-import type { Hex, TaskIntentMessage, TaskIntentTypedData } from "../../packages/config/src/index.ts";
+import type { Hex, TaskIntentMessage, TaskIntentTypedData } from "@agentpassport/sdk";
 import {
   buildTaskIntentTypedData,
   hashTaskIntent,
   recoverSignerAddress
-} from "../../packages/config/src/index.ts";
-import { normalizeAddress } from "../../packages/config/src/hex.ts";
+} from "@agentpassport/sdk";
 
 export type TaskIntentSigner = (typedData: TaskIntentTypedData) => Hex | Promise<Hex>;
 
@@ -50,5 +49,5 @@ export async function signTaskIntent(input: SignTaskIntentInput): Promise<Signed
 }
 
 function sameAddress(left: Hex, right: Hex): boolean {
-  return normalizeAddress(left, "lower") === normalizeAddress(right, "lower");
+  return left.toLowerCase() === right.toLowerCase();
 }
