@@ -140,9 +140,12 @@ function buildResolverMulticall(input: RegistrationBatchInput): RegistrationBatc
  * Encodes the owner-level dashboard index text writes when the owner resolver is known.
  */
 function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCall | null {
-  if (!input.ownerResolverAddress) {
-    return null;
-  }
+  // The owner dashboard is ENS-index backed, so registration must not succeed without
+  // writing agentpassports.v and agentpassports.agents on the owner resolver.
+  const ownerResolverAddress = requireAddress(
+    input.ownerResolverAddress,
+    "Owner resolver address is required for owner dashboard index updates"
+  );
 
   const nextLabels = addOwnerAgentLabel(input.ownerAgentLabels ?? [], input.agentLabel);
   const resolverCalls = [
@@ -165,7 +168,7 @@ function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCa
       args: [resolverCalls]
     }),
     label: "setOwnerIndex",
-    to: input.ownerResolverAddress
+    to: ownerResolverAddress
   };
 }
 

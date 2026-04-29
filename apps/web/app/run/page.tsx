@@ -3,6 +3,8 @@ import { buildDemoAgentProfile } from "../../lib/demoProfile";
 
 /**
  * Renders the task execution demo where an ENS-published agent signs a policy-limited intent.
+ * Intentional demo route: the owner dashboard is the primary product flow, but AGENTS.md
+ * still requires /run for end-to-end executor proof.
  */
 export default function RunPage() {
   const profile = buildDemoAgentProfile();

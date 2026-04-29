@@ -414,6 +414,7 @@ test("registration batch creates the subname, writes resolver records through re
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -422,7 +423,7 @@ test("registration batch creates the subname, writes resolver records through re
     textRecords: preview.textRecords
   });
 
-  assert.equal(batch.calls.length, 3);
+  assert.equal(batch.calls.length, 4);
   assert.equal(batch.calls[0].label, "setSubnodeRecord");
   assert.equal(batch.calls[0].to, ENS_REGISTRY_ADDRESS);
   assert.equal(batch.calls[1].label, "multicall");
@@ -430,10 +431,13 @@ test("registration batch creates the subname, writes resolver records through re
   assert.equal(batch.calls[2].label, "setPolicy");
   assert.equal(batch.calls[2].to, EXECUTOR_ADDRESS);
   assert.equal(batch.calls[2].value, 10000000000000000n);
+  assert.equal(batch.calls[3].label, "setOwnerIndex");
+  assert.equal(batch.calls[3].to, PUBLIC_RESOLVER_ADDRESS);
   assert.deepEqual(batch.summary, [
     "setSubnodeRecord(owner ENS, agent label, connected wallet, public resolver)",
     `multicall(setAddr, ${preview.textRecords.length} text records)`,
-    "setPolicy(..., with gas budget)"
+    "setPolicy(..., with gas budget)",
+    "set owner index text records"
   ]);
   for (const call of batch.calls) {
     assert.match(call.data, /^0x[0-9a-f]+$/iu);
@@ -469,6 +473,7 @@ test("registration batch skips subname setup when the live resolver already exis
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -479,7 +484,7 @@ test("registration batch skips subname setup when the live resolver already exis
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall", "setPolicy"]
+    ["multicall", "setPolicy", "setOwnerIndex"]
   );
 });
 
@@ -514,6 +519,7 @@ test("registration batch skips policy writes when the live enabled policy alread
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -524,7 +530,7 @@ test("registration batch skips policy writes when the live enabled policy alread
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall"]
+    ["multicall", "setOwnerIndex"]
   );
 });
 
@@ -559,6 +565,7 @@ test("registration batch tops up budget without resetting a matching enabled pol
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -569,7 +576,7 @@ test("registration batch tops up budget without resetting a matching enabled pol
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall", "depositGasBudget"]
+    ["multicall", "depositGasBudget", "setOwnerIndex"]
   );
   assert.equal(batch.calls[1].value, 150000000000000n);
 });
@@ -605,6 +612,7 @@ test("registration batch resets a matching disabled policy so it becomes active 
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -615,7 +623,7 @@ test("registration batch resets a matching disabled policy so it becomes active 
 
   assert.deepEqual(
     batch.calls.map((call) => call.label),
-    ["multicall", "setPolicy"]
+    ["multicall", "setPolicy", "setOwnerIndex"]
   );
   assert.equal(batch.calls[1].value, 0n);
 });
@@ -650,6 +658,7 @@ test("registration submission falls back when the wallet does not support sendCa
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -687,7 +696,8 @@ test("registration submission falls back when the wallet does not support sendCa
   assert.deepEqual(result.transactionIds, [
     "0x0000000000000000000000000000000000000000000000000000000000000001",
     "0x0000000000000000000000000000000000000000000000000000000000000002",
-    "0x0000000000000000000000000000000000000000000000000000000000000003"
+    "0x0000000000000000000000000000000000000000000000000000000000000003",
+    "0x0000000000000000000000000000000000000000000000000000000000000004"
   ]);
 });
 
@@ -804,6 +814,7 @@ test("registration fallback waits for each transaction before sending the depend
     nameWrapperAddress: null,
     normalizedAgentAddress: OWNER_WALLET,
     ownerNode: preview.ownerNode,
+    ownerResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
     publicResolverAddress: PUBLIC_RESOLVER_ADDRESS,
     resolverAddress: PUBLIC_RESOLVER_ADDRESS,
@@ -836,7 +847,9 @@ test("registration fallback waits for each transaction before sending the depend
     `send:${batch.calls[1].to}`,
     "wait:0x0000000000000000000000000000000000000000000000000000000000000003",
     `send:${batch.calls[2].to}`,
-    "wait:0x0000000000000000000000000000000000000000000000000000000000000005"
+    "wait:0x0000000000000000000000000000000000000000000000000000000000000005",
+    `send:${batch.calls[3].to}`,
+    "wait:0x0000000000000000000000000000000000000000000000000000000000000007"
   ]);
 });
 

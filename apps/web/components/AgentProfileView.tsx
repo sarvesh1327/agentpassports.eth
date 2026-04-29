@@ -112,6 +112,25 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
   const nextStatusAction = passportStatus === "disabled" ? "active" : "disabled";
 
+  async function refreshAgentReads() {
+    await Promise.all([
+      registryResolver.refetch(),
+      agentAddress.refetch(),
+      textRecordReads.refetch(),
+      policyRead.refetch(),
+      gasBudgetRead.refetch(),
+      nextNonceRead.refetch()
+    ]);
+
+    const tasks = await loadTaskHistory({
+      agentNode: initialProfile.agentNode,
+      fromBlock: parseOptionalBigInt(initialProfile.taskLogStartBlock),
+      publicClient,
+      taskLogAddress: initialProfile.taskLogAddress
+    });
+    setTaskHistory(tasks);
+  }
+
   async function sendAgentManagementCall(input: { data: Hex; label: string; to?: Hex | null; value?: bigint }) {
     if (!input.to) {
       setManagementStatus("error");
@@ -122,9 +141,13 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     setManagementStatus("loading");
     setManagementMessage(`Awaiting wallet approval for ${input.label}.`);
     try {
-      await sendTransactionAsync({ data: input.data, to: input.to, value: input.value });
+      const hash = await sendTransactionAsync({ data: input.data, to: input.to, value: input.value });
+      if (publicClient) {
+        await publicClient.waitForTransactionReceipt({ hash });
+      }
+      await refreshAgentReads();
       setManagementStatus("success");
-      setManagementMessage(`${input.label} transaction submitted.`);
+      setManagementMessage(`${input.label} transaction confirmed.`);
     } catch (error) {
       setManagementStatus("error");
       setManagementMessage(error instanceof Error ? error.message : `${input.label} failed.`);
@@ -139,23 +162,6 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
         args: [initialProfile.agentNode, "agent.status", nextStatus]
       }),
       label: nextStatus === "active" ? "Enable agent" : "Disable agent",
-      to: resolverAddress
-    });
-  }
-
-  async function promptPolicyUriUpdate() {
-    const nextPolicyUri = window.prompt("Policy URI", policyUri || "");
-    if (nextPolicyUri === null) {
-      return;
-    }
-
-    await sendAgentManagementCall({
-      data: encodeFunctionData({
-        abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [initialProfile.agentNode, "agent.policy.uri", nextPolicyUri.trim()]
-      }),
-      label: "Edit policy",
       to: resolverAddress
     });
   }
@@ -241,7 +247,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
             <button type="button" onClick={() => void writeAgentStatus(nextStatusAction)}>
               <UiIcon name={nextStatusAction === "active" ? "check" : "shield"} size={16} /> {nextStatusAction === "active" ? "Enable" : "Disable"}
             </button>
-            <button type="button" onClick={() => void promptPolicyUriUpdate()}><UiIcon name="edit" size={16} /> Edit policy</button>
+            <a href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
             <a href="#agent-gas-add-input"><UiIcon name="plus" size={16} /> Add gas</a>
             <a href="#agent-gas-withdraw-input"><UiIcon name="download" size={16} /> Withdraw gas</a>
             <a className="agent-detail__delete-link" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
@@ -277,6 +283,12 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           policyUri={policyUri}
           taskLogAddress={initialProfile.taskLogAddress}
         />
+        <AgentProofPanel
+          agentNode={initialProfile.agentNode}
+          ownerNode={initialProfile.ownerNode}
+          recoveredSigner={liveAgentAddress}
+          resolverAddress={resolverAddress}
+        />
         <GasBudgetPanel
           gasBudgetWei={liveGasBudget}
           onAddGas={(amountEth) => void submitGasBudgetChange("deposit", amountEth)}
@@ -297,10 +309,50 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
         gasBudgetWei={liveGasBudget}
         initialProfile={initialProfile}
         liveAgentAddress={liveAgentAddress}
+        onDeleted={() => {
+          window.location.href = `/owner/${encodeURIComponent(initialProfile.ownerName)}`;
+        }}
+        onRefresh={refreshAgentReads}
         policyEnabled={policyEnabled}
         resolverAddress={resolverAddress}
       />
     </div>
+  );
+}
+
+function AgentProofPanel(props: {
+  agentNode: Hex;
+  ownerNode: Hex;
+  recoveredSigner: Hex | null;
+  resolverAddress: Hex | null;
+}) {
+  const rows = [
+    { label: "agentNode", title: props.agentNode, value: shortenHex(props.agentNode) },
+    { label: "ownerNode", title: props.ownerNode, value: shortenHex(props.ownerNode) },
+    {
+      label: "Live resolver",
+      title: props.resolverAddress ?? undefined,
+      value: props.resolverAddress ? shortenHex(props.resolverAddress) : "Unknown"
+    },
+    {
+      label: "Recovered signer",
+      title: props.recoveredSigner ?? undefined,
+      value: props.recoveredSigner ? shortenHex(props.recoveredSigner) : "Unknown"
+    }
+  ];
+
+  return (
+    <section className="agent-panel agent-proof-card" aria-labelledby="agent-proof-title">
+      <h2 id="agent-proof-title"><UiIcon name="shield" size={18} /> Agent proof</h2>
+      <dl className="agent-fact-table">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd title={row.title}>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
