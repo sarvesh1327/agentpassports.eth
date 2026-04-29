@@ -3,6 +3,8 @@ packages:
   - "apps/web"
   # Shared TypeScript constants consumed by app and runner packages.
   - "packages/config"
+  # MCP server used by autonomous agents to resolve passports and execute tasks.
+  - "packages/mcp-server"
   # Local agent signing CLI.
   - "agent-runner"
   # Solidity project wrapper for workspace scripts.
