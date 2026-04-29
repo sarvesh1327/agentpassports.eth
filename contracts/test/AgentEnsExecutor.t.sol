@@ -161,6 +161,14 @@ contract AgentEnsExecutorTest is TestBase {
         assertEq(executor.gasBudgetWei(agentNode), 0.3 ether, "remaining budget");
     }
 
+    /// @notice Verifies typoed or deleted ENS nodes cannot receive permanently stuck gas deposits.
+    function testCannotDepositGasBudgetForUnownedAgentNode() public {
+        bytes32 unownedAgentNode = keccak256("missing.agent");
+
+        vm.expectRevert(AgentEnsExecutor.NotNameOwner.selector);
+        executor.depositGasBudget{ value: 0.5 ether }(unownedAgentNode);
+    }
+
     /// @notice Verifies wrapped agent subname managers can withdraw without policy storage.
     function testWrappedAgentSubnameManagerCanWithdrawGasBudget() public {
         ens.setOwner(agentNode, address(nameWrapper));

@@ -134,6 +134,8 @@ contract AgentEnsExecutor {
     /// @param agentNode ENS namehash for the funded agent.
     function depositGasBudget(bytes32 agentNode) external payable nonReentrant {
         if (msg.value == 0) revert ZeroAmount();
+        // A gas budget is only recoverable while the agent subname has a current ENS manager.
+        if (_effectiveManager(agentNode) == address(0)) revert NotNameOwner();
 
         gasBudgetWei[agentNode] += msg.value;
         emit GasBudgetDeposited(agentNode, msg.sender, msg.value);
