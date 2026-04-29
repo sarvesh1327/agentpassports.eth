@@ -14,6 +14,7 @@ import {
   policySnapshotFromTextRecords,
   serializePolicySnapshot,
   serializeTaskIntent,
+  swapPolicyFromTextRecords,
   taskLogRecordTaskSelector,
   assertExactActiveStatus,
   assertPolicyDigestMatches,
@@ -23,6 +24,7 @@ import {
 } from "@agentpassport/sdk";
 import { createPublicClient, defineChain, encodeFunctionData, http, keccak256, stringToHex } from "viem";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
+import { buildUniswapApprovalPayload, buildUniswapQuotePayload, callUniswapApi, validateSwapRequestAgainstPolicy } from "./uniswap.ts";
 
 const AGENT_TEXT_KEYS = [
   "agent.v",
@@ -38,7 +40,17 @@ const AGENT_TEXT_KEYS = [
   "agent.policy.selector",
   "agent.policy.maxValueWei",
   "agent.policy.maxGasReimbursementWei",
-  "agent.policy.expiresAt"
+  "agent.policy.expiresAt",
+  "agent.policy.uniswap.chainId",
+  "agent.policy.uniswap.allowedTokenIn",
+  "agent.policy.uniswap.allowedTokenOut",
+  "agent.policy.uniswap.maxInputAmount",
+  "agent.policy.uniswap.maxSlippageBps",
+  "agent.policy.uniswap.deadlineSeconds",
+  "agent.policy.uniswap.enabled",
+  "agent.policy.uniswap.recipient",
+  "agent.policy.uniswap.router",
+  "agent.policy.uniswap.selector"
 ] as const;
 
 const OWNER_INDEX_KEYS = ["agentpassports.v", "agentpassports.agents"] as const;
@@ -82,6 +94,8 @@ export type McpServerConfig = {
   relayerUrl: string;
   rpcUrl: string;
   taskLogAddress: Hex;
+  uniswapApiBaseUrl?: string;
+  uniswapApiKey?: string;
 };
 
 type ToolArgs<TName extends AgentPassportToolName> = Record<string, any>;
@@ -98,7 +112,9 @@ export function loadMcpConfig(env: Record<string, string | undefined> = process.
     executorAddress: readAddress(env.EXECUTOR_ADDRESS ?? env.NEXT_PUBLIC_EXECUTOR_ADDRESS, "EXECUTOR_ADDRESS"),
     relayerUrl: readUrl(env.RELAYER_URL, "RELAYER_URL"),
     rpcUrl: readUrl(env.RPC_URL ?? env.NEXT_PUBLIC_RPC_URL, "RPC_URL"),
-    taskLogAddress: readAddress(env.TASK_LOG_ADDRESS ?? env.NEXT_PUBLIC_TASK_LOG_ADDRESS, "TASK_LOG_ADDRESS")
+    taskLogAddress: readAddress(env.TASK_LOG_ADDRESS ?? env.NEXT_PUBLIC_TASK_LOG_ADDRESS, "TASK_LOG_ADDRESS"),
+    uniswapApiBaseUrl: optionalUrl(env.UNISWAP_API_BASE_URL),
+    uniswapApiKey: optionalSecret(env.UNISWAP_API_KEY)
   };
 }
 
@@ -140,6 +156,19 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     const computedDigest = hashPolicySnapshot(passport.agentNode, policySnapshot);
     assertPolicyDigestMatches(computedDigest, passport.textRecords["agent.policy.digest"] as Hex);
     return { agentName: passport.agentName, agentNode: passport.agentNode, policyDigest: computedDigest, policySnapshot: serializePolicySnapshot(policySnapshot), policyUri: passport.textRecords["agent.policy.uri"] ?? "", status: passport.textRecords["agent.status"] ?? "" };
+  }
+
+  async function getSwapPolicy(agentName: string) {
+    const passport = await resolvePassport(agentName);
+    assertExactActiveStatus(passport.textRecords["agent.status"] ?? "");
+    if (!passport.agentAddress) throw new Error("Agent ENS addr() is required for Uniswap API calls");
+    return { agentAddress: passport.agentAddress, agentName: passport.agentName, agentNode: passport.agentNode, swapPolicy: swapPolicyFromTextRecords(passport.textRecords) };
+  }
+
+  async function validateUniswapSwap(args: ToolArgs<"uniswap_validate_swap_against_ens_policy">) {
+    const policy = await getSwapPolicy(args.agentName);
+    const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
+    return { ...validation, agentAddress: policy.agentAddress, agentName: policy.agentName, agentNode: policy.agentNode };
   }
 
   async function buildIntent(args: ToolArgs<"build_task_intent">) {
@@ -219,7 +248,34 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
         throw new Error(typeof body?.details === "string" ? body.details : `Relayer failed with HTTP ${response.status}`);
       }
       return { agentName: normalizeEnsName(args.agentName), relayer: body };
-    }
+    },
+    uniswap_check_approval: async (args: ToolArgs<"uniswap_check_approval">) => {
+      const policy = await getSwapPolicy(args.agentName);
+      const validation = validateSwapRequestAgainstPolicy(
+        { amount: args.amount, chainId: args.chainId, slippageBps: "0", tokenIn: args.token, tokenOut: policy.swapPolicy.allowedTokensOut[0] },
+        policy.swapPolicy
+      );
+      if (!validation.policyEnabled || !validation.chainAllowed || !validation.tokenInAllowed || !validation.amountAllowed) {
+        throw new Error("Approval request is not allowed by ENS Uniswap policy");
+      }
+      const payload = buildUniswapApprovalPayload(policy.agentAddress, args as any);
+      return { agentName: policy.agentName, payload, uniswap: await callUniswapApi("/check_approval", payload, uniswapRuntimeConfig(config)) };
+    },
+    uniswap_quote: async (args: ToolArgs<"uniswap_quote">) => {
+      const policy = await getSwapPolicy(args.agentName);
+      const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
+      if (!validation.allowed) throw new Error("Quote request is not allowed by ENS Uniswap policy");
+      const payload = buildUniswapQuotePayload(policy.agentAddress, args as any);
+      return { agentName: policy.agentName, payload, policyValidation: validation, uniswap: await callUniswapApi("/quote", payload, uniswapRuntimeConfig(config)) };
+    },
+    uniswap_execute_swap: async (args: ToolArgs<"uniswap_execute_swap">) => {
+      const policy = await getSwapPolicy(args.agentName);
+      const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
+      if (!validation.allowed) throw new Error("Swap request is not allowed by ENS Uniswap policy");
+      const payload = { ...buildUniswapQuotePayload(policy.agentAddress, args as any), permit2Signature: args.permit2Signature, quote: args.quote, quoteId: args.quoteId };
+      return { agentName: policy.agentName, payload, policyValidation: validation, uniswap: await callUniswapApi("/swap", payload, uniswapRuntimeConfig(config)) };
+    },
+    uniswap_validate_swap_against_ens_policy: validateUniswapSwap
   };
 }
 
@@ -251,7 +307,21 @@ function readBigint(value: string | undefined, name: string): bigint {
   return BigInt(value);
 }
 
+function uniswapRuntimeConfig(config: McpServerConfig) {
+  return { apiBaseUrl: config.uniswapApiBaseUrl, apiKey: config.uniswapApiKey };
+}
+
 function readUrl(value: string | undefined, name: string): string {
   if (!value?.trim()) throw new Error(`Missing ${name}`);
   return new URL(value).toString().replace(/\/$/u, "");
+}
+
+function optionalUrl(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  return new URL(value).toString().replace(/\/$/u, "");
+}
+
+function optionalSecret(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }

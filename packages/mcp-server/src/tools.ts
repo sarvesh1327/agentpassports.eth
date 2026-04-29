@@ -31,13 +31,27 @@ const policySnapshotSchema = z.object({
   enabled: z.boolean()
 });
 
+const swapRequestSchema = {
+  agentName: ensName,
+  amount: uintString.describe("Exact input token amount in smallest units."),
+  chainId: uintString.describe("Swap chain id. Must match ENS Uniswap policy."),
+  slippageBps: uintString.describe("Requested slippage in basis points. Must be <= ENS policy limit."),
+  tokenIn: address.describe("Input token address. Must be allowed by ENS policy."),
+  tokenOut: address.describe("Output token address. Must be allowed by ENS policy."),
+  type: z.string().optional().describe("Uniswap quote type. Defaults to EXACT_INPUT.")
+};
+
 export type AgentPassportToolName =
   | "resolve_agent_passport"
   | "list_owner_agents"
   | "get_agent_policy"
   | "check_task_against_policy"
   | "build_task_intent"
-  | "submit_task";
+  | "submit_task"
+  | "uniswap_check_approval"
+  | "uniswap_quote"
+  | "uniswap_validate_swap_against_ens_policy"
+  | "uniswap_execute_swap";
 
 export type AgentPassportToolDefinition = {
   description: string;
@@ -92,5 +106,39 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
     description:
       "Submit an externally signed intent, policy snapshot, calldata, and signature to the configured AgentPassports relayer. The relayer rechecks ENS policy and signer state before broadcasting AgentEnsExecutor.execute.",
     inputShape: { agentName: ensName, intent: intentSchema, policySnapshot: policySnapshotSchema, callData: hex, signature: hex }
+  },
+  {
+    name: "uniswap_check_approval",
+    description:
+      "Call the Uniswap API approval check for an agent wallet after checking the token, amount, and chain against live ENS Uniswap policy. Never exposes the Uniswap API key to the browser or agent.",
+    inputShape: {
+      agentName: ensName,
+      amount: uintString,
+      chainId: uintString,
+      token: address
+    }
+  },
+  {
+    name: "uniswap_validate_swap_against_ens_policy",
+    description:
+      "Validate a proposed Uniswap swap against the agent's live ENS Uniswap policy without calling Uniswap. Use before quote or execution to explain exactly which policy checks pass or fail.",
+    inputShape: swapRequestSchema
+  },
+  {
+    name: "uniswap_quote",
+    description:
+      "Request a Uniswap API quote for an agent only after live ENS policy allows chain, token pair, amount, and slippage. Returns the exact API payload, policy validation, and Uniswap response.",
+    inputShape: swapRequestSchema
+  },
+  {
+    name: "uniswap_execute_swap",
+    description:
+      "Execute a previously quoted Uniswap swap for an agent only after rechecking live ENS policy. Requires quote data and optional Permit2 signature. Returns the Uniswap swap response for signing/broadcasting or order settlement.",
+    inputShape: {
+      ...swapRequestSchema,
+      permit2Signature: hex.optional(),
+      quote: z.record(z.string(), z.unknown()),
+      quoteId: z.string().optional()
+    }
   }
 ];
