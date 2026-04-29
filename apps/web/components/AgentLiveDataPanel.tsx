@@ -1,6 +1,5 @@
-import type { Hex } from "@agentpassport/config";
+import type { Hex, PolicySnapshot } from "@agentpassport/config";
 import type { AgentTextRecord } from "../lib/agentSession";
-import type { PolicyContractResult } from "../lib/contracts";
 import { formatWei, shortenHex } from "./EnsProofPanel";
 
 type AgentLiveDataPanelProps = {
@@ -10,7 +9,7 @@ type AgentLiveDataPanelProps = {
   gasBudgetWei?: bigint;
   isReverseEnsSettled: boolean;
   nextNonce?: bigint | string | null;
-  policy?: PolicyContractResult;
+  policySnapshot?: PolicySnapshot | null;
   policyHash?: Hex | null;
   resolverAddress?: Hex | null;
   reverseEnsName?: string | null;
@@ -33,9 +32,9 @@ export function AgentLiveDataPanel(props: AgentLiveDataPanelProps) {
     { label: "Agent ENS", value: props.agentName || "Unknown" },
     { label: "Resolver", title: props.resolverAddress ?? undefined, value: formatNullableHex(props.resolverAddress) },
     { label: "ENS addr(agent)", title: props.agentAddress ?? undefined, value: formatNullableHex(props.agentAddress) },
-    { label: "Policy state", value: formatPolicyState(props.policy?.[7]) },
-    { label: "Policy target", title: props.policy?.[2], value: formatNullableHex(props.policy?.[2]) },
-    { label: "Policy selector", title: props.policy?.[3], value: props.policy?.[3] ?? "Unknown" },
+    { label: "Policy state", value: formatPolicyState(props.policySnapshot?.enabled) },
+    { label: "Policy target", title: props.policySnapshot?.target, value: formatNullableHex(props.policySnapshot?.target) },
+    { label: "Policy selector", title: props.policySnapshot?.selector, value: props.policySnapshot?.selector ?? "Unknown" },
     { label: "Policy hash", title: props.policyHash ?? undefined, value: formatNullableHex(props.policyHash) },
     { label: "Gas budget", value: formatWei(props.gasBudgetWei) },
     { label: "Next nonce", value: formatNonce(props.nextNonce) }

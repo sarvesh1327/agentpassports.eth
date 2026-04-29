@@ -593,7 +593,7 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
           gasBudgetWei={liveGasBudget}
           isReverseEnsSettled={!connectedWallet || agentReverseName.isSuccess || agentReverseName.isError}
           nextNonce={nextNonceRead.isSuccess ? effectiveNextNonce : null}
-          policy={undefined}
+          policySnapshot={livePolicyState.policySnapshot}
           policyHash={livePolicyState.policyDigest ?? null}
           resolverAddress={resolverAddress}
           reverseEnsName={agentReverseName.data ?? null}

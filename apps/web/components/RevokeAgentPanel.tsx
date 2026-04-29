@@ -2,7 +2,14 @@
 
 import type { ChangeEvent, FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { namehashEnsName, type Hex } from "@agentpassport/config";
+import {
+  buildPolicyMetadata,
+  hashPolicyMetadata,
+  namehashEnsName,
+  policySnapshotFromTextRecords,
+  type Hex,
+  type PolicySnapshot
+} from "@agentpassport/config";
 import { encodeFunctionData } from "viem";
 import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import {
@@ -11,7 +18,6 @@ import {
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
   ZERO_ADDRESS,
-  type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { normalizeAddressInput } from "../lib/addressInput";
@@ -22,7 +28,6 @@ import {
   type AgentTextReadResult
 } from "../lib/agentSession";
 import { normalizeEnsFormName, safeNamehash } from "../lib/ensPreview";
-import { hashPolicyContractResult } from "../lib/policyProof";
 import { readOwnerEnsAutofill } from "../lib/registerAgent";
 import { buildEnsStatusWriteState, buildRevocationActionState } from "../lib/revokeAgent";
 import { revocationFailureProof, type RelayerRetryResponse } from "../lib/revocationProof";
@@ -145,13 +150,6 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
       : [],
     query: { enabled: Boolean(resolverAddress) }
   });
-  const policyRead = useReadContract({
-    address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
-    functionName: "policies",
-    args: [agentNode],
-    query: { enabled: Boolean(props.executorAddress) }
-  });
   const gasBudgetRead = useReadContract({
     address: props.executorAddress ?? undefined,
     abi: AGENT_POLICY_EXECUTOR_ABI,
@@ -167,20 +165,44 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     query: { enabled: Boolean(props.executorAddress) }
   });
   const liveAgentAddress = nonZeroAddress(currentAgentAddress.data as Hex | undefined);
-  const livePolicy = policyRead.data as PolicyContractResult | undefined;
-  const livePolicyHash = hashPolicyContractResult({ agentNode, policy: livePolicy });
   const liveGasBudget = typeof gasBudgetRead.data === "bigint" ? gasBudgetRead.data : 0n;
   const liveNextNonce = typeof nextNonceRead.data === "bigint" ? nextNonceRead.data : null;
   const textRecords = useMemo(
     () => mapAgentTextRecords(textRecordReads.data as AgentTextReadResult[] | undefined),
     [textRecordReads.data]
   );
+  const textRecordMap = useMemo(
+    () =>
+      Object.fromEntries(
+        textRecords.map((record) => [record.key, record.value === "Unknown" ? "" : record.value])
+      ),
+    [textRecords]
+  );
+  const livePolicyState = useMemo(() => {
+    try {
+      return {
+        error: null,
+        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policySnapshot: policySnapshotFromTextRecords(agentNode, textRecordMap)
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Waiting for ENS policy snapshot",
+        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policySnapshot: null
+      };
+    }
+  }, [agentNode, textRecordMap]);
   const agentStatusText = textRecords.find((record) => record.key === "agent.status")?.value ?? null;
   const livePolicyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value ?? "";
+  const livePolicySnapshot = livePolicyState.policySnapshot;
+  const livePolicyDigest = livePolicyState.policyDigest ?? null;
+  const livePolicyEnabled =
+    agentStatusText?.trim().toLowerCase() === "disabled" ? false : livePolicySnapshot?.enabled;
   const revocationActionState = buildRevocationActionState({
     canWriteEnsStatus: ensStatusWriteState.canWrite,
     ensStatusBlocker: ensStatusWriteState.blocker,
-    policyEnabled: livePolicy?.[7],
+    policyEnabled: livePolicyEnabled,
     statusText: agentStatusText
   });
   const displayRecoveredSigner = storedRecoveredSigner(lastPayload);
@@ -310,10 +332,20 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
    * Pins a fresh policy/profile document for the requested public ENS status.
    */
   async function generatePolicyMetadata(status: AgentPolicyStatus): Promise<{ policyHash: Hex; policyUri: string }> {
-    const policy = requireLivePolicy();
+    const policySnapshot = requireLivePolicySnapshot();
     const agentAddress = requireAddress(liveAgentAddress, "Agent ENS address is not configured");
     const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
-    const expectedPolicyHash = hashPolicyContractResult({ agentNode, policy });
+    const expectedPolicyHash = hashPolicyMetadata(
+      buildPolicyMetadata({
+        agentNode,
+        expiresAt: policySnapshot.expiresAt,
+        maxGasReimbursementWei: policySnapshot.maxGasReimbursementWei,
+        maxValueWei: policySnapshot.maxValueWei,
+        ownerNode,
+        selector: policySnapshot.selector,
+        target: policySnapshot.target
+      })
+    );
     const response = await fetch("/api/policy-metadata", {
       body: JSON.stringify({
         agentAddress,
@@ -322,13 +354,13 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         capabilities: AGENT_CAPABILITIES,
         chainId: props.chainId.toString(),
         executorAddress,
-        expiresAt: policy[6].toString(),
-        maxGasReimbursementWei: policy[5].toString(),
-        maxValueWei: policy[4].toString(),
+        expiresAt: policySnapshot.expiresAt.toString(),
+        maxGasReimbursementWei: policySnapshot.maxGasReimbursementWei.toString(),
+        maxValueWei: policySnapshot.maxValueWei.toString(),
         ownerName: normalizedOwnerName,
-        ownerNode: policy[0],
+        ownerNode,
         status,
-        target: policy[2]
+        target: policySnapshot.target
       }),
       headers: { "content-type": "application/json" },
       method: "POST"
@@ -338,8 +370,8 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
       throw new Error("Policy metadata Pinata upload failed");
     }
-    if (!expectedPolicyHash || body.policyHash.toLowerCase() !== expectedPolicyHash.toLowerCase()) {
-      throw new Error("Generated policy metadata does not match the live executor policy");
+    if (body.policyHash.toLowerCase() !== expectedPolicyHash.toLowerCase()) {
+      throw new Error("Generated policy metadata does not match the live ENS policy snapshot");
     }
 
     return {
@@ -410,26 +442,24 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   }
 
   /**
-   * Returns the live executor policy tuple needed to regenerate policy JSON.
+   * Returns the live ENS policy snapshot needed to regenerate policy JSON.
    */
-  function requireLivePolicy(): PolicyContractResult {
-    if (!livePolicy) {
-      throw new Error("Policy state is not loaded");
+  function requireLivePolicySnapshot(): PolicySnapshot {
+    if (!livePolicySnapshot) {
+      throw new Error(livePolicyState.error ?? "Policy state is not loaded");
     }
 
-    return livePolicy;
+    return livePolicySnapshot;
   }
 
   /**
-   * Disables the policy in AgentPolicyExecutor so new and old intents are blocked.
+   * Disables execution by publishing agent.status=disabled in ENS, which AgentEnsExecutor checks live.
    */
   async function handleRevokePolicy() {
     try {
       if (revocationActionState.blocker) {
         throw new Error(revocationActionState.blocker);
       }
-      const executorAddress = requireAddress(props.executorAddress, "Executor address is not configured");
-      const writeAgentNode = requireAgentNode();
       const statusWrite = revocationActionState.shouldWriteEnsStatus
         ? await writeAgentStatusMetadata("disabled")
         : null;
@@ -440,14 +470,8 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         await publicClient.waitForTransactionReceipt({ hash: statusWrite.txHash });
         await unpinOldPolicyMetadata(statusWrite.oldPolicyUri, statusWrite.newPolicyUri);
       }
-      const policyTxHash = await writeContractAsync({
-        address: executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
-        functionName: "revokePolicy",
-        args: [writeAgentNode]
-      });
-      setTxHashes((hashes) => [...hashes, ...[statusWrite?.txHash, policyTxHash].filter(Boolean) as Hex[]]);
-      setStatusMessage("Policy revocation and ENS status disable transactions submitted");
+      setTxHashes((hashes) => [...hashes, ...[statusWrite?.txHash].filter(Boolean) as Hex[]]);
+      setStatusMessage("ENS status disabled transaction submitted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Policy revocation failed");
     }
@@ -606,7 +630,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
             </label>
             <label>
               <span>Policy enabled</span>
-              <input readOnly value={livePolicy?.[7] === false ? "Disabled" : livePolicy?.[7] ? "Enabled" : "Unknown"} />
+              <input readOnly value={livePolicyEnabled === false ? "Disabled" : livePolicyEnabled ? "Enabled" : "Unknown"} />
             </label>
           </div>
         </div>
@@ -614,11 +638,11 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
         <div className="register-form__section">
           <div className="section-heading">
             <p>Policy</p>
-            <h2>Disable executor policy</h2>
+            <h2>Disable ENS policy</h2>
           </div>
           <div className="register-form__actions register-form__actions--flush">
             <button disabled={!revocationActionState.canRevoke} onClick={handleRevokePolicy} type="button">
-              Revoke policy
+              Disable ENS policy
             </button>
             <button disabled={!ensStatusWriteState.canWrite} onClick={handleSetStatusDisabled} type="button">
               Set status disabled
@@ -721,8 +745,8 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           gasBudgetWei={liveGasBudget}
           isReverseEnsSettled={!connectedWallet || ownerReverseName.isSuccess || ownerReverseName.isError}
           nextNonce={nextNonceRead.isSuccess ? liveNextNonce : null}
-          policy={livePolicy}
-          policyHash={livePolicyHash}
+          policySnapshot={livePolicySnapshot}
+          policyHash={livePolicyDigest}
           resolverAddress={resolverAddress}
           reverseEnsName={ownerReverseName.data ?? null}
           textRecords={textRecords}
@@ -736,8 +760,8 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           gasBudgetWei={liveGasBudget}
           ownerName={ownerName}
           ownerNode={ownerNode}
-          policyEnabled={livePolicy?.[7]}
-          policyHash={livePolicyHash}
+          policyEnabled={livePolicyEnabled}
+          policyHash={livePolicyDigest}
           recoveredSigner={proofRecoveredSigner}
           resolverAddress={resolverAddress}
         />
