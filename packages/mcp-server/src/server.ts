@@ -1,4 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { registerAgentPassportPrompts } from "./prompts.ts";
+import { registerAgentPassportResources } from "./resources.ts";
 import { createAgentPassportHandlers, loadMcpConfig } from "./runtime.ts";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
 
@@ -24,6 +26,9 @@ export function createAgentPassportsMcpServer() {
       async (args) => jsonToolResult(await handlers[tool.name as AgentPassportToolName](args as never))
     );
   }
+
+  registerAgentPassportResources(server, handlers);
+  registerAgentPassportPrompts(server);
 
   return server;
 }
