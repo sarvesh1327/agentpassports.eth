@@ -12,6 +12,7 @@ import { buildServerChain } from "../../../../lib/serverChain";
 import { TASK_LOG_ABI } from "../../../../lib/contracts";
 import { loadRelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
+import { normalizeEnsPolicyRead } from "../../../../lib/relayer/ensPolicy";
 import {
   assertSufficientEstimatedExecutionBudget,
   estimateExecutionReimbursementWei
@@ -267,10 +268,7 @@ async function readEnsPolicy(
       args: [agentNode, "agent.policy.digest"]
     })
   ]);
-  return {
-    digest: typeof digest === "string" && /^0x[0-9a-fA-F]{64}$/.test(digest) ? digest as Hex : `0x${"00".repeat(32)}`,
-    status: typeof status === "string" ? status.trim() : ""
-  };
+  return normalizeEnsPolicyRead({ digest, status });
 }
 
 async function readResolvedAgent(

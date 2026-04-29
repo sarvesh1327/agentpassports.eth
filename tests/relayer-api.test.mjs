@@ -206,6 +206,36 @@ test("relayer helpers reject requests before the relayer spends gas", async () =
   );
 });
 
+test("relayer ENS policy reads normalize digest but preserve exact status text", async () => {
+  const { normalizeEnsPolicyRead } = await import("../apps/web/lib/relayer/ensPolicy.ts");
+
+  assert.deepEqual(
+    normalizeEnsPolicyRead({
+      digest: POLICY_DIGEST.toUpperCase(),
+      status: "active "
+    }),
+    {
+      digest: POLICY_DIGEST,
+      status: "active "
+    }
+  );
+
+  const { parseRelayerExecuteRequest, validateRelayerExecution } = await import(
+    "../apps/web/lib/relayer/validation.ts"
+  );
+  const payload = parseRelayerExecuteRequest(requestBody());
+
+  assertRelayerCode(
+    () =>
+      validateRelayerExecution({
+        context: precheckContext({ ensPolicy: { digest: POLICY_DIGEST, status: "active " } }),
+        now: 1700000000n,
+        payload
+      }),
+    "PolicyDisabled"
+  );
+});
+
 test("relayer gas budget estimates actual reimbursement instead of requiring the full cap", async () => {
   const { assertSufficientEstimatedExecutionBudget, estimateExecutionReimbursementWei } = await import(
     "../apps/web/lib/relayer/gasBudget.ts"
