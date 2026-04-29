@@ -28,6 +28,7 @@ export type ExecuteSwapRequest = SwapRequest & {
 };
 
 const DEFAULT_UNISWAP_API_BASE_URL = "https://api.uniswap.org/v1";
+const DEFAULT_QUOTE_PROTOCOLS = ["UNISWAPX_V2", "V4", "V3", "V2"] as const;
 
 /**
  * Validates agent-requested swap fields against ENS-published Uniswap policy.
@@ -74,14 +75,25 @@ export async function callUniswapApi(path: string, payload: Record<string, unkno
 }
 
 export function buildUniswapQuotePayload(agentAddress: Hex, request: SwapRequest) {
+  const chainId = Number(request.chainId);
   return {
     amount: request.amount,
-    chainId: Number(request.chainId),
-    slippageTolerance: Number(request.slippageBps),
+    autoSlippage: undefined,
+    // The Uniswap API expects percentage slippage, while AgentPassports policy
+    // stores basis points because bps are easier to compare deterministically.
+    slippageTolerance: Number(request.slippageBps) / 100,
+    generatePermitAsTransaction: false,
+    permitAmount: "FULL",
+    protocols: [...DEFAULT_QUOTE_PROTOCOLS],
+    routingPreference: "BEST_PRICE",
+    spreadOptimization: "EXECUTION",
     swapper: agentAddress,
     tokenIn: request.tokenIn,
+    tokenInChainId: chainId,
     tokenOut: request.tokenOut,
-    type: request.type ?? "EXACT_INPUT"
+    tokenOutChainId: chainId,
+    type: request.type ?? "EXACT_INPUT",
+    urgency: "normal"
   };
 }
 
@@ -91,6 +103,55 @@ export function buildUniswapApprovalPayload(agentAddress: Hex, request: Approval
     chainId: Number(request.chainId),
     token: request.token,
     walletAddress: agentAddress
+  };
+}
+
+export function normalizeUniswapQuoteResponse(response: Record<string, any>) {
+  const quote = response.quote && typeof response.quote === "object" ? response.quote : {};
+  return {
+    gasFee: typeof quote.gasFee === "string" ? quote.gasFee : undefined,
+    quoteId: typeof quote.quoteId === "string" ? quote.quoteId : undefined,
+    requestId: typeof response.requestId === "string" ? response.requestId : undefined,
+    routeString: typeof quote.routeString === "string" ? quote.routeString : undefined,
+    routing: typeof response.routing === "string" ? response.routing : undefined
+  };
+}
+
+export function normalizeUniswapSwapResponse(response: Record<string, any>) {
+  return {
+    orderId: typeof response.orderId === "string" ? response.orderId : undefined,
+    requestId: typeof response.requestId === "string" ? response.requestId : undefined,
+    txHash: typeof response.txHash === "string" ? response.txHash : undefined,
+    transaction: response.transaction && typeof response.transaction === "object" ? response.transaction : undefined
+  };
+}
+
+export function buildSwapProofMetadata(input: {
+  agentName: string;
+  agentNode: Hex;
+  amount: string;
+  chainId: number | string;
+  policyDigest: Hex;
+  quoteId?: string;
+  requestId?: string;
+  routing?: string;
+  tokenIn: Hex;
+  tokenOut: Hex;
+  txHashOrOrderId?: string;
+}) {
+  return {
+    agentName: input.agentName.trim().toLowerCase(),
+    agentNode: input.agentNode.toLowerCase() as Hex,
+    amount: input.amount,
+    chainId: input.chainId.toString(),
+    policyDigest: input.policyDigest.toLowerCase() as Hex,
+    quoteId: input.quoteId,
+    requestId: input.requestId,
+    routing: input.routing,
+    schema: "agentpassport.uniswapSwapProof.v2" as const,
+    tokenIn: normalizeAddress(input.tokenIn),
+    tokenOut: normalizeAddress(input.tokenOut),
+    txHashOrOrderId: input.txHashOrOrderId
   };
 }
 

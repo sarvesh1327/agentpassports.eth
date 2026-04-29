@@ -36,7 +36,8 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "uniswap_check_approval",
     "uniswap_validate_swap_against_ens_policy",
     "uniswap_quote",
-    "uniswap_execute_swap"
+    "uniswap_execute_swap",
+    "uniswap_record_swap_proof"
   ]);
 
   for (const tool of AGENTPASSPORT_MCP_TOOLS) {
@@ -63,6 +64,7 @@ test("MCP tools use zod schemas with the required public arguments", async () =>
   assert.deepEqual(Object.keys(byName.uniswap_validate_swap_against_ens_policy.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
   assert.deepEqual(Object.keys(byName.uniswap_quote.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
   assert.deepEqual(Object.keys(byName.uniswap_execute_swap.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type", "permit2Signature", "quote", "quoteId"]);
+  assert.deepEqual(Object.keys(byName.uniswap_record_swap_proof.inputShape), ["agentName", "amount", "chainId", "policyDigest", "quoteId", "requestId", "routing", "tokenIn", "tokenOut", "txHashOrOrderId"]);
 });
 
 test("MCP safety helpers reject missing or non-exact ENS active status before signing", async () => {
@@ -111,6 +113,88 @@ test("MCP JSON tool formatter serializes BigInt values instead of throwing", asy
   assert.equal(result.content[0].type, "text");
   assert.match(result.content[0].text, /"expiresAt": "123"/);
   assert.match(result.content[0].text, /"nonce": "7"/);
+});
+
+test("Uniswap MCP helpers build documented quote and approval payloads", async () => {
+  const { buildUniswapApprovalPayload, buildUniswapQuotePayload, normalizeUniswapQuoteResponse } = await import("../packages/mcp-server/src/uniswap.ts");
+  const agent = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+  assert.deepEqual(
+    buildUniswapApprovalPayload(agent, {
+      amount: "1000000",
+      chainId: "1",
+      token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    }),
+    {
+      amount: "1000000",
+      chainId: 1,
+      token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      walletAddress: agent
+    }
+  );
+
+  assert.deepEqual(
+    buildUniswapQuotePayload(agent, {
+      amount: "1000000",
+      chainId: "1",
+      slippageBps: "50",
+      tokenIn: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      tokenOut: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    }),
+    {
+      amount: "1000000",
+      autoSlippage: undefined,
+      generatePermitAsTransaction: false,
+      permitAmount: "FULL",
+      protocols: ["UNISWAPX_V2", "V4", "V3", "V2"],
+      routingPreference: "BEST_PRICE",
+      slippageTolerance: 0.5,
+      spreadOptimization: "EXECUTION",
+      swapper: agent,
+      tokenIn: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      tokenInChainId: 1,
+      tokenOut: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      tokenOutChainId: 1,
+      type: "EXACT_INPUT",
+      urgency: "normal"
+    }
+  );
+
+  assert.deepEqual(
+    normalizeUniswapQuoteResponse({ requestId: "req", routing: "CLASSIC", quote: { quoteId: "qid", gasFee: "1", routeString: "USDC/WETH" } }),
+    { gasFee: "1", quoteId: "qid", requestId: "req", routeString: "USDC/WETH", routing: "CLASSIC" }
+  );
+});
+
+test("Uniswap swap proof metadata is canonical and records policy context", async () => {
+  const { buildSwapProofMetadata } = await import("../packages/mcp-server/src/uniswap.ts");
+
+  assert.deepEqual(buildSwapProofMetadata({
+    agentName: "swapper.alice.eth",
+    agentNode: "0x" + "11".repeat(32),
+    amount: "1000000",
+    chainId: "1",
+    policyDigest: "0x" + "22".repeat(32),
+    quoteId: "qid",
+    requestId: "req",
+    routing: "CLASSIC",
+    tokenIn: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    tokenOut: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    txHashOrOrderId: "0x" + "33".repeat(32)
+  }), {
+    agentName: "swapper.alice.eth",
+    agentNode: "0x" + "11".repeat(32),
+    amount: "1000000",
+    chainId: "1",
+    policyDigest: "0x" + "22".repeat(32),
+    quoteId: "qid",
+    requestId: "req",
+    routing: "CLASSIC",
+    schema: "agentpassport.uniswapSwapProof.v2",
+    tokenIn: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    tokenOut: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    txHashOrOrderId: "0x" + "33".repeat(32)
+  });
 });
 
 test("MCP package does not own agent private-key signing scripts", async () => {
