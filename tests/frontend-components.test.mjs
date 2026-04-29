@@ -272,7 +272,7 @@ test("register page renders the ENS registration workflow", async () => {
   }
 });
 
-test("dashboard-scoped register uses mockup defaults while run and revoke remain blank", async () => {
+test("dashboard-scoped register uses mockup defaults while revoke remains blank and run points to MCP", async () => {
   const registerSource = await readText("apps/web/app/register/page.tsx");
   const runSource = await readText("apps/web/app/run/page.tsx");
   const revokeSource = await readText("apps/web/app/revoke/page.tsx");
@@ -284,10 +284,12 @@ test("dashboard-scoped register uses mockup defaults while run and revoke remain
   assert.match(registerSource, /defaultGasBudgetWei="500000000000000"/);
   assert.match(registerSource, /defaultAgentAddress={null}/);
   assert.match(registerSource, /defaultPolicyUri=""/);
-  assert.match(runSource, /defaultAgentName=""/);
-  assert.match(runSource, /defaultOwnerName=""/);
-  assert.match(runSource, /defaultMetadataURI=""/);
-  assert.match(runSource, /defaultTaskDescription=""/);
+  assert.match(runSource, /MCP demo/);
+  assert.match(runSource, /href="\/mcp"/);
+  assert.doesNotMatch(runSource, /defaultAgentName/);
+  assert.doesNotMatch(runSource, /defaultOwnerName/);
+  assert.doesNotMatch(runSource, /defaultMetadataURI/);
+  assert.doesNotMatch(runSource, /defaultTaskDescription/);
   assert.match(revokeSource, /defaultAgentName=""/);
   assert.match(revokeSource, /defaultOwnerName=""/);
   assert.doesNotMatch(source, /agentpassports\.eth/);
@@ -510,118 +512,31 @@ test("agent page uses the owner-management mockup layout instead of legacy passp
   assert.match(styles, /\.agent-delete-band/);
 });
 
-test("run page signs task intents and submits them to the relayer", async () => {
+test("run page is repurposed as the MCP task execution guide", async () => {
   await assertFile("apps/web/app/run/page.tsx");
-  await assertFile("apps/web/components/RunTaskDemo.tsx");
-  await assertFile("apps/web/components/AgentLiveDataPanel.tsx");
-  await assertFile("apps/web/components/TaskHistoryPanel.tsx");
-  await assertFile("apps/web/lib/agentSession.ts");
-  await assertFile("apps/web/lib/taskDemo.ts");
+  await assertFile("apps/web/app/mcp/page.tsx");
 
-  const pageSource = await readText("apps/web/app/run/page.tsx");
-  const componentSource = await readText("apps/web/components/RunTaskDemo.tsx");
-  const liveDataPanelSource = await readText("apps/web/components/AgentLiveDataPanel.tsx");
-  const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
-  const sessionSource = await readText("apps/web/lib/agentSession.ts");
-  const helperSource = await readText("apps/web/lib/taskDemo.ts");
-  const taskHistorySource = await readText("apps/web/lib/taskHistory.ts");
-  const source = `${pageSource}\n${componentSource}\n${liveDataPanelSource}\n${historyPanelSource}\n${sessionSource}\n${helperSource}\n${taskHistorySource}`;
-  const requiredText = [
-    "RunTaskDemo",
-    "Agent ENS",
-    "Owner ENS",
-    "Task text",
-    "Metadata URI",
-    "Typed data",
-    "Connected wallet",
-    "Wallet reverse ENS",
-    "ENS text records",
-    "Policy state",
-    "Submit to relayer",
-    "Transaction status",
-    "Task history"
-  ];
+  const runSource = await readText("apps/web/app/run/page.tsx");
+  const mcpSource = await readText("apps/web/app/mcp/page.tsx");
 
-  assert.match(componentSource, /useAccount/);
-  assert.match(componentSource, /useEnsName/);
-  assert.match(componentSource, /useReadContracts/);
-  assert.match(componentSource, /useSignTypedData/);
-  assert.match(componentSource, /usePublicClient\(\{ chainId: Number\(props\.chainId\) \}\)/);
-  assert.doesNotMatch(
-    componentSource,
-    /usePublicClient\(\{ chainId: SEPOLIA_CHAIN_ID \}\)/,
-    "run page public reads must use the same configured chain id as signed intents",
-  );
-  assert.match(componentSource, /fetch\("\/api\/relayer\/execute"/);
-  assert.doesNotMatch(source, /Sign and save for revocation/);
-  assert.doesNotMatch(componentSource, /persistForRevocation/);
-  assert.match(componentSource, /storeSignedTaskPayload/);
-  assert.match(componentSource, /buildStoredSignedTaskPayload/);
-  assert.match(componentSource, /setStatusMessage\("Task submitted and saved for revocation proof"\)/);
-  assert.match(componentSource, /buildFreshTaskRunDraft/);
-  assert.match(componentSource, /chainNowSeconds/);
-  assert.match(componentSource, /readLatestBlockTimestamp/);
-  assert.match(componentSource, /publicClient\.getBlock\(\{ blockTag: "latest" \}\)/);
-  assert.match(componentSource, /const chainTimestamp = await readLatestBlockTimestamp\(\)/);
-  assert.match(componentSource, /const draft = buildCurrentDraft\(chainTimestamp\)/);
-  assert.doesNotMatch(
-    componentSource,
-    /currentUnixSeconds\(\)/,
-    "run page must derive signed intent expiry from chain time instead of the browser clock",
-  );
-  assert.match(componentSource, /optimisticNextNonce/);
-  assert.match(componentSource, /setOptimisticNextNonce\(BigInt\(relayerPayload\.intent\.nonce\) \+ 1n\)/);
-  assert.match(componentSource, /nextNonceRead\.refetch\(\)/);
-  assert.ok(
-    componentSource.indexOf("setOptimisticNextNonce(BigInt(relayerPayload.intent.nonce) + 1n)") <
-      componentSource.indexOf('setStatus("submitted")'),
-    "run page must advance the next nonce before allowing another submission",
-  );
-  assert.match(componentSource, /policySnapshotFromTextRecords/);
-  assert.match(componentSource, /policySnapshot: draft\.policySnapshot/);
-  assert.match(componentSource, /policyHash={livePolicyState\.policyDigest \?\? null}/);
-  assert.doesNotMatch(componentSource, /policyHash={null}/);
-  assert.match(componentSource, /taskGasBudgetStatus/);
-  assert.match(componentSource, /runSubmitBlocker/);
-  assert.match(componentSource, /readAgentEnsAutofill/);
-  assert.match(componentSource, /lookupVerifiedAgentDirectory/);
-  assert.match(componentSource, /fetch\(`\/api\/agents\?address=\$\{encodeURIComponent\(connectedWallet\)\}`/);
-  assert.match(componentSource, /directoryAgent\?\.agentName/);
-  assert.match(componentSource, /directoryAgent\?\.ownerName/);
-  assert.match(componentSource, /readImmediateOwnerName/);
-  assert.match(componentSource, /setOwnerName\(derivedOwnerName\)/);
-  assert.match(componentSource, /AgentLiveDataPanel/);
-  assert.match(componentSource, /AGENT_TEXT_RECORD_KEYS/);
-  assert.match(componentSource, /mapAgentTextRecords/);
-  assert.match(componentSource, /connectedWallet/);
-  assert.match(componentSource, /agentReverseName/);
-  assert.match(liveDataPanelSource, /formatWei/);
-  assert.match(componentSource, /normalizedAgentName/);
-  assert.match(componentSource, /safeNamehash\(normalizedAgentName\)/);
-  assert.match(componentSource, /agentName: normalizedAgentName/);
-  assert.match(componentSource, /ownerName: normalizedOwnerName/);
-  assert.doesNotMatch(
-    componentSource,
-    /safeNamehash\(agentName\)/,
-    "run page must not query nonce, policy, or resolver data from a raw ENS input node",
-  );
-  assert.match(helperSource, /buildTaskRunDraft/);
-  assert.match(helperSource, /serializeRelayerExecutePayload/);
-  assert.match(helperSource, /normalizeOptionalTaskMetadataURI/);
-  assert.doesNotMatch(helperSource, /normalizeRequiredText\(input\.metadataURI, "Metadata URI"\)/);
-  assert.match(source, /EnsProofPanel/);
-  assert.match(source, /TaskRecorded/);
-  assert.match(componentSource, /loadTaskHistory/);
-  assert.match(componentSource, /fromBlock: props\.taskLogStartBlock/);
-  assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
-  assert.match(taskHistorySource, /getLogs/);
-  assert.match(componentSource, /from "\.\.\/lib\/taskHistory"/);
-  assert.match(componentSource, /from "\.\/TaskHistoryPanel"/);
-  assert.doesNotMatch(componentSource, /fromBlock: 0n/);
-  assert.doesNotMatch(componentSource, /function taskFromLog/);
-  assert.doesNotMatch(componentSource, /function TaskHistoryPanel/);
-  for (const label of requiredText) {
-    assert.match(source, new RegExp(label), `${label} should be rendered`);
+  assert.match(runSource, /MCP demo/);
+  assert.match(runSource, /href="\/mcp"/);
+  assert.match(runSource, /build unsigned intents/);
+  assert.doesNotMatch(runSource, /RunTaskDemo/);
+  assert.doesNotMatch(runSource, /buildDemoAgentProfile/);
+
+  for (const label of [
+    "AgentPassports MCP",
+    "http://localhost:3333/mcp",
+    "agentpassport_execute_task",
+    "resolve_agent_passport",
+    "check_task_against_policy",
+    "build_task_intent",
+    "submit_task",
+    "sign-intent.ts",
+    "Policy source: ENS"
+  ]) {
+    assert.match(mcpSource, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented`);
   }
 });
 

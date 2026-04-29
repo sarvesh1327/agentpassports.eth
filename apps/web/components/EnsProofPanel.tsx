@@ -55,6 +55,7 @@ export function EnsProofPanel(props: EnsProofPanelProps) {
       title: props.recoveredSigner ?? undefined,
       value: formatNullableHex(props.recoveredSigner)
     },
+    { label: "Policy source: ENS", value: "Live ENS text records" },
     { label: "Policy hash", fullValue: props.policyHash, title: props.policyHash ?? undefined, value: formatNullableHex(props.policyHash) },
     { label: "Policy enabled", value: formatBoolean(props.policyEnabled) },
     { label: "Gas budget", value: formatWei(props.gasBudgetWei) }
