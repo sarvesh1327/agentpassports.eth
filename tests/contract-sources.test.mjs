@@ -225,7 +225,9 @@ test("Foundry deployment script reads environment addresses and emits deployed c
   assert.match(source, /FOUNDRY_VM\.envAddress\("ENS_REGISTRY"\)/);
   assert.match(source, /FOUNDRY_VM\.envAddress\("NAME_WRAPPER"\)/);
   assert.match(source, /FOUNDRY_VM\.startBroadcast\(\)/);
-  assert.match(source, /new AgentPolicyExecutor\(ensRegistry, nameWrapper\)/);
+  assert.match(source, /import \{ AgentEnsExecutor \}/);
+  assert.match(source, /new AgentEnsExecutor\(ensRegistry, nameWrapper\)/);
+  assert.doesNotMatch(source, /new AgentPolicyExecutor\(ensRegistry, nameWrapper\)/);
   assert.match(source, /new TaskLog\(address\(executor\)\)/);
   assert.match(source, /event DeploymentAddresses/);
   assert.match(source, /emit DeploymentAddresses\(address\(executor\), address\(taskLog\)\)/);

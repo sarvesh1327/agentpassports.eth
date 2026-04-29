@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import { AgentPolicyExecutor } from "../src/AgentPolicyExecutor.sol";
+import { AgentEnsExecutor } from "../src/AgentEnsExecutor.sol";
 import { TaskLog } from "../src/TaskLog.sol";
 
 /// @notice Minimal Foundry cheatcode interface used by the deployment script.
@@ -20,7 +20,7 @@ interface Vm {
 }
 
 /// @title Deploy
-/// @notice Deploys AgentPolicyExecutor and TaskLog with ENS constructor arguments from the environment.
+/// @notice Deploys AgentEnsExecutor and TaskLog with ENS constructor arguments from the environment.
 contract Deploy {
     /// @notice Emitted with the deployed addresses for updating environment files after a run.
     event DeploymentAddresses(address indexed executor, address indexed taskLog);
@@ -30,14 +30,14 @@ contract Deploy {
 
     /// @notice Deploys the executor first, then deploys TaskLog bound to that executor.
     /// @dev Requires ENS_REGISTRY and NAME_WRAPPER to be set in the Foundry environment.
-    /// @return executorAddress Address of the deployed AgentPolicyExecutor.
+    /// @return executorAddress Address of the deployed AgentEnsExecutor.
     /// @return taskLogAddress Address of the deployed TaskLog.
     function run() external returns (address executorAddress, address taskLogAddress) {
         address ensRegistry = FOUNDRY_VM.envAddress("ENS_REGISTRY");
         address nameWrapper = FOUNDRY_VM.envAddress("NAME_WRAPPER");
 
         FOUNDRY_VM.startBroadcast();
-        AgentPolicyExecutor executor = new AgentPolicyExecutor(ensRegistry, nameWrapper);
+        AgentEnsExecutor executor = new AgentEnsExecutor(ensRegistry, nameWrapper);
         TaskLog taskLog = new TaskLog(address(executor));
         FOUNDRY_VM.stopBroadcast();
 

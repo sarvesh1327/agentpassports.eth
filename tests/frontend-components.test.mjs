@@ -645,7 +645,7 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     "Policy state",
     "Next nonce",
     "Current agent address",
-    "Revoke policy",
+    "Disable ENS policy",
     "Set status disabled",
     "Update addr record",
     "Withdraw gas budget",
@@ -660,12 +660,19 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /useReadContracts/);
   assert.match(panelSource, /usePublicClient/);
   assert.match(panelSource, /useWriteContract/);
-  assert.match(panelSource, /revokePolicy/);
+  assert.doesNotMatch(panelSource, /revokePolicy/);
   assert.match(panelSource, /handleRevokePolicy/);
   assert.match(panelSource, /writeAgentStatusMetadata\("disabled"\)/);
   assert.match(panelSource, /generatePolicyMetadata\(status\)/);
-  assert.match(panelSource, /ownerNode: policy\[0\]/);
-  assert.match(panelSource, /hashPolicyContractResult\(\{ agentNode, policy \}\)/);
+  assert.match(panelSource, /policySnapshotFromTextRecords/);
+  assert.match(panelSource, /livePolicySnapshot/);
+  assert.match(panelSource, /ownerNode/);
+  assert.match(panelSource, /agent\.policy\.digest/);
+  assert.match(source, /agent\.policy\.target/);
+  assert.match(source, /agent\.policy\.selector/);
+  assert.match(source, /agent\.policy\.maxValueWei/);
+  assert.match(source, /agent\.policy\.maxGasReimbursementWei/);
+  assert.match(source, /agent\.policy\.expiresAt/);
   assert.match(panelSource, /fetch\("\/api\/policy-metadata"/);
   assert.match(panelSource, /unpinOldPolicyMetadata/);
   assert.match(panelSource, /method: "DELETE"/);
@@ -677,7 +684,9 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.doesNotMatch(panelSource, /Promise\.all\(\[/);
   assert.match(panelSource, /revocationActionState\.shouldWriteEnsStatus/);
   assert.match(panelSource, /waitForTransactionReceipt/);
-  assert.match(panelSource, /const policyTxHash = await writeContractAsync/);
+  assert.doesNotMatch(panelSource, /const policyTxHash = await writeContractAsync/);
+  assert.doesNotMatch(panelSource, /functionName: "revokePolicy"/);
+  assert.doesNotMatch(panelSource, /functionName: "policies"/);
   assert.doesNotMatch(panelSource, /ENS status write skipped/);
   assert.match(panelSource, /withdrawGasBudget/);
   assert.match(panelSource, /handleWithdrawGasBudget/);
@@ -719,8 +728,8 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     /requireAddress\(resolverAddress, "Resolver address is not configured"\)/,
     "revoke resolver writes must wait for a live registry resolver read instead of using a fallback resolver",
   );
-  assert.match(panelSource, /hashPolicyContractResult/);
-  assert.match(panelSource, /policyHash={livePolicyHash}/);
+  assert.doesNotMatch(panelSource, /hashPolicyContractResult/);
+  assert.match(panelSource, /policyHash={livePolicyDigest}/);
   assert.doesNotMatch(panelSource, /policyHash={null}/);
   assert.match(panelSource, /readOwnerEnsAutofill/);
   assert.match(panelSource, /ownerReverseName/);
@@ -805,7 +814,7 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
     "revoke panel must not fall back to a configured resolver after a live zero resolver read",
   );
   assert.match(source, /EnsProofPanel/);
-  assert.match(contractsSource, /name: "revokePolicy"/);
+  assert.match(contractsSource, /name: "withdrawGasBudget"/);
   for (const label of requiredText) {
     assert.match(source, new RegExp(label), `${label} should be rendered`);
   }
