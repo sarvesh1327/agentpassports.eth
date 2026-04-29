@@ -1,4 +1,4 @@
-import type { Hex, PolicyMetadata, PolicyMetadataInput, PolicySnapshot } from "./types.ts";
+import type { Hex, PolicyMetadata, PolicyMetadataInput, PolicySnapshot, SwapPolicy, SwapPolicyMetadata } from "./types.ts";
 import {
   assertUint64,
   assertUint256,
@@ -16,6 +16,7 @@ import { keccak256Hex, keccak256Utf8 } from "./keccak.ts";
 
 const POLICY_SNAPSHOT_TYPE =
   "PolicySnapshot(bytes32 agentNode,address target,bytes4 selector,uint96 maxValueWei,uint96 maxGasReimbursementWei,uint64 expiresAt,bool enabled)";
+const MAX_SLIPPAGE_BPS = 10_000n;
 
 /**
  * Builds deterministic policy metadata suitable for ENS text records or IPFS JSON.
@@ -107,6 +108,69 @@ export function policySnapshotFromTextRecords(agentNode: Hex, records: Record<st
   return policySnapshot;
 }
 
+/**
+ * Normalizes V2 Uniswap swap policy fields used by owner UI, MCP, and relayer preflight.
+ */
+export function normalizeSwapPolicy(policy: SwapPolicy): SwapPolicy {
+  const maxSlippageBps = assertUint256(policy.maxSlippageBps);
+  if (maxSlippageBps > MAX_SLIPPAGE_BPS) {
+    throw new Error("maxSlippageBps must be <= 10000");
+  }
+
+  return {
+    allowedChainId: assertUint256(policy.allowedChainId),
+    allowedTokensIn: normalizeAddressList(policy.allowedTokensIn),
+    allowedTokensOut: normalizeAddressList(policy.allowedTokensOut),
+    deadlineSeconds: assertUint64(policy.deadlineSeconds),
+    enabled: Boolean(policy.enabled),
+    maxAmountInWei: assertUint256(policy.maxAmountInWei),
+    maxSlippageBps,
+    recipient: normalizeAddress(policy.recipient, "lower"),
+    router: normalizeAddress(policy.router, "lower"),
+    selector: normalizeSelector(policy.selector)
+  };
+}
+
+/**
+ * Builds canonical V2 swap policy metadata for ENS/IPFS publication.
+ */
+export function buildSwapPolicyMetadata(policy: SwapPolicy): SwapPolicyMetadata {
+  const normalized = normalizeSwapPolicy(policy);
+  return {
+    allowedChainId: normalized.allowedChainId.toString(),
+    allowedTokensIn: normalized.allowedTokensIn,
+    allowedTokensOut: normalized.allowedTokensOut,
+    deadlineSeconds: normalized.deadlineSeconds.toString(),
+    enabled: normalized.enabled,
+    maxAmountInWei: normalized.maxAmountInWei.toString(),
+    maxSlippageBps: normalized.maxSlippageBps.toString(),
+    recipient: normalized.recipient,
+    router: normalized.router,
+    schema: "agentpassport.swapPolicy.v2",
+    selector: normalized.selector
+  };
+}
+
+/**
+ * Converts V2 swap constraints into the executor snapshot that authorizes router calls.
+ */
+export function swapPolicyToExecutableSnapshot(input: {
+  expiresAt: bigint;
+  maxGasReimbursementWei: bigint;
+  maxValueWei?: bigint;
+  swapPolicy: SwapPolicy;
+}): PolicySnapshot {
+  const swapPolicy = normalizeSwapPolicy(input.swapPolicy);
+  return normalizePolicySnapshot({
+    enabled: swapPolicy.enabled,
+    expiresAt: input.expiresAt,
+    maxGasReimbursementWei: input.maxGasReimbursementWei,
+    maxValueWei: input.maxValueWei ?? 0n,
+    selector: swapPolicy.selector,
+    target: swapPolicy.router
+  });
+}
+
 function assertUint96(value: bigint, label: string): bigint {
   const normalized = assertUint256(value);
   if (normalized >= 1n << 96n) {
@@ -129,4 +193,20 @@ function readUnsignedText(records: Record<string, string>, key: string): bigint 
     throw new Error(`${key} must be a non-negative integer`);
   }
   return BigInt(value);
+}
+
+function normalizeAddressList(values: readonly Hex[]): readonly Hex[] {
+  const seen = new Set<string>();
+  const normalized: Hex[] = [];
+  for (const value of values) {
+    const address = normalizeAddress(value, "lower");
+    if (!seen.has(address)) {
+      seen.add(address);
+      normalized.push(address);
+    }
+  }
+  if (normalized.length === 0) {
+    throw new Error("Expected at least one allowed token");
+  }
+  return normalized;
 }

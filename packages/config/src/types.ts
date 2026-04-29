@@ -61,6 +61,33 @@ export type PolicyMetadata = {
   target: Hex;
 };
 
+export type SwapPolicy = {
+  allowedChainId: bigint;
+  allowedTokensIn: readonly Hex[];
+  allowedTokensOut: readonly Hex[];
+  deadlineSeconds: bigint;
+  enabled: boolean;
+  maxAmountInWei: bigint;
+  maxSlippageBps: bigint;
+  recipient: Hex;
+  router: Hex;
+  selector: Hex;
+};
+
+export type SwapPolicyMetadata = {
+  allowedChainId: string;
+  allowedTokensIn: readonly Hex[];
+  allowedTokensOut: readonly Hex[];
+  deadlineSeconds: string;
+  enabled: boolean;
+  maxAmountInWei: string;
+  maxSlippageBps: string;
+  recipient: Hex;
+  router: Hex;
+  schema: "agentpassport.swapPolicy.v2";
+  selector: Hex;
+};
+
 export type LatestBlock = {
   timestamp: bigint;
 };

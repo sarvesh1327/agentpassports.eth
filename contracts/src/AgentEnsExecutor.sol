@@ -62,6 +62,14 @@ contract AgentEnsExecutor {
         uint256 nonce,
         uint256 gasReimbursed
     );
+    event AgentTaskExecuted(
+        bytes32 indexed agentNode,
+        address indexed target,
+        bytes4 selector,
+        bytes32 callDataHash,
+        bytes32 policyDigest,
+        uint256 nonce
+    );
 
     /// @notice Policy fields supplied to execute and accepted only when they match ENS digest.
     struct PolicySnapshot {
@@ -214,12 +222,13 @@ contract AgentEnsExecutor {
             if (!reimbursed) revert ReimbursementFailed();
         }
 
-        _emitTaskExecuted(intent, resolvedAgent, reimbursement);
+        _emitTaskExecuted(intent, policy.selector, resolvedAgent, reimbursement);
     }
 
     /// @notice Emits the execution proof from a separate frame to keep execute stack-light.
     function _emitTaskExecuted(
         TaskIntent calldata intent,
+        bytes4 selector,
         address resolvedAgent,
         uint256 reimbursement
     ) internal {
@@ -231,6 +240,14 @@ contract AgentEnsExecutor {
             intent.policyDigest,
             intent.nonce,
             reimbursement
+        );
+        emit AgentTaskExecuted(
+            intent.agentNode,
+            intent.target,
+            selector,
+            intent.callDataHash,
+            intent.policyDigest,
+            intent.nonce
         );
     }
 
