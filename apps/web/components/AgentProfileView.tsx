@@ -105,6 +105,8 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const maxValueWei = textRecords.find((record) => record.key === "agent.policy.maxValueWei")?.value || "";
   const maxGasReimbursementWei = textRecords.find((record) => record.key === "agent.policy.maxGasReimbursementWei")?.value || "";
   const policyExpiresAt = textRecords.find((record) => record.key === "agent.policy.expiresAt")?.value || "";
+  const uniswapPolicy = readUniswapPolicyDisplay(textRecords);
+  const latestSwapTask = capabilities.includes("uniswap-swap") ? taskHistory[0] ?? null : null;
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
   const policyEnabled = passportStatus === "active";
   const nextStatusAction = passportStatus === "disabled" ? "active" : "disabled";
@@ -294,6 +296,12 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           onAddGas={(amountEth) => void submitGasBudgetChange("deposit", amountEth)}
           onWithdrawGas={(amountEth) => void submitGasBudgetChange("withdraw", amountEth)}
         />
+        {capabilities.includes("uniswap-swap") ? (
+          <UniswapPolicyPanel policy={uniswapPolicy} />
+        ) : null}
+        {capabilities.includes("uniswap-swap") ? (
+          <LatestSwapProofPanel latestSwapTask={latestSwapTask} policyDigest={policyDigest} />
+        ) : null}
         <TaskHistoryPanel
           cardClassName="agent-panel agent-history-card"
           emptyDescription="TaskLog events remain visible here after disable or delete."
@@ -519,6 +527,78 @@ function GasBudgetPanel(props: {
   );
 }
 
+type UniswapPolicyDisplay = {
+  allowedChainId: string;
+  allowedTokenIn: string;
+  allowedTokenOut: string;
+  deadlineSeconds: string;
+  enabled: string;
+  maxInputAmount: string;
+  maxSlippageBps: string;
+  recipient: string;
+  router: string;
+  selector: string;
+};
+
+function UniswapPolicyPanel(props: { policy: UniswapPolicyDisplay }) {
+  const rows = [
+    { label: "Allowed chain ID", value: props.policy.allowedChainId },
+    { label: "Allowed token in", title: props.policy.allowedTokenIn, value: shortenAddressCsv(props.policy.allowedTokenIn) },
+    { label: "Allowed token out", title: props.policy.allowedTokenOut, value: shortenAddressCsv(props.policy.allowedTokenOut) },
+    { label: "Max input amount", value: props.policy.maxInputAmount },
+    { label: "Max slippage bps", value: props.policy.maxSlippageBps },
+    { label: "Quote deadline", value: props.policy.deadlineSeconds === "Unknown" ? "Unknown" : `${props.policy.deadlineSeconds}s` },
+    { label: "Policy enabled", value: props.policy.enabled },
+    { label: "Recipient", title: props.policy.recipient, value: shortenMaybeHex(props.policy.recipient) },
+    { label: "Router", title: props.policy.router, value: shortenMaybeHex(props.policy.router) },
+    { label: "Selector", value: props.policy.selector }
+  ];
+
+  return (
+    <section className="agent-panel agent-policy-card" aria-labelledby="agent-uniswap-policy-title">
+      <h2 id="agent-uniswap-policy-title"><UiIcon name="queue" size={18} /> Uniswap policy</h2>
+      <dl className="agent-fact-table">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd title={row.title}>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function LatestSwapProofPanel(props: { latestSwapTask: TaskHistoryItem | null; policyDigest: string | null }) {
+  const rows = props.latestSwapTask
+    ? [
+        { label: "Latest quote/proof URI", title: props.latestSwapTask.metadataURI, value: props.latestSwapTask.metadataURI || "No metadata URI" },
+        { label: "Swap tx", title: props.latestSwapTask.txHash, value: shortenHex(props.latestSwapTask.txHash) },
+        { label: "Task hash", title: props.latestSwapTask.taskHash, value: shortenMaybeHex(props.latestSwapTask.taskHash) },
+        { label: "Timestamp", value: props.latestSwapTask.timestamp },
+        { label: "Policy digest used", title: props.policyDigest ?? undefined, value: props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown" }
+      ]
+    : [
+        { label: "Latest quote/proof URI", value: "No swap proof yet" },
+        { label: "Swap tx", value: "Waiting for Uniswap execution" },
+        { label: "Policy digest used", title: props.policyDigest ?? undefined, value: props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown" }
+      ];
+
+  return (
+    <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-latest-swap-proof-title">
+      <h2 id="agent-latest-swap-proof-title"><UiIcon name="shield" size={18} /> Latest swap proof</h2>
+      <dl className="agent-fact-table">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd title={row.title}>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 /**
  * Replaces demo text record values with live resolver values when they exist.
  */
@@ -531,6 +611,26 @@ function mergeTextRecords(
     const fallback = initialRecords.find((record) => record.key === key)?.value ?? "";
     return { key, value: liveValue || fallback || "Unknown" };
   });
+}
+
+function readUniswapPolicyDisplay(records: readonly { key: string; value: string }[]): UniswapPolicyDisplay {
+  const read = (key: string) => {
+    const value = records.find((record) => record.key === key)?.value.trim();
+    return value && value !== "Unknown" ? value : "Unknown";
+  };
+
+  return {
+    allowedChainId: read("agent.policy.uniswap.chainId"),
+    allowedTokenIn: read("agent.policy.uniswap.allowedTokenIn"),
+    allowedTokenOut: read("agent.policy.uniswap.allowedTokenOut"),
+    deadlineSeconds: read("agent.policy.uniswap.deadlineSeconds"),
+    enabled: read("agent.policy.uniswap.enabled"),
+    maxInputAmount: read("agent.policy.uniswap.maxInputAmount"),
+    maxSlippageBps: read("agent.policy.uniswap.maxSlippageBps"),
+    recipient: read("agent.policy.uniswap.recipient"),
+    router: read("agent.policy.uniswap.router"),
+    selector: read("agent.policy.uniswap.selector")
+  };
 }
 
 /**
@@ -562,6 +662,17 @@ function formatUnixTime(value: bigint): string {
 
 function formatWei(value?: bigint): string {
   return formatWeiAsEth(value);
+}
+
+function shortenAddressCsv(value: string): string {
+  if (value === "Unknown") {
+    return value;
+  }
+  return value.split(",").map((item) => shortenMaybeHex(item.trim())).join(", ");
+}
+
+function shortenMaybeHex(value: string): string {
+  return value.startsWith("0x") ? shortenHex(value as Hex) : value || "Unknown";
 }
 
 function shortenHex(value: Hex): string {
