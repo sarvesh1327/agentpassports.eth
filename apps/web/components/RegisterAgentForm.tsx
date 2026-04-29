@@ -30,7 +30,9 @@ import {
   requireAddress,
   resolveEffectiveOwnerManager,
   safeBigInt,
-  validateRegistrationInput
+  validateRegistrationInput,
+  type AgentKind,
+  type SwapPolicyInput
 } from "../lib/registerAgent";
 import { formatWeiAsEth, formatWeiInputAsEth, parseEthInputToWeiString } from "../lib/ethAmount";
 import { buildRegistrationBatch, type RegistrationBatchInput } from "../lib/registrationBatch";
@@ -73,7 +75,14 @@ type GeneratedPolicyMetadataResponse = {
 };
 
 const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
-const AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
+const BASE_AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
+const UNISWAP_SWAP_SELECTOR = "0x12aa3caf" as const;
+const AGENT_KIND_OPTIONS: readonly { label: string; value: AgentKind }[] = [
+  { label: "Personal assistant", value: "personal-assistant" },
+  { label: "Swapper", value: "swapper" },
+  { label: "Researcher", value: "researcher" },
+  { label: "Keeper", value: "keeper" }
+];
 
 /**
  * Captures the ENS identity, record metadata, policy, and gas budget inputs for a new agent.
@@ -88,6 +97,16 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const [ownerNameEdited, setOwnerNameEdited] = useState(false);
   const [agentLabel, setAgentLabel] = useState(props.defaultAgentLabel);
   const [agentAddress, setAgentAddress] = useState(props.defaultAgentAddress ?? "");
+  const [agentKind, setAgentKind] = useState<AgentKind>("personal-assistant");
+  const [swapChainId, setSwapChainId] = useState("1");
+  const [swapTokenIn, setSwapTokenIn] = useState("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+  const [swapTokenOut, setSwapTokenOut] = useState("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
+  const [swapMaxAmountInWei, setSwapMaxAmountInWei] = useState("10000000");
+  const [swapMaxSlippageBps, setSwapMaxSlippageBps] = useState("50");
+  const [swapDeadlineSeconds, setSwapDeadlineSeconds] = useState("60");
+  const [swapRecipient, setSwapRecipient] = useState(props.defaultAgentAddress ?? "");
+  const [swapRouter, setSwapRouter] = useState("");
+  const [swapSelector, setSwapSelector] = useState<Hex>(UNISWAP_SWAP_SELECTOR);
   const [gasBudgetEth, setGasBudgetEth] = useState(formatWeiInputAsEth(props.defaultGasBudgetWei));
   const [maxReimbursementEth, setMaxReimbursementEth] = useState(formatWeiInputAsEth(props.defaultMaxGasReimbursementWei));
   const [status, setStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
@@ -97,10 +116,26 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
   const gasBudgetWei = parseEthInputToWeiString(gasBudgetEth);
   const maxGasReimbursementWei = parseEthInputToWeiString(maxReimbursementEth);
+  const swapPolicy = useMemo(
+    () => buildSwapPolicyDraft({
+      allowedChainId: swapChainId,
+      allowedTokensIn: swapTokenIn,
+      allowedTokensOut: swapTokenOut,
+      deadlineSeconds: swapDeadlineSeconds,
+      maxAmountInWei: swapMaxAmountInWei,
+      maxSlippageBps: swapMaxSlippageBps,
+      recipient: swapRecipient || agentAddress,
+      router: swapRouter,
+      selector: swapSelector
+    }),
+    [agentAddress, swapChainId, swapDeadlineSeconds, swapMaxAmountInWei, swapMaxSlippageBps, swapRecipient, swapRouter, swapSelector, swapTokenIn, swapTokenOut]
+  );
+  const agentCapabilities = useMemo(() => buildAgentCapabilities(agentKind), [agentKind]);
   const preview = useMemo(
     () =>
       buildRegisterPreview({
         agentAddress,
+        agentKind,
         agentLabel,
         executorAddress: props.executorAddress,
         gasBudgetWei,
@@ -109,14 +144,17 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         ownerName,
         policyExpiresAt: props.defaultPolicyExpiresAt,
         policyUri: "",
+        swapPolicy: agentKind === "swapper" ? swapPolicy : null,
         taskLogAddress: props.taskLogAddress
       }),
     [
       agentAddress,
+      agentKind,
       agentLabel,
       gasBudgetWei,
       maxGasReimbursementWei,
       ownerName,
+      swapPolicy,
       props.defaultMaxValueWei,
       props.defaultPolicyExpiresAt,
       props.executorAddress,
@@ -258,8 +296,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const ownerIndexBlocker = ownerResolver.isSuccess && !ownerResolverAddress
     ? "Owner resolver address is required for owner dashboard index updates"
     : null;
-  const submitBlocker = ownerEnsStatus.blocker ?? ownerIndexBlocker ?? registrationDraftStatus.blocker;
-  const hasPreparedTransactions = registrationDraftStatus.canSubmit;
+  const swapPolicyBlocker = agentKind === "swapper" && !swapPolicy
+    ? "Complete valid Uniswap policy fields before registering a Swapper agent"
+    : null;
+  const submitBlocker = ownerEnsStatus.blocker ?? ownerIndexBlocker ?? registrationDraftStatus.blocker ?? swapPolicyBlocker;
+  const hasPreparedTransactions = registrationDraftStatus.canSubmit && !swapPolicyBlocker;
   const preparedBatchSummary = useMemo(
     () => buildPreparedBatchSummary(),
     [
@@ -497,7 +538,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         agentAddress: agentSignerAddress,
         agentName: preview.agentName,
         agentNode: preview.agentNode,
-        capabilities: AGENT_CAPABILITIES,
+        capabilities: agentCapabilities,
         chainId: props.chainId.toString(),
         executorAddress,
         expiresAt: props.defaultPolicyExpiresAt,
@@ -506,6 +547,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         ownerName: normalizedOwnerName,
         ownerNode: preview.ownerNode,
         status: "active",
+        swapPolicy: agentKind === "swapper" && swapPolicy ? swapPolicy : undefined,
         target: taskLogAddress
       }),
       headers: { "content-type": "application/json" },
@@ -708,13 +750,19 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               />
             </label>
             <div className="segmented-control" aria-label="Agent kind">
-              <button type="button" aria-pressed="true">Personal assistant</button>
-              <button type="button">Swapper</button>
-              <button type="button">Researcher</button>
-              <button type="button">Keeper</button>
+              {AGENT_KIND_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={agentKind === option.value}
+                  onClick={() => setAgentKind(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
             <div className="capability-row" aria-label="Capabilities">
-              {AGENT_CAPABILITIES.map((capability) => (
+              {agentCapabilities.map((capability) => (
                 <span key={capability}><input readOnly type="checkbox" /> {capability}</span>
               ))}
             </div>
@@ -760,6 +808,57 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
             </label>
           </div>
         </section>
+
+        {agentKind === "swapper" ? (
+          <section className="register-step register-step--wide" aria-labelledby="register-swap-policy-title">
+            <div className="register-step__heading">
+              <span><UiIcon name="queue" size={18} /></span>
+              <h2 id="register-swap-policy-title">Uniswap policy</h2>
+              <strong>Capability <span className="pill pill--info">uniswap-swap</span></strong>
+            </div>
+            <div className="field-grid">
+              <label>
+                <span>Allowed chain ID</span>
+                <input value={swapChainId} onChange={(event) => setSwapChainId(event.target.value)} />
+              </label>
+              <label>
+                <span>Allowed token in</span>
+                <input value={swapTokenIn} onChange={(event) => setSwapTokenIn(event.target.value)} />
+              </label>
+              <label>
+                <span>Allowed token out</span>
+                <input value={swapTokenOut} onChange={(event) => setSwapTokenOut(event.target.value)} />
+              </label>
+              <label>
+                <span>Max input amount</span>
+                <input value={swapMaxAmountInWei} onChange={(event) => setSwapMaxAmountInWei(event.target.value)} />
+              </label>
+              <label>
+                <span>Max slippage bps</span>
+                <input value={swapMaxSlippageBps} onChange={(event) => setSwapMaxSlippageBps(event.target.value)} />
+              </label>
+              <label>
+                <span>Quote deadline seconds</span>
+                <input value={swapDeadlineSeconds} onChange={(event) => setSwapDeadlineSeconds(event.target.value)} />
+              </label>
+              <label>
+                <span>Recipient</span>
+                <input placeholder="defaults to agent address" value={swapRecipient} onChange={(event) => setSwapRecipient(event.target.value)} />
+              </label>
+              <label>
+                <span>Uniswap router</span>
+                <input placeholder="0x..." value={swapRouter} onChange={(event) => setSwapRouter(event.target.value)} />
+              </label>
+              <label>
+                <span>Router selector</span>
+                <input value={swapSelector} onChange={(event) => setSwapSelector(event.target.value as Hex)} />
+              </label>
+            </div>
+            <small className="field-help">
+              These records are published to ENS and checked by MCP before every Uniswap API quote or swap.
+            </small>
+          </section>
+        ) : null}
 
         <section className="register-step" aria-labelledby="register-gas-title">
           <div className="register-step__heading">
@@ -879,6 +978,63 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
  */
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function buildAgentCapabilities(agentKind: AgentKind): readonly string[] {
+  const capabilities: string[] = [...BASE_AGENT_CAPABILITIES];
+  if (agentKind === "swapper") {
+    capabilities.push("uniswap-swap");
+  }
+  return capabilities;
+}
+
+function buildSwapPolicyDraft(input: {
+  allowedChainId: string;
+  allowedTokensIn: string;
+  allowedTokensOut: string;
+  deadlineSeconds: string;
+  maxAmountInWei: string;
+  maxSlippageBps: string;
+  recipient: string;
+  router: string;
+  selector: string;
+}): SwapPolicyInput | null {
+  const allowedTokensIn = readAddressCsv(input.allowedTokensIn);
+  const allowedTokensOut = readAddressCsv(input.allowedTokensOut);
+  const recipient = normalizeAddressInput(input.recipient);
+  const router = normalizeAddressInput(input.router);
+  const selector = normalizeSelectorInput(input.selector);
+
+  // Return null while the owner is still typing. The submit blocker turns this
+  // into a clear UI message for Swapper agents instead of throwing during render.
+  if (!allowedTokensIn.length || !allowedTokensOut.length || !recipient || !router || !selector) {
+    return null;
+  }
+
+  return {
+    allowedChainId: input.allowedChainId,
+    allowedTokensIn,
+    allowedTokensOut,
+    deadlineSeconds: input.deadlineSeconds,
+    enabled: true,
+    maxAmountInWei: input.maxAmountInWei,
+    maxSlippageBps: input.maxSlippageBps,
+    recipient,
+    router,
+    selector
+  };
+}
+
+function readAddressCsv(value: string): Hex[] {
+  return value
+    .split(",")
+    .map((item) => normalizeAddressInput(item.trim()))
+    .filter((item): item is Hex => Boolean(item));
+}
+
+function normalizeSelectorInput(value: string): Hex | null {
+  const text = value.trim();
+  return /^0x[0-9a-fA-F]{8}$/u.test(text) ? text as Hex : null;
 }
 
 /**

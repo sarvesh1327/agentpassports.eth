@@ -1,9 +1,12 @@
 import {
   buildPolicyMetadata,
+  buildSwapPolicyMetadata,
   hashPolicyMetadata,
   taskLogRecordTaskSelector,
   type Hex,
-  type PolicyMetadata
+  type PolicyMetadata,
+  type SwapPolicy,
+  type SwapPolicyMetadata
 } from "@agentpassport/config";
 import type { ServerEnv } from "./serverEnv";
 
@@ -23,6 +26,7 @@ export type AgentPolicyDocumentInput = {
   ownerName: string;
   ownerNode: Hex;
   status?: "active" | "disabled";
+  swapPolicy?: SwapPolicy | null;
   target: Hex;
 };
 
@@ -40,6 +44,7 @@ export type AgentPolicyDocument = {
   chainId: string;
   executor: Hex;
   policy: PolicyMetadata;
+  swapPolicy?: SwapPolicyMetadata;
 };
 
 export type GeneratedAgentPolicy = {
@@ -90,6 +95,12 @@ export function buildAgentPolicyDocument(input: AgentPolicyDocumentInput): Gener
     executor: input.executorAddress.toLowerCase() as Hex,
     policy
   };
+
+  // Keep the executable V1 policy hash stable while attaching V2 swap guardrails
+  // as transparent metadata for agents, MCP, UI, and reviewers.
+  if (input.swapPolicy) {
+    document.swapPolicy = buildSwapPolicyMetadata(input.swapPolicy);
+  }
 
   return {
     document,

@@ -58,6 +58,31 @@ test("policy metadata hash is stable for the same executable policy", async () =
   assert.equal(first.policyHash, second.policyHash);
 });
 
+test("policy metadata document can include Uniswap swap policy for Swapper agents", async () => {
+  const { buildAgentPolicyDocument } = await import("../apps/web/lib/policyMetadata.ts");
+
+  const result = buildAgentPolicyDocument(policyInput({
+    capabilities: ["task-log", "sponsored-execution", "uniswap-swap"],
+    swapPolicy: {
+      allowedChainId: 1n,
+      allowedTokensIn: ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"],
+      allowedTokensOut: ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],
+      deadlineSeconds: 60n,
+      enabled: true,
+      maxAmountInWei: 10000000n,
+      maxSlippageBps: 50n,
+      recipient: AGENT_ADDRESS,
+      router: "0x1111111111111111111111111111111111111111",
+      selector: "0x12aa3caf",
+    },
+  }));
+
+  assert.equal(result.document.swapPolicy.schema, "agentpassport.swapPolicy.v2");
+  assert.equal(result.document.swapPolicy.allowedChainId, "1");
+  assert.equal(result.document.swapPolicy.maxSlippageBps, "50");
+  assert.deepEqual(result.document.agent.capabilities, ["sponsored-execution", "task-log", "uniswap-swap"]);
+});
+
 test("Pinata upload uses server-only credentials and returns an IPFS policy URI", async () => {
   const { buildAgentPolicyDocument, uploadPolicyDocumentToPinata } = await import("../apps/web/lib/policyMetadata.ts");
   const calls = [];
