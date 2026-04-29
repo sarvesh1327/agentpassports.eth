@@ -175,7 +175,7 @@ test("primary UI flow points owners through the dashboard instead of legacy stan
   assert.match(source, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
   assert.doesNotMatch(headerSource, /href="\/run"/);
   assert.doesNotMatch(headerSource, /href="\/revoke"/);
-  assert.doesNotMatch(headerSource, /href="\/register"/);
+  assert.match(headerSource, /registerHref = ownerName \? `\/register\?owner=\$\{encodeURIComponent\(ownerName\)\}` : "\/register"/);
   assert.doesNotMatch(homeSource, /Run task/);
   assert.doesNotMatch(homeSource, /Revoke access/);
   assert.doesNotMatch(homeSource, /Register agent/);
@@ -184,7 +184,7 @@ test("primary UI flow points owners through the dashboard instead of legacy stan
 test("register route is dashboard scoped instead of a standalone legacy flow", async () => {
   const registerSource = await readText("apps/web/app/register/page.tsx");
 
-  assert.match(registerSource, /redirect\("\/"\)/);
+  assert.doesNotMatch(registerSource, /redirect\("\/"\)/);
   assert.match(registerSource, /Register new agent/);
   assert.match(registerSource, /Create an ENS subname, publish policy metadata, and fund execution budget\./);
   assert.match(registerSource, /Back to owner dashboard/);

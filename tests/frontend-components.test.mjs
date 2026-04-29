@@ -123,13 +123,17 @@ test("home page renders the dashboard-first owner workflow", async () => {
   assert.match(source, /landing-hero/);
   assert.match(source, /AgentPassports\.eth/);
   assert.match(source, /OwnerDashboardEntry/);
-  assert.match(source, /Start from the owner ENS/);
+  assert.match(source, /LandingOwnerPreview/);
+  assert.doesNotMatch(source, /landing-steps/);
+  assert.doesNotMatch(source, /Start from the owner ENS/);
   assert.match(entrySource, /Open owner dashboard/);
   assert.match(entrySource, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
   assert.doesNotMatch(source, /Register agent/);
   assert.doesNotMatch(source, /Run task/);
   assert.doesNotMatch(source, /Revoke access/);
-  assert.doesNotMatch(headerSource, /href="\/register"/);
+  assert.match(headerSource, /useAccount/);
+  assert.match(headerSource, /useEnsName/);
+  assert.match(headerSource, /registerHref = ownerName \? `\/register\?owner=\$\{encodeURIComponent\(ownerName\)\}` : "\/register"/);
   assert.doesNotMatch(headerSource, /href="\/run"/);
   assert.doesNotMatch(headerSource, /href="\/revoke"/);
   assert.doesNotMatch(headerSource, /buildDemoAgentProfile/);
@@ -143,7 +147,7 @@ test("home page renders the dashboard-first owner workflow", async () => {
   assert.doesNotMatch(source, /Temporary shell/);
   assert.match(styles, /\.landing-hero__content\s*{[^}]*min-width: 0/s);
   assert.match(styles, /\.landing-hero__content h1\s*{[^}]*overflow-wrap: anywhere/s);
-  assert.match(styles, /\.landing-visual\s*{[^}]*min-width: 0/s);
+  assert.match(styles, /\.landing-product-preview\s*{/);
   assert.match(styles, /\.owner-entry/);
 });
 
@@ -278,7 +282,7 @@ test("dashboard-scoped register uses mockup defaults while revoke remains blank 
   const revokeSource = await readText("apps/web/app/revoke/page.tsx");
   const source = `${registerSource}\n${runSource}\n${revokeSource}`;
 
-  assert.match(registerSource, /redirect\("\/"\)/);
+  assert.doesNotMatch(registerSource, /redirect\("\/"\)/);
   assert.match(registerSource, /defaultOwnerName={defaultOwnerName}/);
   assert.match(registerSource, /defaultAgentLabel="assistant"/);
   assert.match(registerSource, /defaultGasBudgetWei="500000000000000"/);

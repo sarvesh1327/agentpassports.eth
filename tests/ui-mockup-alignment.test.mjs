@@ -32,11 +32,16 @@ test("mockup visual system tokens and reusable surfaces are present", async () =
 test("landing page matches product UI and dashboard navigation requirements", async () => {
   const page = await readText("apps/web/app/page.tsx");
   const entry = await readText("apps/web/components/OwnerDashboardEntry.tsx");
+  const preview = await readText("apps/web/components/LandingOwnerPreview.tsx");
   const header = await readText("apps/web/components/SiteHeader.tsx");
 
   assert.doesNotMatch(page, /demo/i);
-  assert.match(page, /landing-product-preview/);
-  assert.match(page, /Open owner dashboard/);
+  assert.match(page, /LandingOwnerPreview/);
+  assert.match(preview, /landing-product-preview/);
+  assert.match(preview, /useAccount/);
+  assert.match(preview, /useEnsName/);
+  assert.match(preview, /\/api\/agents\?ownerName=/);
+  assert.match(entry, /Open owner dashboard/);
   assert.match(entry, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
   assert.doesNotMatch(entry, /encodeURIComponent\(ownerName\)/);
   assert.match(header, /href="\/mcp"/);

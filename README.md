@@ -89,17 +89,12 @@ Keep secrets in local `.env` files only. Public values are prefixed with `NEXT_P
 
 ## Deployed addresses
 
-Fill these from the local deployment output before a public demo or submission.
-
 | Item | Sepolia value |
 |---|---|
-| Demo owner ENS | `TODO` |
-| Demo agent ENS | `TODO` |
 | `AgentEnsExecutor` | `0xf6902c77f4dF81327ADF86cc484498C467335115` |
 | `TaskLog` | `0xe41f0aeeF4e0A84b46448913f51E60640F6c2Bf2` |
 | ENS registry | `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e` |
 | NameWrapper | `0x0635513f179D50A207757E05759CbD106d7dFcE8` |
-| Public resolver | `NEXT_PUBLIC_PUBLIC_RESOLVER` |
 
 ## Setup
 
