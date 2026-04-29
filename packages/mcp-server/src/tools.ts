@@ -37,7 +37,6 @@ export type AgentPassportToolName =
   | "get_agent_policy"
   | "check_task_against_policy"
   | "build_task_intent"
-  | "sign_task_intent"
   | "submit_task";
 
 export type AgentPassportToolDefinition = {
@@ -80,7 +79,7 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
   {
     name: "build_task_intent",
     description:
-      "Build TaskLog.recordTask calldata and an AgentEnsExecutor TaskIntent from live ENS policy, current executor nonce, task text, metadata URI, and TTL. This only prepares data; it does not sign or submit anything.",
+      "Build TaskLog.recordTask calldata, unsigned intent JSON, and typed-data signing metadata from live ENS policy, current executor nonce, task text, metadata URI, and TTL. This only prepares data; it does not sign, submit, or access an agent private key.",
     inputShape: {
       agentName: ensName,
       task: taskSchema,
@@ -89,15 +88,9 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
     }
   },
   {
-    name: "sign_task_intent",
-    description:
-      "Sign a prepared TaskIntent with the local AGENT_PRIVATE_KEY after re-resolving ENS and verifying the signer still equals addr(agentName). Never sign stale, disabled, mismatched, or externally supplied policy data.",
-    inputShape: { agentName: ensName, intent: intentSchema }
-  },
-  {
     name: "submit_task",
     description:
-      "Submit a signed intent, policy snapshot, calldata, and signature to the configured AgentPassports relayer. The relayer rechecks ENS policy and signer state before broadcasting AgentEnsExecutor.execute.",
+      "Submit an externally signed intent, policy snapshot, calldata, and signature to the configured AgentPassports relayer. The relayer rechecks ENS policy and signer state before broadcasting AgentEnsExecutor.execute.",
     inputShape: { agentName: ensName, intent: intentSchema, policySnapshot: policySnapshotSchema, callData: hex, signature: hex }
   }
 ];

@@ -1,7 +1,7 @@
 # AgentPassports MCP Server
 
 This package exposes AgentPassports.eth as a Model Context Protocol server for autonomous agents.
-It uses the current MCP TypeScript SDK with stdio transport so a local agent runtime can launch it as a subprocess without opening an HTTP port.
+It supports stdio transport for subprocess-based MCP clients and a local Streamable HTTP endpoint for agents that connect to an already-running server at `http://localhost:3333/mcp`.
 
 ## Run
 
@@ -9,6 +9,18 @@ From the repo root:
 
 ```bash
 pnpm mcp:start
+```
+
+For a local hosted MCP server, run:
+
+```bash
+pnpm mcp:http
+```
+
+The Streamable HTTP endpoint is:
+
+```text
+http://localhost:3333/mcp
 ```
 
 Or directly:
@@ -28,10 +40,9 @@ ENS_REGISTRY=0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e
 EXECUTOR_ADDRESS=0xAgentEnsExecutor
 TASK_LOG_ADDRESS=0xTaskLog
 RELAYER_URL=http://localhost:3000/api/relayer/execute
-AGENT_PRIVATE_KEY=0x... # only required for sign_task_intent
 ```
 
-`AGENT_PRIVATE_KEY` is never sent to the browser or relayer. It is only used locally by `sign_task_intent` after the server re-resolves ENS and confirms the key matches `addr(agentName)`.
+The MCP server does not read or store agent private keys. Signing happens outside the MCP server using the AgentPassports skill-provided signing script or another wallet flow controlled by the agent/user environment.
 
 ## Tools
 
@@ -39,9 +50,12 @@ AGENT_PRIVATE_KEY=0x... # only required for sign_task_intent
 - `list_owner_agents`: read `agentpassports.agents` from an owner ENS name and resolve every listed agent passport.
 - `get_agent_policy`: load policy fields from ENS text records, require `agent.status` is exactly `active`, and verify the computed digest matches `agent.policy.digest`.
 - `check_task_against_policy`: preflight task value, target, selector, and policy digest before any signing.
-- `build_task_intent`: build `TaskLog.recordTask` calldata and an unsigned `AgentEnsExecutor.TaskIntent` from live ENS policy and nonce state.
-- `sign_task_intent`: sign the prepared intent with the local agent key after re-checking live ENS signer and exact status.
-- `submit_task`: send the signed payload to the AgentPassports relayer, which repeats ENS and signature checks before broadcasting.
+- `build_task_intent`: build `TaskLog.recordTask` calldata and unsigned intent JSON from live ENS policy and nonce state.
+- `submit_task`: send the externally signed payload to the AgentPassports relayer, which repeats ENS and signature checks before broadcasting.
+
+## Signing script
+
+`build_task_intent` returns intent JSON plus signing metadata. The MCP server does not own agent private keys and does not provide the signing script as a package command. Agents should download or copy the skill-provided signing script from `skills/agentpassports/sign-intent.ts` into the agent/user-controlled signing environment, sign the exact intent JSON there, and return only the signature to `submit_task`.
 
 ## Safety flow
 

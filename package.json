@@ -8,6 +8,7 @@
     "web:dev": "pnpm --filter @agentpassport/web dev",
     "agent:run": "pnpm --filter @agentpassport/agent-runner start",
     "mcp:start": "pnpm --filter @agentpassport/mcp-server start",
+    "mcp:http": "pnpm --filter @agentpassport/mcp-server http",
     "contracts:test": "forge test"
   }
 }

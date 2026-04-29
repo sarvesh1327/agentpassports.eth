@@ -32,7 +32,6 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "get_agent_policy",
     "check_task_against_policy",
     "build_task_intent",
-    "sign_task_intent",
     "submit_task"
   ]);
 
@@ -41,7 +40,7 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     assert.match(tool.description, /ENS/i, `${tool.name} should mention ENS`);
   }
 
-  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "sign_task_intent").description, /never sign/i);
+  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "build_task_intent").description, /does not sign/i);
   assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "check_task_against_policy").description, /policy digest/i);
   assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "submit_task").description, /relayer/i);
 });
@@ -55,7 +54,6 @@ test("MCP tools use zod schemas with the required public arguments", async () =>
   assert.deepEqual(Object.keys(byName.get_agent_policy.inputShape), ["agentName"]);
   assert.deepEqual(Object.keys(byName.check_task_against_policy.inputShape), ["agentName", "task"]);
   assert.deepEqual(Object.keys(byName.build_task_intent.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds"]);
-  assert.deepEqual(Object.keys(byName.sign_task_intent.inputShape), ["agentName", "intent"]);
   assert.deepEqual(Object.keys(byName.submit_task.inputShape), ["agentName", "intent", "policySnapshot", "callData", "signature"]);
 });
 
@@ -74,13 +72,40 @@ test("MCP safety helpers reject missing or non-exact ENS active status before si
   );
 });
 
-test("MCP entrypoint uses stdio transport and registers all tool definitions", async () => {
-  const source = await readText("packages/mcp-server/src/index.ts");
+test("MCP package exposes stdio and localhost HTTP entrypoints", async () => {
+  const rootPackage = JSON.parse(await readText("package.json"));
+  const packageJson = JSON.parse(await readText("packages/mcp-server/package.json"));
+  const httpSource = await readText("packages/mcp-server/src/http.ts");
 
-  assert.match(source, /StdioServerTransport/);
-  assert.match(source, /McpServer/);
-  assert.match(source, /AGENTPASSPORT_MCP_TOOLS/);
-  assert.match(source, /server\.tool/);
+  assert.equal(rootPackage.scripts["mcp:start"], "pnpm --filter @agentpassport/mcp-server start");
+  assert.equal(rootPackage.scripts["mcp:http"], "pnpm --filter @agentpassport/mcp-server http");
+  assert.equal(packageJson.scripts.start, "tsx src/index.ts");
+  assert.equal(packageJson.scripts.http, "tsx src/http.ts");
+  assert.match(httpSource, /StreamableHTTPServerTransport/);
+  assert.match(httpSource, /127\.0\.0\.1/);
+  assert.match(httpSource, /3333/);
+  assert.match(httpSource, /\/mcp/);
+});
+
+test("MCP package does not own agent private-key signing scripts", async () => {
+  const packageJson = JSON.parse(await readText("packages/mcp-server/package.json"));
+  const readme = await readText("packages/mcp-server/README.md");
+
+  assert.equal(packageJson.scripts["sign:intent"], undefined);
+  assert.doesNotMatch(readme, /AGENTPASSPORT_SIGNER_PRIVATE_KEY/);
+  assert.doesNotMatch(readme, /sign:intent/);
+  assert.match(readme, /skill-provided signing script/i);
+});
+
+test("MCP entrypoint uses stdio transport and shared registration registers all tool definitions", async () => {
+  const entrypoint = await readText("packages/mcp-server/src/index.ts");
+  const serverFactory = await readText("packages/mcp-server/src/server.ts");
+
+  assert.match(entrypoint, /StdioServerTransport/);
+  assert.match(entrypoint, /createAgentPassportsMcpServer/);
+  assert.match(serverFactory, /McpServer/);
+  assert.match(serverFactory, /AGENTPASSPORT_MCP_TOOLS/);
+  assert.match(serverFactory, /server\.tool/);
 });
 
 test("MCP package documents setup, environment, and tool safety flow", async () => {
@@ -88,9 +113,9 @@ test("MCP package documents setup, environment, and tool safety flow", async () 
 
   assert.match(readme, /AgentPassports MCP Server/);
   assert.match(readme, /mcp:start/);
-  assert.match(readme, /AGENT_PRIVATE_KEY/);
+  assert.doesNotMatch(readme, /AGENT_PRIVATE_KEY/);
   assert.match(readme, /resolve_agent_passport/);
-  assert.match(readme, /sign_task_intent/);
+  assert.match(readme, /skill-provided signing script/i);
   assert.match(readme, /Never sign/i);
   assert.match(readme, /agent\.status.*exactly.*active/i);
 });

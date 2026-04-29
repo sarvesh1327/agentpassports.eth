@@ -16,7 +16,6 @@ import {
   type TaskIntentMessage
 } from "@agentpassport/config";
 import { createPublicClient, defineChain, encodeFunctionData, http, keccak256, stringToHex } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { assertExactActiveStatus, assertPolicyDigestMatches } from "./safety.ts";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
 
@@ -72,7 +71,6 @@ const TASK_LOG_ABI = [
 ] as const;
 
 export type McpServerConfig = {
-  agentPrivateKey?: Hex;
   chainId: bigint;
   ensRegistryAddress: Hex;
   executorAddress: Hex;
@@ -90,7 +88,6 @@ type ToolArgs<TName extends AgentPassportToolName> = Record<string, any>;
  */
 export function loadMcpConfig(env: Record<string, string | undefined> = process.env): McpServerConfig {
   return {
-    agentPrivateKey: optionalHex(env.AGENT_PRIVATE_KEY, 32),
     chainId: readBigint(env.CHAIN_ID ?? env.NEXT_PUBLIC_CHAIN_ID, "CHAIN_ID"),
     ensRegistryAddress: optionalAddress(env.ENS_REGISTRY ?? env.NEXT_PUBLIC_ENS_REGISTRY) ?? ENS_REGISTRY_ADDRESS,
     executorAddress: readAddress(env.EXECUTOR_ADDRESS ?? env.NEXT_PUBLIC_EXECUTOR_ADDRESS, "EXECUTOR_ADDRESS"),
@@ -165,7 +162,23 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       expiresAt
     };
 
-    return { callData, intent: serializeIntent(intent), metadataURI: args.metadataURI, ownerName, ownerNode, policySnapshot: policy.policySnapshot, taskHash };
+    return {
+      callData,
+      chainId: config.chainId.toString(),
+      executorAddress: config.executorAddress,
+      intent: serializeIntent(intent),
+      metadataURI: args.metadataURI,
+      ownerName,
+      ownerNode,
+      policySnapshot: policy.policySnapshot,
+      signingPayload: {
+        chainId: config.chainId.toString(),
+        executorAddress: config.executorAddress,
+        intent: serializeIntent(intent),
+        typedData: buildTaskIntentTypedData(intent, config.chainId, config.executorAddress)
+      },
+      taskHash
+    };
   }
 
   return {
@@ -188,25 +201,6 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       return { allowed: selectorAllowed && targetAllowed && valueAllowed, policy, selectorAllowed, targetAllowed, valueAllowed };
     },
     build_task_intent: buildIntent,
-    sign_task_intent: async (args: ToolArgs<"sign_task_intent">) => {
-      if (!config.agentPrivateKey) {
-        throw new Error("AGENT_PRIVATE_KEY is required for sign_task_intent");
-      }
-      const passport = await resolvePassport(args.agentName);
-      assertExactActiveStatus(passport.textRecords["agent.status"] ?? "");
-      if (!passport.agentAddress) {
-        throw new Error("ENS addr(agentName) is not set");
-      }
-      const account = privateKeyToAccount(config.agentPrivateKey);
-      if (account.address.toLowerCase() !== passport.agentAddress.toLowerCase()) {
-        throw new Error("AGENT_PRIVATE_KEY does not match live ENS addr(agentName)");
-      }
-      const intent = parseIntent(args.intent);
-      const typedData = buildTaskIntentTypedData(intent, config.chainId, config.executorAddress);
-      const signature = await account.signTypedData(typedData);
-      const digest = hashTaskIntent(intent, config.chainId, config.executorAddress);
-      return { digest, intent: serializeIntent(intent), signer: account.address, signature, typedData };
-    },
     submit_task: async (args: ToolArgs<"submit_task">) => {
       // The relayer performs the same ENS and signature checks again. This MCP
       // tool still requires agentName so agents keep a human-readable audit trail.
@@ -272,13 +266,6 @@ function optionalAddress(value: string | undefined): Hex | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (!/^0x[0-9a-fA-F]{40}$/u.test(trimmed)) throw new Error("Expected an EVM address");
-  return trimmed as Hex;
-}
-
-function optionalHex(value: string | undefined, bytes: number): Hex | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) return undefined;
-  if (!new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`, "u").test(trimmed)) throw new Error(`Expected ${bytes}-byte hex`);
   return trimmed as Hex;
 }
 
