@@ -33,6 +33,8 @@ test("key setup skill teaches agent-owned key file setup and UI registration", a
     [
       "\\.agentPassports/keys\\.txt",
       "private key",
+      "Ethereum private key",
+      "ECDSA|secp256k1",
       "create a new key pair",
       "public address",
       "ask the user",
@@ -105,6 +107,8 @@ test("skill-owned signing script signs provided intent JSON with .agentPassports
   assert.match(source, /intent JSON/i);
   assert.match(source, /signature/);
   assert.match(source, /download/i);
+  assert.match(source, /Promise<`0x\$\{string\}`>/);
+  assert.doesNotMatch(source, /Promise\s*\{/);
   assert.doesNotMatch(source, /process\.env/);
   assert.doesNotMatch(source, /AGENT_PRIVATE_KEY|AGENTPASSPORT_SIGNER_PRIVATE_KEY/);
   assert.doesNotMatch(source, /0x[0-9a-fA-F]{64}/, "skill script must not contain a hardcoded private key");

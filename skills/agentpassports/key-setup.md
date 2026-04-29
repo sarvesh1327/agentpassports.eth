@@ -1,6 +1,6 @@
 # AgentPassports Key Setup Skill
 
-Use this skill when an agent needs to prepare or verify the signing key it will use for AgentPassports. The agent owns its private key locally, stores it in `.agentPassports/keys.txt`, and only shares the derived public address with the user for UI setup.
+Use this skill when an agent needs to prepare or verify the signing key it will use for AgentPassports. AgentPassports requires an Ethereum private key/public key pair, meaning an ECDSA secp256k1 key pair whose public key derives to an EVM address. The agent owns its private key locally, stores it in `.agentPassports/keys.txt`, and only shares the derived public address with the user for UI setup.
 
 ## Brief protocol context
 
