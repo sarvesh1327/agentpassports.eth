@@ -114,6 +114,48 @@ test("skill-owned signing script signs provided intent JSON with .agentPassports
   assert.doesNotMatch(source, /0x[0-9a-fA-F]{64}/, "skill script must not contain a hardcoded private key");
 });
 
+test("skill-owned create-key helper generates an Ethereum secp256k1 key file safely", async () => {
+  const source = await readText("skills/agentpassports/create-key.ts");
+
+  assert.match(source, /generatePrivateKey/);
+  assert.match(source, /privateKeyToAccount/);
+  assert.match(source, /\.agentPassports\/keys\.txt/);
+  assert.match(source, /mkdir/);
+  assert.match(source, /chmod/);
+  assert.match(source, /0o600/);
+  assert.match(source, /address/);
+  assert.match(source, /must not.*commit|do not commit/i);
+  assert.doesNotMatch(source, /process\.env/);
+  assert.doesNotMatch(source, /@agentpassport\/config/);
+  assert.doesNotMatch(source, /0x[0-9a-fA-F]{64}/, "create-key script must not contain a hardcoded private key");
+});
+
+test("fresh agent walkthrough explains the complete first-run flow", async () => {
+  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
+
+  assertMentionsAll(
+    walkthrough,
+    [
+      "create-key\.ts",
+      "\.agentPassports/keys\.txt",
+      "public address",
+      "AgentPassports UI",
+      "localhost:3333/mcp",
+      "resolve_agent_passport",
+      "get_agent_policy",
+      "check_task_against_policy",
+      "build_task_intent",
+      "build-task-intent\.json",
+      "npm install.*viem.*tsx",
+      "sign-intent\.ts",
+      "submit_task",
+      "agent\.status.*active",
+      "policy digest"
+    ],
+    "fresh agent walkthrough"
+  );
+});
+
 test("MCP safety flow skill teaches exact AgentPassports MCP tool order and refusal conditions", async () => {
   const skill = await readText("skills/agentpassports/mcp-safety-flow.md");
 
