@@ -7,11 +7,10 @@ import { encodeFunctionData } from "viem";
 import { formatWei, shortenHex } from "./EnsProofPanel";
 import { AgentBotIcon, EnsIndexIcon, ResearcherAgentIcon, SwapperAgentIcon, UiIcon } from "./icons/UiIcons";
 import {
-  AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import {
@@ -226,22 +225,14 @@ function OwnerDashboardAgentCard(props: {
       : [],
     query: { enabled: Boolean(resolverAddress) }
   });
-  const policy = useReadContract({
-    address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
-    functionName: "policies",
-    args: [agentNode],
-    query: { enabled: Boolean(props.executorAddress) }
-  });
   const gasBudget = useReadContract({
     address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
+    abi: AGENT_ENS_EXECUTOR_ABI,
     functionName: "gasBudgetWei",
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
   });
   const textRecords = mapTextRecords(textRecordReads.data as TextReadResult[] | undefined);
-  const policyState = policy.data as PolicyContractResult | undefined;
   const resolvedAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined);
   const status = readPassportStatus(textRecords.get("agent.status") ?? "", resolvedAgentAddress);
   const capabilities = parseCapabilities(textRecords.get("agent.capabilities") ?? "", []);
@@ -253,10 +244,10 @@ function OwnerDashboardAgentCard(props: {
     props.onSnapshot(props.agentName, {
       gasBudgetWei,
       latestTaskTimestamp: tasks[0]?.timestamp ?? null,
-      policyEnabled: typeof policyState?.[7] === "boolean" ? policyState[7] : null,
+      policyEnabled: status === "active",
       status
     });
-  }, [gasBudgetWei, policyState, props.agentName, props.onSnapshot, status, tasks]);
+  }, [gasBudgetWei, props.agentName, props.onSnapshot, status, tasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -301,7 +292,6 @@ function OwnerDashboardAgentCard(props: {
     }
     await Promise.all([
       textRecordReads.refetch(),
-      policy.refetch(),
       gasBudget.refetch()
     ]);
   }
@@ -346,7 +336,7 @@ function OwnerDashboardAgentCard(props: {
         <span>Latest Task</span>
         <span className="sr-only">Latest task history</span>
         <strong>{tasks[0]?.timestamp ?? "No tasks yet"}</strong>
-        <small>{policyState?.[7] ? "Policy enabled" : "Policy disabled or unknown"}</small>
+        <small>{status === "active" ? "Policy enabled by ENS" : "Policy disabled or unknown"}</small>
       </div>
 
       <div className="owner-agent-row__actions">

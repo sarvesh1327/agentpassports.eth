@@ -12,12 +12,12 @@ A user binds an autonomous agent to an ENS subname such as `assistant.alice.eth`
    - `addr(assistant.alice.eth) = 0xAgent`
    - `text(agent.owner) = alice.eth`
    - `text(agent.capabilities) = task-log,sponsored-execution`
-   - `text(agent.executor) = 0xAgentPolicyExecutor`
+   - `text(agent.executor) = 0xAgentEnsExecutor`
    - `text(agent.status) = active`
 4. User creates an onchain policy and deposits a gas budget.
 5. Agent signs an EIP-712 intent to record a task onchain.
 6. Relayer submits the transaction.
-7. `AgentPolicyExecutor` resolves the agent address from ENS live, verifies the signature, checks policy, executes `TaskLog.recordTask`, and reimburses the relayer.
+7. `AgentEnsExecutor` resolves the agent address from ENS live, verifies the signature, checks policy, executes `TaskLog.recordTask`, and reimburses the relayer.
 8. User revokes the agent by changing the ENS address record or disabling policy.
 9. The same old signature now fails, proving ENS is part of authorization and revocation.
 
@@ -48,13 +48,13 @@ The executor must resolve the agent address from ENS during `execute()`. Do not 
 flowchart LR
   Owner["Owner wallet"] --> Register["/register UI"]
   Register --> ENS["ENS registry + ENS public resolver"]
-  Register --> Executor["AgentPolicyExecutor"]
+  Register --> Executor["AgentEnsExecutor"]
   Executor --> Policy["Policy + gas budget"]
 
   Agent["Agent wallet"] --> Run["/run UI or agent-runner"]
   Run --> Intent["EIP-712 TaskIntent signature"]
   Intent --> Relayer["/api/relayer/execute"]
-  Relayer --> Execute["AgentPolicyExecutor.execute"]
+  Relayer --> Execute["AgentEnsExecutor.execute"]
   Execute --> ENSRead["Resolve live addr(agent) from ENS"]
   ENSRead --> Verify["Verify recovered signer"]
   Verify --> TaskLog["TaskLog.recordTask"]
@@ -65,7 +65,7 @@ flowchart LR
   ENSChange --> OldSignature["Old signature retry fails"]
 ```
 
-The important trust boundary is inside `AgentPolicyExecutor`. The contract does not store the agent signer as policy authority. It resolves `addr(agentNode)` from ENS during every execution, then compares the recovered EIP-712 signer to that live ENS result.
+The important trust boundary is inside `AgentEnsExecutor`. The contract does not store the agent signer as policy authority. It resolves `addr(agentNode)` from ENS during every execution, then compares the recovered EIP-712 signer to that live ENS result.
 
 ## Environment variables
 
@@ -77,7 +77,7 @@ Keep secrets in local `.env` files only. Public values are prefixed with `NEXT_P
 | `NEXT_PUBLIC_ENS_REGISTRY` | Web | Sepolia ENS registry address. |
 | `NEXT_PUBLIC_NAME_WRAPPER` | Web/contracts | Sepolia NameWrapper address for wrapped-owner checks. |
 | `NEXT_PUBLIC_PUBLIC_RESOLVER` | Web | Resolver used when the app creates a new subname. |
-| `NEXT_PUBLIC_EXECUTOR_ADDRESS` | Web/relayer | Deployed `AgentPolicyExecutor`. |
+| `NEXT_PUBLIC_EXECUTOR_ADDRESS` | Web/relayer | Deployed `AgentEnsExecutor`. |
 | `NEXT_PUBLIC_TASK_LOG_ADDRESS` | Web/relayer | Deployed `TaskLog`. |
 | `NEXT_PUBLIC_TASK_LOG_START_BLOCK` | Web | Deployment block used to bound `TaskRecorded` event reads. |
 | `NEXT_PUBLIC_RPC_URL` | Web | Optional browser read RPC. Leave blank to use wagmi defaults. |
@@ -218,10 +218,10 @@ agent-passport-ens/
       pages/api/relayer/execute.ts
   contracts/
     src/
-      AgentPolicyExecutor.sol
+      AgentEnsExecutor.sol
       TaskLog.sol
     test/
-      AgentPolicyExecutor.t.sol
+      AgentEnsExecutor.t.sol
       TaskLog.t.sol
     script/
       Deploy.s.sol
@@ -235,14 +235,14 @@ agent-passport-ens/
 
 ## Contract names
 
-- `AgentPolicyExecutor.sol`
+- `AgentEnsExecutor.sol`
 - `TaskLog.sol`
 - Optional stretch: `AgentSubnameRegistrar.sol`
 
 ## Most important implementation rule
 
 ```txt
-The executor must resolve the current agent address from ENS every time it verifies a task.
+The executor must resolve the current agent address and policy digest from ENS every time it verifies a task.
 ```
 
 That single rule makes ENS the identity, authorization, and revocation mechanism.

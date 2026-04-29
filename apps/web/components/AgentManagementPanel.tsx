@@ -6,7 +6,7 @@ import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData } from "viem";
 import { usePublicClient, useReadContract, useSendTransaction } from "wagmi";
 import {
-  AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_ENS_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
   NAME_WRAPPER_ABI,
   PUBLIC_RESOLVER_ABI,
@@ -225,7 +225,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
     await sendManagementCall({
       data: encodeFunctionData({
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: mode === "deposit" ? "depositGasBudget" : "withdrawGasBudget",
         args: mode === "deposit" ? [props.initialProfile.agentNode] : [props.initialProfile.agentNode, amountWei]
       }),

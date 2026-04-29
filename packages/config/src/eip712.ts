@@ -47,7 +47,7 @@ export function taskLogRecordTaskSelector(): Hex {
 }
 
 /**
- * Hashes calldata exactly as AgentPolicyExecutor compares intent.callDataHash.
+ * Hashes calldata exactly as AgentEnsExecutor compares intent.callDataHash.
  */
 export function hashCallData(callData: Hex): Hex {
   return keccak256Hex(hexToBytes(assertHex(callData)));

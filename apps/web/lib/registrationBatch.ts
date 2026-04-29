@@ -1,6 +1,6 @@
 import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData, labelhash } from "viem";
-import { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, NAME_WRAPPER_ABI, PUBLIC_RESOLVER_ABI } from "./contracts.ts";
+import { AGENT_ENS_EXECUTOR_ABI, ENS_REGISTRY_ABI, NAME_WRAPPER_ABI, PUBLIC_RESOLVER_ABI } from "./contracts.ts";
 import { requireAddress, safeBigInt } from "./registerAgent.ts";
 import {
   OWNER_INDEX_AGENTS_KEY,
@@ -28,7 +28,6 @@ export type RegistrationBatchInput = {
   connectedWallet: Hex;
   ensRegistryAddress?: Hex | null;
   existingGasBudgetWei?: bigint | null;
-  existingPolicy?: unknown;
   executorAddress: Hex;
   gasBudgetWei: string;
   isOwnerWrapped: boolean;
@@ -192,7 +191,7 @@ function buildBudgetTopUpCall(input: RegistrationBatchInput): { call: Registrati
 function buildDepositGasBudgetCall(input: RegistrationBatchInput, topUpWei: bigint): RegistrationBatchCall {
   return {
     data: encodeFunctionData({
-      abi: AGENT_POLICY_EXECUTOR_ABI,
+      abi: AGENT_ENS_EXECUTOR_ABI,
       functionName: "depositGasBudget",
       args: [input.agentNode]
     }),

@@ -117,7 +117,7 @@ export function namehashEnsName(name: string): Hex {
 }
 
 /**
- * Computes the ENS subnode hash used by AgentPolicyExecutor.setPolicy().
+ * Computes the ENS subnode hash used for an agent label under an owner ENS node.
  */
 export function computeSubnode(parentNode: Hex, label: string): Hex {
   const normalizedParentNode = normalizeBytes32(parentNode);

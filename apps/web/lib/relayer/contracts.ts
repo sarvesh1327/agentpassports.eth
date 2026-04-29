@@ -3,7 +3,7 @@ import { normalizePolicySnapshot, type Hex, type PolicySnapshot } from "../../..
 /**
  * Minimal AgentEnsExecutor ABI used for relayer reads and execution.
  */
-export const AGENT_POLICY_EXECUTOR_ABI = [
+export const AGENT_ENS_EXECUTOR_ABI = [
   {
     type: "function",
     name: "nextNonce",

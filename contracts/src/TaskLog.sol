@@ -37,7 +37,7 @@ contract TaskLog {
     }
 
     /// @notice Records a task proof after executor authorization succeeds.
-    /// @dev Only AgentPolicyExecutor can write records, so every proof has passed policy checks first.
+    /// @dev Only AgentEnsExecutor can write records, so every proof has passed policy checks first.
     /// @param agentNode ENS namehash for the agent identity.
     /// @param ownerNode ENS namehash for the owner identity.
     /// @param taskHash Hash of the task content or result.

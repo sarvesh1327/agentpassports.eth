@@ -4,7 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { ZERO_ADDRESS, type Hex } from "@agentpassport/config";
 import {
   ADDR_RESOLVER_ABI,
-  AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_ENS_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
   TEXT_RESOLVER_ABI
 } from "../../../../lib/relayer/contracts";
@@ -46,13 +46,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     const [nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
       publicClient.readContract({
         address: config.executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: "nextNonce",
         args: [payload.intent.agentNode]
       }),
       publicClient.readContract({
         address: config.executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: "gasBudgetWei",
         args: [payload.intent.agentNode]
       }),
@@ -130,18 +130,18 @@ export async function POST(request: Request): Promise<NextResponse> {
       const walletClient = createWalletClient({ account, chain, transport });
       txHash = await walletClient.writeContract({
         address: config.executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: "execute",
         args: [validated.intent, validated.policySnapshot, validated.callData, validated.signature]
       });
       await reservation.markBroadcast(txHash);
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-      if (receipt.status !== "success") {
-        await reservation.release();
-        throw new RelayerValidationError("TransactionReverted", "Relayer transaction reverted", 502);
-      }
-      await persistTaskReceipt(receipt);
-      await reservation.markSubmitted(txHash);
+      void monitorBroadcastReceipt({
+        agentNode: validated.intent.agentNode,
+        nonce: validated.intent.nonce,
+        publicClient,
+        reservation,
+        txHash
+      });
     } catch (error) {
       if (!txHash) {
         await reservation.release();
@@ -149,13 +149,37 @@ export async function POST(request: Request): Promise<NextResponse> {
       throw error;
     }
 
-    return NextResponse.json({ status: "submitted", txHash });
+    return NextResponse.json({ status: "pending", txHash });
   } catch (error) {
     if (!(error instanceof RelayerValidationError)) {
       console.error("Relayer execute failed", error);
     }
     const response = relayerErrorResponse(error);
     return NextResponse.json(response.body, { status: response.httpStatus });
+  }
+}
+
+
+async function monitorBroadcastReceipt(input: {
+  agentNode: Hex;
+  nonce: bigint;
+  publicClient: ReturnType<typeof createPublicClient>;
+  reservation: Extract<Awaited<ReturnType<typeof reserveIntentSubmission>>, { status: "acquired" }>;
+  txHash: Hex;
+}): Promise<void> {
+  try {
+    const receipt = await input.publicClient.waitForTransactionReceipt({ hash: input.txHash });
+    if (receipt.status !== "success") {
+      await input.reservation.release();
+      console.error("Relayer transaction reverted", input.txHash);
+      return;
+    }
+    await persistTaskReceipt(receipt);
+    await input.reservation.markSubmitted(input.txHash);
+  } catch (error) {
+    // Keep the broadcast reservation pending so duplicate retries can reconcile
+    // the tx hash without broadcasting another transaction for the same nonce.
+    console.error("Relayer receipt monitor failed", error);
   }
 }
 
@@ -211,7 +235,7 @@ async function assertEstimatedBudget(input: {
       input.publicClient.estimateContractGas({
         account: input.account,
         address: input.relayerConfig.executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: "execute",
         args: [input.payload.intent, input.payload.policySnapshot, input.payload.callData, input.payload.signature]
       }),

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import { AgentPolicyExecutor } from "../src/AgentPolicyExecutor.sol";
 import { TaskLog } from "../src/TaskLog.sol";
-import { TestBase } from "./TestBase.sol";
+import { TestBase } from "../../test/TestBase.sol";
 import { MockENSRegistry } from "./mocks/MockENSRegistry.sol";
 import { MockNameWrapper } from "./mocks/MockNameWrapper.sol";
 import { MockResolver } from "./mocks/MockResolver.sol";

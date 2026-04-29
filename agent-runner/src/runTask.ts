@@ -29,7 +29,7 @@ export type AgentTaskSigner = {
 };
 
 export type RelayerSubmissionResponse = {
-  status: "submitted";
+  status: "pending" | "submitted";
   txHash: Hex;
 };
 

@@ -13,7 +13,7 @@ import {
 import { encodeFunctionData } from "viem";
 import { useAccount, useEnsName, usePublicClient, useReadContract, useReadContracts, useWriteContract } from "wagmi";
 import {
-  AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
@@ -152,14 +152,14 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
   });
   const gasBudgetRead = useReadContract({
     address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
+    abi: AGENT_ENS_EXECUTOR_ABI,
     functionName: "gasBudgetWei",
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
   });
   const nextNonceRead = useReadContract({
     address: props.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
+    abi: AGENT_ENS_EXECUTOR_ABI,
     functionName: "nextNonce",
     args: [agentNode],
     query: { enabled: Boolean(props.executorAddress) }
@@ -491,7 +491,7 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
       }
       const txHash = await writeContractAsync({
         address: executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: "withdrawGasBudget",
         args: [writeAgentNode, withdrawAmountWei]
       });

@@ -8,11 +8,10 @@ import { AgentManagementPanel } from "./AgentManagementPanel";
 import { StatusBanner } from "./StatusBanner";
 import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
-  AGENT_POLICY_EXECUTOR_ABI,
+  AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
   PUBLIC_RESOLVER_ABI,
-  type PolicyContractResult,
   nonZeroAddress
 } from "../lib/contracts";
 import { parseCapabilities, readPassportStatus, resolveVisibleAgentAddress } from "../lib/agentProfileDisplay";
@@ -66,23 +65,16 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
       : [],
     query: { enabled: Boolean(resolverAddress) }
   });
-  const policyRead = useReadContract({
-    address: initialProfile.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
-    functionName: "policies",
-    args: [initialProfile.agentNode],
-    query: { enabled: Boolean(initialProfile.executorAddress) }
-  });
   const gasBudgetRead = useReadContract({
     address: initialProfile.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
+    abi: AGENT_ENS_EXECUTOR_ABI,
     functionName: "gasBudgetWei",
     args: [initialProfile.agentNode],
     query: { enabled: Boolean(initialProfile.executorAddress) }
   });
   const nextNonceRead = useReadContract({
     address: initialProfile.executorAddress ?? undefined,
-    abi: AGENT_POLICY_EXECUTOR_ABI,
+    abi: AGENT_ENS_EXECUTOR_ABI,
     functionName: "nextNonce",
     args: [initialProfile.agentNode],
     query: { enabled: Boolean(initialProfile.executorAddress) }
@@ -91,7 +83,6 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     () => mergeTextRecords(initialProfile.textRecords, textRecordReads.data as TextReadResult[] | undefined),
     [initialProfile.textRecords, textRecordReads.data]
   );
-  const livePolicy = policyRead.data as PolicyContractResult | undefined;
   const resolvedAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined);
   const agentAddressReadSettled = Boolean(resolverAddress) && agentAddress.isSuccess;
   const liveAgentAddress = resolveVisibleAgentAddress({
@@ -103,13 +94,19 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   });
   const liveGasBudget = (gasBudgetRead.data as bigint | undefined) ?? safeBigInt(initialProfile.gasBudgetWei);
   const liveNextNonce = (nextNonceRead.data as bigint | undefined)?.toString() ?? initialProfile.nextNonce ?? "Unknown";
-  const policyEnabled = livePolicy?.[7] ?? initialProfile.policyEnabled;
   const capabilityText = textRecords.find((record) => record.key === "agent.capabilities")?.value;
   const capabilities = parseCapabilities(capabilityText, initialProfile.capabilities);
   const statusText = textRecords.find((record) => record.key === "agent.status")?.value;
   const policyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value || initialProfile.policyUri;
   const policyHash = textRecords.find((record) => record.key === "agent.policy.hash")?.value || initialProfile.policyHash;
+  const policyDigest = textRecords.find((record) => record.key === "agent.policy.digest")?.value || null;
+  const policyTarget = textRecords.find((record) => record.key === "agent.policy.target")?.value || null;
+  const policySelector = textRecords.find((record) => record.key === "agent.policy.selector")?.value || "";
+  const maxValueWei = textRecords.find((record) => record.key === "agent.policy.maxValueWei")?.value || "";
+  const maxGasReimbursementWei = textRecords.find((record) => record.key === "agent.policy.maxGasReimbursementWei")?.value || "";
+  const policyExpiresAt = textRecords.find((record) => record.key === "agent.policy.expiresAt")?.value || "";
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
+  const policyEnabled = passportStatus === "active";
   const nextStatusAction = passportStatus === "disabled" ? "active" : "disabled";
 
   async function refreshAgentReads() {
@@ -117,7 +114,6 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
       registryResolver.refetch(),
       agentAddress.refetch(),
       textRecordReads.refetch(),
-      policyRead.refetch(),
       gasBudgetRead.refetch(),
       nextNonceRead.refetch()
     ]);
@@ -176,7 +172,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
 
     await sendAgentManagementCall({
       data: encodeFunctionData({
-        abi: AGENT_POLICY_EXECUTOR_ABI,
+        abi: AGENT_ENS_EXECUTOR_ABI,
         functionName: mode === "deposit" ? "depositGasBudget" : "withdrawGasBudget",
         args: mode === "deposit" ? [initialProfile.agentNode] : [initialProfile.agentNode, amountWei]
       }),
@@ -277,10 +273,16 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           capabilities={capabilities}
           executorAddress={initialProfile.executorAddress}
           gasBudgetWei={liveGasBudget}
+          maxGasReimbursementWei={maxGasReimbursementWei}
+          maxValueWei={maxValueWei}
           nextNonce={liveNextNonce}
-          policy={livePolicy}
+          policyDigest={typeof policyDigest === "string" && policyDigest.startsWith("0x") ? policyDigest as Hex : null}
+          policyExpiresAt={policyExpiresAt}
           policyHash={typeof policyHash === "string" && policyHash.startsWith("0x") ? policyHash as Hex : initialProfile.policyHash}
+          policySelector={policySelector}
+          policyTarget={typeof policyTarget === "string" && policyTarget.startsWith("0x") ? policyTarget as Hex : null}
           policyUri={policyUri}
+          status={passportStatus}
           taskLogAddress={initialProfile.taskLogAddress}
         />
         <AgentProofPanel
@@ -404,18 +406,29 @@ function PolicyStatePanel(props: {
   capabilities: readonly string[];
   executorAddress: Hex | null;
   gasBudgetWei: bigint;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
   nextNonce: string;
-  policy?: PolicyContractResult;
+  policyDigest: Hex | null;
+  policyExpiresAt: string;
   policyHash: Hex | null;
+  policySelector: string;
+  policyTarget: Hex | null;
   policyUri: string;
+  status: string;
   taskLogAddress: Hex | null;
 }) {
   const rows = [
-    { label: "Allowed Target (TaskLog)", title: props.policy?.[2] ?? props.taskLogAddress ?? undefined, value: props.policy?.[2] ? shortenHex(props.policy[2]) : props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
-    { label: "Allowed Selector", title: props.policy?.[3], value: props.policy?.[3] ?? "Unknown" },
-    { label: "Max Value per Call", value: props.policy?.[4] !== undefined ? formatWei(props.policy[4]) : "Unknown" },
-    { label: "Reimbursement Cap", value: props.policy?.[5] !== undefined ? formatWei(props.policy[5]) : "Unknown" },
-    { label: "Expiry", value: props.policy?.[6] !== undefined ? formatUnixTime(props.policy[6]) : "Unknown" },
+    { label: "Allowed Target (TaskLog)", title: props.policyTarget ?? props.taskLogAddress ?? undefined, value: props.policyTarget ? shortenHex(props.policyTarget) : props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
+    { label: "Allowed Selector", title: props.policySelector || undefined, value: props.policySelector || "Unknown" },
+    { label: "Max Value per Call", value: props.maxValueWei ? formatWei(safeBigInt(props.maxValueWei)) : "Unknown" },
+    { label: "Reimbursement Cap", value: props.maxGasReimbursementWei ? formatWei(safeBigInt(props.maxGasReimbursementWei)) : "Unknown" },
+    { label: "Expiry", value: props.policyExpiresAt ? formatUnixTime(safeBigInt(props.policyExpiresAt)) : "Unknown" },
+    {
+      label: "Policy digest",
+      title: props.policyDigest ?? undefined,
+      value: props.policyDigest ? shortenHex(props.policyDigest) : "Unknown"
+    },
     {
       label: "Policy hash",
       title: props.policyHash ?? undefined,
@@ -427,7 +440,7 @@ function PolicyStatePanel(props: {
       value: props.executorAddress ? shortenHex(props.executorAddress) : "Unknown"
     },
     { label: "Policy Source", value: props.policyUri ? "ENS" : "Unknown" },
-    { label: "Policy state", value: props.policy?.[7] ? "Enabled" : "Unknown" },
+    { label: "Policy state", value: props.status === "active" ? "Enabled by exact ENS status" : "Disabled or unknown" },
     { label: "Next nonce", value: props.nextNonce }
   ];
 

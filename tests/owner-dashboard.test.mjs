@@ -374,7 +374,7 @@ test("new owner and agent UI controls are wired to concrete interactions", async
 
 test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion", async () => {
   const { buildAgentDeletePlan } = await import("../apps/web/lib/agentDelete.ts");
-  const { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } = await import("../apps/web/lib/contracts.ts");
+  const { AGENT_ENS_EXECUTOR_ABI, ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } = await import("../apps/web/lib/contracts.ts");
 
   const blocked = buildAgentDeletePlan({
     agentLabel: "assistant",
@@ -403,7 +403,7 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
   assert.equal(plan.canDelete, true);
   assert.equal(plan.calls.length, 3);
 
-  const withdrawCall = decodeFunctionData({ abi: AGENT_POLICY_EXECUTOR_ABI, data: plan.calls[0].data });
+  const withdrawCall = decodeFunctionData({ abi: AGENT_ENS_EXECUTOR_ABI, data: plan.calls[0].data });
   assert.equal(withdrawCall.functionName, "withdrawGasBudget");
   assert.deepEqual(withdrawCall.args, [AGENT_NODE, 123n]);
   assert.equal(plan.calls[0].label, "withdrawGasBudget");

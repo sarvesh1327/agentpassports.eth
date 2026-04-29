@@ -1,6 +1,6 @@
 import type { Hex } from "@agentpassport/config";
 import { encodeFunctionData, labelhash } from "viem";
-import { AGENT_POLICY_EXECUTOR_ABI, ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } from "./contracts.ts";
+import { AGENT_ENS_EXECUTOR_ABI, ENS_REGISTRY_ABI, PUBLIC_RESOLVER_ABI, ZERO_ADDRESS } from "./contracts.ts";
 import {
   OWNER_INDEX_AGENTS_KEY,
   OWNER_INDEX_VERSION,
@@ -78,7 +78,7 @@ export function buildAgentDeletePlan(input: AgentDeletePlanInput): AgentDeletePl
   const withdrawGasBudget: AgentDeleteCall | null = shouldWithdrawGasBudget
     ? {
         data: encodeFunctionData({
-          abi: AGENT_POLICY_EXECUTOR_ABI,
+          abi: AGENT_ENS_EXECUTOR_ABI,
           functionName: "withdrawGasBudget",
           args: [input.agentNode, gasBudgetWei]
         }),

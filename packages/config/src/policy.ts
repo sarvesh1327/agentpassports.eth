@@ -85,9 +85,9 @@ export function hashPolicySnapshot(agentNode: Hex, policy: PolicySnapshot): Hex 
  * Reads the V1 executable policy snapshot from ENS text records and checks its digest.
  */
 export function policySnapshotFromTextRecords(agentNode: Hex, records: Record<string, string>): PolicySnapshot {
-  const status = readRequiredText(records, "agent.status");
+  const status = records["agent.status"] ?? "";
   if (status !== "active") {
-    throw new Error("agent.status must be active");
+    throw new Error('agent.status must be exactly "active"');
   }
 
   const policySnapshot = normalizePolicySnapshot({

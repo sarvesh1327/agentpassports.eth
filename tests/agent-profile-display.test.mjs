@@ -68,6 +68,6 @@ test("agent profile display parses capabilities and status from ENS text records
   ]);
   assert.deepEqual(parseCapabilities("", ["fallback"]), ["fallback"]);
   assert.equal(readPassportStatus("disabled", LIVE_AGENT_ADDRESS), "disabled");
-  assert.equal(readPassportStatus("", LIVE_AGENT_ADDRESS), "active");
+  assert.equal(readPassportStatus("", LIVE_AGENT_ADDRESS), "unknown");
   assert.equal(readPassportStatus("", null), "unknown");
 });

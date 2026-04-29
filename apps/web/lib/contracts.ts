@@ -21,8 +21,6 @@ export const AGENT_TEXT_RECORD_KEYS = [
   "agent.description"
 ] as const;
 
-export type PolicyContractResult = readonly [Hex, Hex, Hex, Hex, bigint, bigint, bigint, boolean];
-
 /**
  * ENS registry calls needed for live resolver and owner-manager checks.
  */
@@ -138,23 +136,7 @@ export const PUBLIC_RESOLVER_ABI = [
 /**
  * Executor reads and writes needed for policy creation, funding, and profile display.
  */
-export const AGENT_POLICY_EXECUTOR_ABI = [
-  {
-    type: "function",
-    name: "policies",
-    stateMutability: "view",
-    inputs: [{ name: "agentNode", type: "bytes32" }],
-    outputs: [
-      { name: "ownerNode", type: "bytes32" },
-      { name: "ownerWallet", type: "address" },
-      { name: "target", type: "address" },
-      { name: "selector", type: "bytes4" },
-      { name: "maxValueWei", type: "uint96" },
-      { name: "maxGasReimbursementWei", type: "uint96" },
-      { name: "expiresAt", type: "uint64" },
-      { name: "enabled", type: "bool" }
-    ]
-  },
+export const AGENT_ENS_EXECUTOR_ABI = [
   {
     type: "function",
     name: "gasBudgetWei",
@@ -171,21 +153,6 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
   },
   {
     type: "function",
-    name: "setPolicy",
-    stateMutability: "payable",
-    inputs: [
-      { name: "ownerNode", type: "bytes32" },
-      { name: "agentLabel", type: "string" },
-      { name: "target", type: "address" },
-      { name: "selector", type: "bytes4" },
-      { name: "maxValueWei", type: "uint96" },
-      { name: "maxGasReimbursementWei", type: "uint96" },
-      { name: "expiresAt", type: "uint64" }
-    ],
-    outputs: [{ name: "agentNode", type: "bytes32" }]
-  },
-  {
-    type: "function",
     name: "depositGasBudget",
     stateMutability: "payable",
     inputs: [{ name: "agentNode", type: "bytes32" }],
@@ -199,13 +166,6 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
       { name: "agentNode", type: "bytes32" },
       { name: "amount", type: "uint256" }
     ],
-    outputs: []
-  },
-  {
-    type: "function",
-    name: "revokePolicy",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "agentNode", type: "bytes32" }],
     outputs: []
   },
   {

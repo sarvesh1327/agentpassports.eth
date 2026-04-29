@@ -103,7 +103,7 @@ test("README documents release demo, architecture, env, and limitations", async 
   ]) {
     assert.match(source, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.match(source, /AgentPolicyExecutor/);
+  assert.match(source, /AgentEnsExecutor/);
   assert.match(source, /ENS public resolver/);
   assert.match(source, /TaskLog\.recordTask/);
   assert.match(source, /TaskLog/);
@@ -437,7 +437,7 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   );
   assert.match(formSource, /Registration submitted/);
   assert.match(contractsSource, /PUBLIC_RESOLVER_ABI/);
-  assert.match(contractsSource, /AGENT_POLICY_EXECUTOR_ABI/);
+  assert.match(contractsSource, /AGENT_ENS_EXECUTOR_ABI/);
 });
 
 test("agent page reads live ENS, policy, gas budget, and task history", async () => {

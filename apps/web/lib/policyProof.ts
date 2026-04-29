@@ -4,7 +4,8 @@ import {
   namehashEnsName,
   type Hex
 } from "@agentpassport/config";
-import type { PolicyContractResult } from "./contracts";
+
+type PolicyContractResult = readonly [Hex, Hex, Hex, Hex, bigint, bigint, bigint, boolean];
 
 const EMPTY_NODE = namehashEnsName("");
 

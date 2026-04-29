@@ -60,7 +60,7 @@ A passing MVP demonstrates:
 Create:
 
 ```txt
-contracts/src/AgentPolicyExecutor.sol
+contracts/src/AgentEnsExecutor.sol
 contracts/src/TaskLog.sol
 ```
 
@@ -113,7 +113,7 @@ Create one endpoint:
 POST /api/relayer/execute
 ```
 
-The endpoint accepts an intent, calldata, and signature, then submits `AgentPolicyExecutor.execute(...)`.
+The endpoint accepts an intent, calldata, and signature, then submits `AgentEnsExecutor.execute(...)`.
 
 ## Implementation preferences
 
@@ -145,7 +145,7 @@ Domain:
 
 ```ts
 {
-  name: 'AgentPolicyExecutor',
+  name: 'AgentEnsExecutor',
   version: '1',
   chainId: 11155111,
   verifyingContract: executorAddress
@@ -188,7 +188,7 @@ Nonce increment can happen before the external call if revert rolls back state. 
 
 ## Avoid these mistakes
 
-- Do not store agent address inside `Policy` as the authorization source.
+- Do not store agent address or executable policy fields as the authorization source.
 - Do not compare signer to the owner wallet. Compare signer to the current ENS-resolved agent address.
 - Do not let `callData` point to any function. Check selector.
 - Do not skip the calldata hash.
@@ -199,7 +199,7 @@ Nonce increment can happen before the external call if revert rolls back state. 
 ## First build order
 
 1. Build and test `TaskLog.sol`.
-2. Build and test `AgentPolicyExecutor.sol` using mock ENS resolver/registry contracts.
+2. Build and test `AgentEnsExecutor.sol` using mock ENS resolver/registry contracts.
 3. Create deployment script.
 4. Build TypeScript namehash and EIP-712 utilities.
 5. Build agent runner signing flow.
