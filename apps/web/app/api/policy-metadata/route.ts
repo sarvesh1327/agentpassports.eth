@@ -70,11 +70,12 @@ async function readPolicyMetadataRequest(request: Request) {
     expiresAt: readBigIntString(input.expiresAt, "expiresAt"),
     maxGasReimbursementWei: readBigIntString(input.maxGasReimbursementWei, "maxGasReimbursementWei"),
     maxValueWei: readBigIntString(input.maxValueWei, "maxValueWei"),
-    ownerName: readRequiredText(input.ownerName, "ownerName"),
-    ownerNode: readHex(input.ownerNode, "ownerNode", 32),
-    status: readPolicyStatus(input.status),
-    target: readHex(input.target, "target", 20)
-  };
+      ownerName: readRequiredText(input.ownerName, "ownerName"),
+      ownerNode: readHex(input.ownerNode, "ownerNode", 32),
+      status: readPolicyStatus(input.status),
+      swapPolicy: readOptionalSwapPolicy(input.swapPolicy),
+      target: readHex(input.target, "target", 20)
+    };
 }
 
 /**
@@ -120,11 +121,11 @@ function readBigIntString(value: unknown, name: string): bigint {
 /**
  * Validates address and bytes32 fields before they reach shared hashing helpers.
  */
-function readHex(value: unknown, name: string, bytes: 20 | 32): Hex {
+function readHex(value: unknown, name: string, bytes: 4 | 20 | 32): Hex {
   const text = readRequiredText(value, name);
-  const pattern = bytes === 20 ? /^0x[0-9a-fA-F]{40}$/u : /^0x[0-9a-fA-F]{64}$/u;
+  const pattern = bytes === 4 ? /^0x[0-9a-fA-F]{8}$/u : bytes === 20 ? /^0x[0-9a-fA-F]{40}$/u : /^0x[0-9a-fA-F]{64}$/u;
   if (!pattern.test(text)) {
-    throw new Error(`Expected ${name} to be ${bytes === 20 ? "an address" : "bytes32"}`);
+    throw new Error(`Expected ${name} to be ${bytes === 4 ? "a selector" : bytes === 20 ? "an address" : "bytes32"}`);
   }
 
   return text as Hex;
@@ -154,6 +155,35 @@ function readPolicyStatus(value: unknown): "active" | "disabled" | undefined {
   }
 
   throw new Error("Expected status to be active or disabled");
+}
+
+function readOptionalSwapPolicy(value: unknown) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("Expected swapPolicy");
+  }
+  const policy = value as Record<string, unknown>;
+  return {
+    allowedChainId: readBigIntString(policy.allowedChainId, "swapPolicy.allowedChainId"),
+    allowedTokensIn: readHexList(policy.allowedTokensIn, "swapPolicy.allowedTokensIn"),
+    allowedTokensOut: readHexList(policy.allowedTokensOut, "swapPolicy.allowedTokensOut"),
+    deadlineSeconds: readBigIntString(policy.deadlineSeconds, "swapPolicy.deadlineSeconds"),
+    enabled: policy.enabled !== false,
+    maxAmountInWei: readBigIntString(policy.maxAmountInWei, "swapPolicy.maxAmountInWei"),
+    maxSlippageBps: readBigIntString(policy.maxSlippageBps, "swapPolicy.maxSlippageBps"),
+    recipient: readHex(policy.recipient, "swapPolicy.recipient", 20),
+    router: readHex(policy.router, "swapPolicy.router", 20),
+    selector: readHex(policy.selector, "swapPolicy.selector", 4)
+  };
+}
+
+function readHexList(value: unknown, name: string): readonly Hex[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Expected ${name}`);
+  }
+  return value.map((item, index) => readHex(item, `${name}[${index}]`, 20));
 }
 
 /**

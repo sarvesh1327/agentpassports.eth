@@ -61,6 +61,50 @@ test("register preview derives ENS nodes, policy hash, and text records from for
   );
 });
 
+test("register preview publishes Swapper kind, capability, and Uniswap policy text records", async () => {
+  const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+
+  const preview = buildRegisterPreview({
+    agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    agentKind: "swapper",
+    agentLabel: "swapper",
+    executorAddress: EXECUTOR_ADDRESS,
+    gasBudgetWei: "10000000000000000",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    ownerName: "agentpassports.eth",
+    policyExpiresAt: "1790000000",
+    policyUri: "ipfs://agentpassports-swap-policy",
+    swapPolicy: {
+      allowedChainId: "1",
+      allowedTokensIn: ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"],
+      allowedTokensOut: ["0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"],
+      deadlineSeconds: "60",
+      enabled: true,
+      maxAmountInWei: "10000000",
+      maxSlippageBps: "50",
+      recipient: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      router: "0x1111111111111111111111111111111111111111",
+      selector: "0x12aa3caf",
+    },
+    taskLogAddress: TASK_LOG_ADDRESS,
+  });
+  const records = Object.fromEntries(preview.textRecords.map((record) => [record.key, record.value]));
+
+  assert.equal(records["agent.kind"], "swapper");
+  assert.equal(records["agent.capabilities"], "task-log,sponsored-execution,uniswap-swap");
+  assert.equal(records["agent.policy.uniswap.chainId"], "1");
+  assert.equal(records["agent.policy.uniswap.allowedTokenIn"], "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+  assert.equal(records["agent.policy.uniswap.allowedTokenOut"], "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+  assert.equal(records["agent.policy.uniswap.maxInputAmount"], "10000000");
+  assert.equal(records["agent.policy.uniswap.maxSlippageBps"], "50");
+  assert.equal(records["agent.policy.uniswap.deadlineSeconds"], "60");
+  assert.equal(records["agent.policy.uniswap.enabled"], "true");
+  assert.equal(records["agent.policy.uniswap.recipient"], "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  assert.equal(records["agent.policy.uniswap.router"], "0x1111111111111111111111111111111111111111");
+  assert.equal(records["agent.policy.uniswap.selector"], "0x12aa3caf");
+});
+
 test("register preview includes only generated policy URIs in ENS records", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
 

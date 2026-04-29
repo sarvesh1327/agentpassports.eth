@@ -1,9 +1,11 @@
 import {
   buildPolicyMetadata,
+  buildSwapPolicyMetadata,
   computeSubnode,
   hashPolicyMetadata,
   taskLogRecordTaskSelector,
-  type Hex
+  type Hex,
+  type SwapPolicy
 } from "@agentpassport/config";
 import { normalizeAddressInput } from "./addressInput.ts";
 import { buildAgentName, safeNamehash, safeSubnode } from "./ensPreview.ts";
@@ -11,6 +13,7 @@ import { hashTaskLogPolicySnapshot } from "./policySnapshot.ts";
 
 export type RegisterPreviewInput = {
   agentAddress: string;
+  agentKind?: AgentKind;
   agentLabel: string;
   executorAddress?: Hex | null;
   gasBudgetWei: string;
@@ -19,7 +22,23 @@ export type RegisterPreviewInput = {
   ownerName: string;
   policyExpiresAt: string;
   policyUri: string;
+  swapPolicy?: SwapPolicyInput | null;
   taskLogAddress?: Hex | null;
+};
+
+export type AgentKind = "personal-assistant" | "swapper" | "researcher" | "keeper";
+
+export type SwapPolicyInput = {
+  allowedChainId: bigint | string;
+  allowedTokensIn: readonly Hex[];
+  allowedTokensOut: readonly Hex[];
+  deadlineSeconds: bigint | string;
+  enabled: boolean;
+  maxAmountInWei: bigint | string;
+  maxSlippageBps: bigint | string;
+  recipient: Hex;
+  router: Hex;
+  selector: Hex;
 };
 
 export type RegisterPreview = {
@@ -120,6 +139,7 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
     policyHash,
     textRecords: buildAgentTextRecords({
       executorAddress: input.executorAddress,
+      agentKind: input.agentKind ?? "personal-assistant",
       hasCompleteEnsInput,
       normalizedAgentAddress,
       normalizedOwnerName,
@@ -129,6 +149,7 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
       maxGasReimbursementWei: input.maxGasReimbursementWei,
       maxValueWei: input.maxValueWei,
       policyUri: input.policyUri,
+      swapPolicy: input.swapPolicy,
       taskLogAddress: input.taskLogAddress
     })
   };
@@ -383,6 +404,7 @@ function sameAddress(left: Hex, right: Hex): boolean {
  * Produces the public ENS text records that make the agent passport inspectable.
  */
 function buildAgentTextRecords(input: {
+  agentKind: AgentKind;
   executorAddress?: Hex | null;
   hasCompleteEnsInput: boolean;
   normalizedAgentAddress: Hex | null;
@@ -393,6 +415,7 @@ function buildAgentTextRecords(input: {
   policyExpiresAt: string;
   policyHash: Hex | null;
   policyUri: string;
+  swapPolicy?: SwapPolicyInput | null;
   taskLogAddress?: Hex | null;
 }): readonly { key: string; value: string }[] {
   if (
@@ -406,11 +429,12 @@ function buildAgentTextRecords(input: {
     return [];
   }
 
+  const capabilities = buildCapabilities(input.agentKind);
   const records = [
     { key: "agent.v", value: "2" },
     { key: "agent.owner", value: input.normalizedOwnerName },
-    { key: "agent.kind", value: "personal-assistant" },
-    { key: "agent.capabilities", value: "task-log,sponsored-execution" },
+    { key: "agent.kind", value: input.agentKind },
+    { key: "agent.capabilities", value: capabilities.join(",") },
     { key: "agent.policy.schema", value: "agentpassport.policy.v1" },
     { key: "agent.policy.digest", value: input.policyDigest },
     { key: "agent.policy.target", value: input.taskLogAddress },
@@ -421,12 +445,61 @@ function buildAgentTextRecords(input: {
     { key: "agent.policy.hash", value: input.policyHash },
     { key: "agent.executor", value: input.executorAddress },
     { key: "agent.status", value: "active" },
-    { key: "agent.description", value: `${input.normalizedOwnerName} onchain assistant` }
+    { key: "agent.description", value: `${input.normalizedOwnerName} ${input.agentKind === "swapper" ? "Uniswap swapper" : "onchain assistant"}` }
   ];
+
+  // Swapper agents publish human-readable Uniswap constraints as ENS text records.
+  // The MCP treats these records as the live safety gate before calling Uniswap API.
+  if (input.agentKind === "swapper" && input.swapPolicy) {
+    records.push(...buildSwapPolicyTextRecords(input.swapPolicy));
+  }
 
   if (input.policyUri.trim()) {
     records.splice(4, 0, { key: "agent.policy.uri", value: input.policyUri.trim() });
   }
 
   return records;
+}
+
+function buildCapabilities(agentKind: AgentKind): string[] {
+  const capabilities = ["task-log", "sponsored-execution"];
+  if (agentKind === "swapper") {
+    capabilities.push("uniswap-swap");
+  }
+  return capabilities;
+}
+
+function buildSwapPolicyTextRecords(input: SwapPolicyInput): { key: string; value: string }[] {
+  const policy = buildSwapPolicyMetadata(readSwapPolicyInput(input));
+  return [
+    { key: "agent.policy.uniswap.chainId", value: policy.allowedChainId },
+    { key: "agent.policy.uniswap.allowedTokenIn", value: policy.allowedTokensIn.join(",") },
+    { key: "agent.policy.uniswap.allowedTokenOut", value: policy.allowedTokensOut.join(",") },
+    { key: "agent.policy.uniswap.maxInputAmount", value: policy.maxAmountInWei },
+    { key: "agent.policy.uniswap.maxSlippageBps", value: policy.maxSlippageBps },
+    { key: "agent.policy.uniswap.deadlineSeconds", value: policy.deadlineSeconds },
+    { key: "agent.policy.uniswap.enabled", value: String(policy.enabled) },
+    { key: "agent.policy.uniswap.recipient", value: policy.recipient },
+    { key: "agent.policy.uniswap.router", value: policy.router },
+    { key: "agent.policy.uniswap.selector", value: policy.selector }
+  ];
+}
+
+function readSwapPolicyInteger(value: bigint | string): bigint {
+  return typeof value === "bigint" ? value : safeBigInt(value);
+}
+
+function readSwapPolicyInput(input: SwapPolicyInput): SwapPolicy {
+  return {
+    allowedChainId: readSwapPolicyInteger(input.allowedChainId),
+    allowedTokensIn: input.allowedTokensIn,
+    allowedTokensOut: input.allowedTokensOut,
+    deadlineSeconds: readSwapPolicyInteger(input.deadlineSeconds),
+    enabled: input.enabled,
+    maxAmountInWei: readSwapPolicyInteger(input.maxAmountInWei),
+    maxSlippageBps: readSwapPolicyInteger(input.maxSlippageBps),
+    recipient: input.recipient,
+    router: input.router,
+    selector: input.selector
+  };
 }
