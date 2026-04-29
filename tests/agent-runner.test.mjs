@@ -14,6 +14,25 @@ const ENS_REGISTRY_ADDRESS = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const RESOLVER_ADDRESS = "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5";
 const AGENT_ADDRESS = "0x19E7E376E7C213B7E7E7E46CC70A5DD086DAFF2A";
 const TX_HASH = `0x${"aa".repeat(32)}`;
+const POLICY_SNAPSHOT = {
+  enabled: true,
+  expiresAt: 1790000100n,
+  maxGasReimbursementWei: 1000000000000000n,
+  maxValueWei: 0n,
+  selector: "0x36736d1e",
+  target: TASK_LOG_ADDRESS,
+};
+const { hashPolicySnapshot } = await import("../packages/config/src/index.ts");
+const POLICY_DIGEST = hashPolicySnapshot(AGENT_NODE, POLICY_SNAPSHOT);
+const POLICY_TEXT_RECORDS = new Map([
+  ["agent.status", "active"],
+  ["agent.policy.digest", POLICY_DIGEST],
+  ["agent.policy.target", TASK_LOG_ADDRESS],
+  ["agent.policy.selector", "0x36736d1e"],
+  ["agent.policy.maxValueWei", "0"],
+  ["agent.policy.maxGasReimbursementWei", "1000000000000000"],
+  ["agent.policy.expiresAt", "1790000100"],
+]);
 
 test("agent runner config parses required environment values", async () => {
   const { loadRunnerConfig } = await import("../agent-runner/src/config.ts");
@@ -61,6 +80,7 @@ test("agent runner builds TaskLog calldata and intent input", async () => {
     metadataURI: "ipfs://demo",
     nonce: 0n,
     ownerNode: OWNER_NODE,
+    policySnapshot: POLICY_SNAPSHOT,
     taskDescription: "Record wallet health check",
     taskLogAddress: TASK_LOG_ADDRESS,
   });
@@ -75,6 +95,7 @@ test("agent runner builds TaskLog calldata and intent input", async () => {
     callDataHash: "0x54b55f2b11883125ffbf0c612ee43d67e6532afa3a45b64c27319c681e198f56",
     expiresAt: 1790000000n,
     nonce: 0n,
+    policyDigest: POLICY_DIGEST,
     target: TASK_LOG_ADDRESS,
     value: 0n,
   });
@@ -82,33 +103,35 @@ test("agent runner builds TaskLog calldata and intent input", async () => {
 
 test("agent runner signs typed data through an injected signer and verifies the signer", async () => {
   const { signTaskIntent } = await import("../agent-runner/src/signIntent.ts");
+  const { createPrivateKeyAgentSigner } = await import("../agent-runner/src/runTask.ts");
+  const signer = createPrivateKeyAgentSigner(AGENT_PRIVATE_KEY);
   const intent = {
     agentNode: AGENT_NODE,
+    policyDigest: POLICY_DIGEST,
     target: TASK_LOG_ADDRESS,
     callDataHash: "0x1d9a6570b4147a41f00c51af3f304ef8ed803c660c2ff922ef8304b1373c9fd2",
     value: 0n,
     nonce: 0n,
     expiresAt: 1790000000n,
   };
-  const signature =
-    "0x21eaf310db27747e87227397b5f7bd44c3bc87e88861d727f834ebeb1af3069d533580f7728d00643630e708367046eab3ef2359d1e499f8e19e2b1df8d197411c";
   let seenTypedData;
 
   const signed = await signTaskIntent({
     chainId: 11155111n,
     executorAddress: EXECUTOR_ADDRESS,
-    expectedSigner: "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c",
+    expectedSigner: signer.address,
     intent,
     signTypedData: (typedData) => {
       seenTypedData = typedData;
-      return signature;
+      return signer.signTypedData(typedData);
     },
   });
 
-  assert.equal(signed.digest, "0x28133eef788c4579d3f97f81863aef1e16c961c3719a7c3190fc6682d50a8bff");
-  assert.equal(signed.recoveredSigner, "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c");
-  assert.equal(signed.signature, signature);
+  assert.equal(signed.digest.length, 66);
+  assert.equal(signed.recoveredSigner.toLowerCase(), signer.address.toLowerCase());
+  assert.equal(signed.signature.length, 132);
   assert.deepEqual(seenTypedData.message, intent);
+  assert.equal(seenTypedData.domain.name, "AgentEnsExecutor");
   assert.equal(seenTypedData.primaryType, "TaskIntent");
   assert.equal(signed.typedData.primaryType, "TaskIntent");
   await assert.rejects(
@@ -118,7 +141,7 @@ test("agent runner signs typed data through an injected signer and verifies the 
         executorAddress: EXECUTOR_ADDRESS,
         expectedSigner: "0x0000000000000000000000000000000000000001",
         intent,
-        signTypedData: () => signature,
+        signTypedData: signer.signTypedData,
       }),
     /Signature does not match expected agent signer/,
   );
@@ -138,6 +161,9 @@ test("agent runner resolves ENS signer, reads nonce, submits intent, and saves p
       }
       if (call.functionName === "addr") {
         return signer.address;
+      }
+      if (call.functionName === "text") {
+        return POLICY_TEXT_RECORDS.get(call.args[1]) ?? "";
       }
       if (call.functionName === "nextNonce") {
         return 3n;
@@ -179,7 +205,7 @@ test("agent runner resolves ENS signer, reads nonce, submits intent, and saves p
 
   assert.deepEqual(
     reads.map(([, functionName]) => functionName),
-    ["resolver", "addr", "nextNonce"],
+    ["resolver", "addr", "text", "text", "text", "text", "text", "text", "text", "nextNonce"],
   );
   assert.equal(result.agentNode, AGENT_NODE);
   assert.equal(result.ownerNode, OWNER_NODE);
@@ -187,11 +213,21 @@ test("agent runner resolves ENS signer, reads nonce, submits intent, and saves p
   assert.equal(result.resolverAddress, RESOLVER_ADDRESS);
   assert.equal(result.plan.intent.nonce, 3n);
   assert.equal(result.plan.intent.expiresAt, 1_700_000_600n);
+  assert.equal(result.plan.intent.policyDigest, POLICY_DIGEST);
   assert.equal(result.relayerResponse.txHash, TX_HASH);
   assert.equal(result.signed.recoveredSigner, signer.address);
   assert.equal(submissions[0][0], RELAYER_URL);
   assert.equal(submissions[0][1].callData, result.plan.callData);
+  assert.deepEqual(submissions[0][1].policySnapshot, POLICY_SNAPSHOT);
   assert.equal(savedPayloads[0][0], ".agentpassports/last-intent.json");
+  assert.deepEqual(savedPayloads[0][1].policySnapshot, {
+    enabled: true,
+    expiresAt: "1790000100",
+    maxGasReimbursementWei: "1000000000000000",
+    maxValueWei: "0",
+    selector: "0x36736d1e",
+    target: TASK_LOG_ADDRESS,
+  });
   assert.equal(savedPayloads[0][1].signature, result.signed.signature);
 });
 
@@ -209,6 +245,9 @@ test("agent runner derives intent expiry from the latest chain block when no clo
       }
       if (call.functionName === "addr") {
         return signer.address;
+      }
+      if (call.functionName === "text") {
+        return POLICY_TEXT_RECORDS.get(call.args[1]) ?? "";
       }
       if (call.functionName === "nextNonce") {
         return 3n;
@@ -253,6 +292,9 @@ test("agent runner does not fail a submitted task when payload persistence fails
       }
       if (call.functionName === "addr") {
         return signer.address;
+      }
+      if (call.functionName === "text") {
+        return POLICY_TEXT_RECORDS.get(call.args[1]) ?? "";
       }
       if (call.functionName === "nextNonce") {
         return 3n;
@@ -302,6 +344,9 @@ test("agent runner rejects owner ENS names that do not contain the agent", async
       }
       if (call.functionName === "addr") {
         return signer.address;
+      }
+      if (call.functionName === "text") {
+        return POLICY_TEXT_RECORDS.get(call.args[1]) ?? "";
       }
       if (call.functionName === "nextNonce") {
         return 3n;
@@ -375,9 +420,11 @@ test("agent runner rejects malformed relayer success responses", async () => {
       callDataHash: `0x${"34".repeat(32)}`,
       expiresAt: 1700000600n,
       nonce: 3n,
+      policyDigest: POLICY_DIGEST,
       target: TASK_LOG_ADDRESS,
       value: 0n,
     },
+    policySnapshot: POLICY_SNAPSHOT,
     signature: `0x${"56".repeat(65)}`,
   };
 
@@ -419,8 +466,17 @@ test("agent runner writes bigint typed data as JSON-safe strings", async () => {
         callDataHash: `0x${"34".repeat(32)}`,
         expiresAt: "1700000600",
         nonce: "3",
+        policyDigest: POLICY_DIGEST,
         target: TASK_LOG_ADDRESS,
         value: "0",
+      },
+      policySnapshot: {
+        enabled: true,
+        expiresAt: "1790000100",
+        maxGasReimbursementWei: "1000000000000000",
+        maxValueWei: "0",
+        selector: "0x36736d1e",
+        target: TASK_LOG_ADDRESS,
       },
       ownerName: "alice.eth",
       ownerNode: OWNER_NODE,
@@ -432,7 +488,7 @@ test("agent runner writes bigint typed data as JSON-safe strings", async () => {
       typedData: {
         domain: {
           chainId: 11155111n,
-          name: "AgentPolicyExecutor",
+          name: "AgentEnsExecutor",
           verifyingContract: EXECUTOR_ADDRESS,
           version: "1",
         },
@@ -441,6 +497,7 @@ test("agent runner writes bigint typed data as JSON-safe strings", async () => {
           callDataHash: `0x${"34".repeat(32)}`,
           expiresAt: 1700000600n,
           nonce: 3n,
+          policyDigest: POLICY_DIGEST,
           target: TASK_LOG_ADDRESS,
           value: 0n,
         },
@@ -448,6 +505,7 @@ test("agent runner writes bigint typed data as JSON-safe strings", async () => {
         types: {
           TaskIntent: [
             { name: "agentNode", type: "bytes32" },
+            { name: "policyDigest", type: "bytes32" },
             { name: "target", type: "address" },
             { name: "callDataHash", type: "bytes32" },
             { name: "value", type: "uint256" },

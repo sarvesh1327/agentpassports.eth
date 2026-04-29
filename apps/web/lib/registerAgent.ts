@@ -125,7 +125,11 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
       normalizedOwnerName,
       policyDigest,
       policyHash,
-      policyUri: input.policyUri
+      policyExpiresAt: input.policyExpiresAt,
+      maxGasReimbursementWei: input.maxGasReimbursementWei,
+      maxValueWei: input.maxValueWei,
+      policyUri: input.policyUri,
+      taskLogAddress: input.taskLogAddress
     })
   };
 }
@@ -383,16 +387,21 @@ function buildAgentTextRecords(input: {
   hasCompleteEnsInput: boolean;
   normalizedAgentAddress: Hex | null;
   normalizedOwnerName: string;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
   policyDigest: Hex | null;
+  policyExpiresAt: string;
   policyHash: Hex | null;
   policyUri: string;
+  taskLogAddress?: Hex | null;
 }): readonly { key: string; value: string }[] {
   if (
     !input.hasCompleteEnsInput ||
     !input.normalizedAgentAddress ||
     !input.executorAddress ||
     !input.policyHash ||
-    !input.policyDigest
+    !input.policyDigest ||
+    !input.taskLogAddress
   ) {
     return [];
   }
@@ -404,6 +413,11 @@ function buildAgentTextRecords(input: {
     { key: "agent.capabilities", value: "task-log,sponsored-execution" },
     { key: "agent.policy.schema", value: "agentpassport.policy.v1" },
     { key: "agent.policy.digest", value: input.policyDigest },
+    { key: "agent.policy.target", value: input.taskLogAddress },
+    { key: "agent.policy.selector", value: taskLogRecordTaskSelector() },
+    { key: "agent.policy.maxValueWei", value: safeBigInt(input.maxValueWei).toString() },
+    { key: "agent.policy.maxGasReimbursementWei", value: safeBigInt(input.maxGasReimbursementWei).toString() },
+    { key: "agent.policy.expiresAt", value: safeBigInt(input.policyExpiresAt).toString() },
     { key: "agent.policy.hash", value: input.policyHash },
     { key: "agent.executor", value: input.executorAddress },
     { key: "agent.status", value: "active" },

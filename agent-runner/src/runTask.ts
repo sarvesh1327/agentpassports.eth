@@ -5,14 +5,18 @@ import { privateKeyToAccount } from "viem/accounts";
 import type {
   ContractReadClient,
   Hex,
+  PolicySnapshot,
   TaskIntentTypedData
 } from "../../packages/config/src/index.ts";
 import {
+  POLICY_SNAPSHOT_TEXT_KEYS,
   chainNameForId,
   ENS_REGISTRY_ADDRESS,
   getAgentAddress,
+  getAgentTextRecords,
   getResolverAddress,
-  namehashEnsName
+  namehashEnsName,
+  policySnapshotFromTextRecords
 } from "../../packages/config/src/index.ts";
 import { assertHex, assertUint256, assertUint64, normalizeAddress } from "../../packages/config/src/hex.ts";
 import type { RunnerConfig } from "./config.ts";
@@ -34,9 +38,10 @@ export type SavedSignedPayload = {
   agentNode: Hex;
   callData: Hex;
   digest: Hex;
-  intent: Record<"agentNode" | "target" | "callDataHash" | "value" | "nonce" | "expiresAt", string>;
+  intent: Record<"agentNode" | "policyDigest" | "target" | "callDataHash" | "value" | "nonce" | "expiresAt", string>;
   ownerName: string;
   ownerNode: Hex;
+  policySnapshot: SerializedPolicySnapshot;
   recoveredSigner: Hex;
   resolverAddress: Hex;
   resolvedAgentAddress: Hex;
@@ -57,6 +62,7 @@ export type RunAgentTaskInput = {
 export type RelayerPayload = {
   callData: Hex;
   intent: TaskPlan["intent"];
+  policySnapshot: PolicySnapshot;
   signature: Hex;
 };
 
@@ -151,6 +157,15 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
     throw new Error("AGENT_PRIVATE_KEY does not match ENS-resolved agent address");
   }
 
+  const policySnapshot = policySnapshotFromTextRecords(
+    agentNode,
+    await getAgentTextRecords({
+      agentNode,
+      client,
+      keys: POLICY_SNAPSHOT_TEXT_KEYS,
+      resolverAddress
+    })
+  );
   const nonce = await readExecutorNonce(client, config.executorAddress, agentNode);
   const now = await readSigningTimestamp(client, input.now);
   const plan = buildTaskPlan({
@@ -159,6 +174,7 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
     metadataURI: config.metadataURI,
     nonce,
     ownerNode,
+    policySnapshot,
     taskDescription: config.taskDescription,
     taskLogAddress: config.taskLogAddress
   });
@@ -172,6 +188,7 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
   const relayerPayload = {
     callData: plan.callData,
     intent: signed.intent,
+    policySnapshot: plan.policySnapshot,
     signature: signed.signature
   };
   const relayerResponse = await (input.submitRelayer ?? submitRelayerPayload)(config.relayerUrl, relayerPayload);
@@ -186,6 +203,7 @@ export async function runAgentTask(input: RunAgentTaskInput): Promise<RunAgentTa
         intent: serializeIntent(signed.intent),
         ownerName,
         ownerNode,
+        policySnapshot: serializePolicySnapshot(plan.policySnapshot),
         recoveredSigner: signed.recoveredSigner,
         resolverAddress,
         resolvedAgentAddress,
@@ -307,6 +325,7 @@ function serializeRelayerPayload(payload: RelayerPayload) {
   return {
     callData: payload.callData,
     intent: serializeIntent(payload.intent),
+    policySnapshot: serializePolicySnapshot(payload.policySnapshot),
     signature: payload.signature
   };
 }
@@ -316,9 +335,30 @@ function serializeIntent(intent: TaskPlan["intent"]) {
     agentNode: intent.agentNode,
     target: intent.target,
     callDataHash: intent.callDataHash,
+    policyDigest: intent.policyDigest,
     value: intent.value.toString(),
     nonce: intent.nonce.toString(),
     expiresAt: intent.expiresAt.toString()
+  };
+}
+
+type SerializedPolicySnapshot = {
+  enabled: boolean;
+  expiresAt: string;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
+  selector: Hex;
+  target: Hex;
+};
+
+function serializePolicySnapshot(policySnapshot: PolicySnapshot): SerializedPolicySnapshot {
+  return {
+    enabled: policySnapshot.enabled,
+    expiresAt: policySnapshot.expiresAt.toString(),
+    maxGasReimbursementWei: policySnapshot.maxGasReimbursementWei.toString(),
+    maxValueWei: policySnapshot.maxValueWei.toString(),
+    selector: policySnapshot.selector,
+    target: policySnapshot.target
   };
 }
 

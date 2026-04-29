@@ -8,9 +8,18 @@ const AGENT_NODE = "0xdd6fbcc964c82b43fdd8e204adf97622963b719d8fe12ebf48264a4677
 const EXECUTOR_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const TASK_LOG_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 const CALL_DATA_HASH = "0x1d9a6570b4147a41f00c51af3f304ef8ed803c660c2ff922ef8304b1373c9fd2";
+const POLICY_SNAPSHOT = {
+  enabled: true,
+  expiresAt: 1790000100n,
+  maxGasReimbursementWei: 1000000000000000n,
+  maxValueWei: 0n,
+  selector: "0x36736d1e",
+  target: TASK_LOG_ADDRESS,
+};
 const ENS_REGISTRY_ADDRESS = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const RESOLVER_ADDRESS = "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5";
 const AGENT_ADDRESS = "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c";
+const POLICY_DIGEST = utilities.hashPolicySnapshot(AGENT_NODE, POLICY_SNAPSHOT);
 
 test("ENS utilities compute Solidity-compatible namehashes and subnodes", () => {
   assert.equal(
@@ -33,6 +42,7 @@ test("ENS utilities compute Solidity-compatible namehashes and subnodes", () => 
 test("TypeScript helpers build task intent typed data and Solidity-compatible hashes", () => {
   const intent = {
     agentNode: AGENT_NODE,
+    policyDigest: POLICY_DIGEST,
     target: TASK_LOG_ADDRESS,
     callDataHash: CALL_DATA_HASH,
     value: 0n,
@@ -42,15 +52,15 @@ test("TypeScript helpers build task intent typed data and Solidity-compatible ha
 
   assert.equal(utilities.taskLogRecordTaskSelector(), "0x36736d1e");
   assert.equal(utilities.hashCallData("0x36736d1e"), CALL_DATA_HASH);
-  assert.equal(utilities.hashTaskIntentStruct(intent), "0x7f1b61a9d6365ebae242e225a0631c642b6add9ced18388ca7c22e03129ace20");
+  assert.equal(utilities.hashTaskIntentStruct(intent), "0xaccd8ca54c765d3dda2d199e45c0e5adbd2ebc5ece7a251b59c64140368276e0");
   assert.equal(
     utilities.hashTaskIntent(intent, 11155111n, EXECUTOR_ADDRESS),
-    "0x28133eef788c4579d3f97f81863aef1e16c961c3719a7c3190fc6682d50a8bff",
+    "0xd440d9ae7ff4f7f21b16bd3101e1975d95bdcc2508a07191d1b48b9a3b4a6e72",
   );
 
   assert.deepEqual(utilities.buildTaskIntentTypedData(intent, 11155111n, EXECUTOR_ADDRESS), {
     domain: {
-      name: "AgentPolicyExecutor",
+      name: "AgentEnsExecutor",
       version: "1",
       chainId: 11155111n,
       verifyingContract: EXECUTOR_ADDRESS,
@@ -59,6 +69,7 @@ test("TypeScript helpers build task intent typed data and Solidity-compatible ha
     types: {
       TaskIntent: [
         { name: "agentNode", type: "bytes32" },
+        { name: "policyDigest", type: "bytes32" },
         { name: "target", type: "address" },
         { name: "callDataHash", type: "bytes32" },
         { name: "value", type: "uint256" },
@@ -110,6 +121,7 @@ test("ENS and hex validation rejects malformed inputs before they reach clients"
     () =>
       utilities.hashTaskIntentStruct({
         agentNode: AGENT_NODE,
+        policyDigest: POLICY_DIGEST,
         target: TASK_LOG_ADDRESS,
         callDataHash: CALL_DATA_HASH,
         value: 0n,

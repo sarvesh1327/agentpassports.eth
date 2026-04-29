@@ -6,13 +6,13 @@ import {
   ADDR_RESOLVER_ABI,
   AGENT_POLICY_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
-  type PolicyContractResult,
-  policyFromContractResult
+  TEXT_RESOLVER_ABI
 } from "../../../../lib/relayer/contracts";
 import { buildServerChain } from "../../../../lib/serverChain";
 import { TASK_LOG_ABI } from "../../../../lib/contracts";
 import { loadRelayerConfig } from "../../../../lib/relayer/config";
 import { RelayerValidationError, relayerErrorResponse } from "../../../../lib/relayer/errors";
+import { normalizeEnsPolicyRead } from "../../../../lib/relayer/ensPolicy";
 import {
   assertSufficientEstimatedExecutionBudget,
   estimateExecutionReimbursementWei
@@ -43,13 +43,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const publicClient = createPublicClient({ chain, transport });
     const account = privateKeyToAccount(config.relayerPrivateKey);
     const reservationStore = createIntentSubmissionStore(config.reservationStore);
-    const [policyResult, nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
-      publicClient.readContract({
-        address: config.executorAddress,
-        abi: AGENT_POLICY_EXECUTOR_ABI,
-        functionName: "policies",
-        args: [payload.intent.agentNode]
-      }),
+    const [nextNonce, gasBudgetWei, resolverAddress, latestBlock] = await Promise.all([
       publicClient.readContract({
         address: config.executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
@@ -70,15 +64,17 @@ export async function POST(request: Request): Promise<NextResponse> {
       }),
       publicClient.getBlock({ blockTag: "latest" })
     ]);
-    const resolvedAgentAddress = await readResolvedAgent(publicClient, resolverAddress as Hex, payload.intent.agentNode);
-    const policy = policyFromContractResult(policyResult as PolicyContractResult);
+    const [resolvedAgentAddress, ensPolicy] = await Promise.all([
+      readResolvedAgent(publicClient, resolverAddress as Hex, payload.intent.agentNode),
+      readEnsPolicy(publicClient, resolverAddress as Hex, payload.intent.agentNode)
+    ]);
     const validated = validateRelayerExecution({
       context: {
         chainId: config.chainId,
         executorAddress: config.executorAddress,
         gasBudgetWei: gasBudgetWei as bigint,
         nextNonce: nextNonce as bigint,
-        policy,
+        ensPolicy,
         resolvedAgentAddress,
         resolverAddress: resolverAddress as Hex
       },
@@ -89,7 +85,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       account: account.address,
       gasBudgetWei: gasBudgetWei as bigint,
       payload: validated,
-      policy,
       publicClient,
       relayerConfig: config
     });
@@ -137,7 +132,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         address: config.executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
         functionName: "execute",
-        args: [validated.intent, validated.callData, validated.signature]
+        args: [validated.intent, validated.policySnapshot, validated.callData, validated.signature]
       });
       await reservation.markBroadcast(txHash);
       const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -207,7 +202,6 @@ async function assertEstimatedBudget(input: {
   account: Hex;
   gasBudgetWei: bigint;
   payload: ReturnType<typeof validateRelayerExecution>;
-  policy: ReturnType<typeof policyFromContractResult>;
   publicClient: ReturnType<typeof createPublicClient>;
   relayerConfig: ReturnType<typeof loadRelayerConfig>;
 }): Promise<void> {
@@ -219,14 +213,14 @@ async function assertEstimatedBudget(input: {
         address: input.relayerConfig.executorAddress,
         abi: AGENT_POLICY_EXECUTOR_ABI,
         functionName: "execute",
-        args: [input.payload.intent, input.payload.callData, input.payload.signature]
+        args: [input.payload.intent, input.payload.policySnapshot, input.payload.callData, input.payload.signature]
       }),
       input.publicClient.getGasPrice()
     ]);
     const estimatedReimbursementWei = estimateExecutionReimbursementWei({
       gasPriceWei,
       gasUsed: estimatedGas,
-      reimbursementCapWei: input.policy.maxGasReimbursementWei
+      reimbursementCapWei: input.payload.policySnapshot.maxGasReimbursementWei
     });
 
     assertSufficientEstimatedExecutionBudget({
@@ -250,6 +244,31 @@ async function readJsonBody(request: Request): Promise<unknown> {
   } catch {
     throw new RelayerValidationError("InvalidRequest", "Expected a JSON request body");
   }
+}
+
+async function readEnsPolicy(
+  publicClient: ReturnType<typeof createPublicClient>,
+  resolverAddress: Hex,
+  agentNode: Hex
+): Promise<{ digest: Hex; status: string }> {
+  if (resolverAddress.toLowerCase() === ZERO_ADDRESS) {
+    return { digest: `0x${"00".repeat(32)}`, status: "" };
+  }
+  const [status, digest] = await Promise.all([
+    publicClient.readContract({
+      address: resolverAddress,
+      abi: TEXT_RESOLVER_ABI,
+      functionName: "text",
+      args: [agentNode, "agent.status"]
+    }),
+    publicClient.readContract({
+      address: resolverAddress,
+      abi: TEXT_RESOLVER_ABI,
+      functionName: "text",
+      args: [agentNode, "agent.policy.digest"]
+    })
+  ]);
+  return normalizeEnsPolicyRead({ digest, status });
 }
 
 async function readResolvedAgent(

@@ -1,35 +1,9 @@
-import type { Hex } from "../../../../packages/config/src/index.ts";
-import {
-  assertUint64,
-  assertUint256,
-  normalizeAddress,
-  normalizeBytes32,
-  normalizeSelector
-} from "../../../../packages/config/src/hex.ts";
-import type { RelayerPolicy } from "./types.ts";
-
-export type PolicyContractResult = readonly [Hex, Hex, Hex, Hex, bigint, bigint, bigint, boolean];
+import { normalizePolicySnapshot, type Hex, type PolicySnapshot } from "../../../../packages/config/src/index.ts";
 
 /**
- * Minimal AgentPolicyExecutor ABI used for relayer reads and execution.
+ * Minimal AgentEnsExecutor ABI used for relayer reads and execution.
  */
 export const AGENT_POLICY_EXECUTOR_ABI = [
-  {
-    type: "function",
-    name: "policies",
-    stateMutability: "view",
-    inputs: [{ name: "agentNode", type: "bytes32" }],
-    outputs: [
-      { name: "ownerNode", type: "bytes32" },
-      { name: "ownerWallet", type: "address" },
-      { name: "target", type: "address" },
-      { name: "selector", type: "bytes4" },
-      { name: "maxValueWei", type: "uint96" },
-      { name: "maxGasReimbursementWei", type: "uint96" },
-      { name: "expiresAt", type: "uint64" },
-      { name: "enabled", type: "bool" }
-    ]
-  },
   {
     type: "function",
     name: "nextNonce",
@@ -54,11 +28,24 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
         type: "tuple",
         components: [
           { name: "agentNode", type: "bytes32" },
+          { name: "policyDigest", type: "bytes32" },
           { name: "target", type: "address" },
           { name: "callDataHash", type: "bytes32" },
           { name: "value", type: "uint256" },
           { name: "nonce", type: "uint256" },
           { name: "expiresAt", type: "uint64" }
+        ]
+      },
+      {
+        name: "policy",
+        type: "tuple",
+        components: [
+          { name: "target", type: "address" },
+          { name: "selector", type: "bytes4" },
+          { name: "maxValueWei", type: "uint96" },
+          { name: "maxGasReimbursementWei", type: "uint96" },
+          { name: "expiresAt", type: "uint64" },
+          { name: "enabled", type: "bool" }
         ]
       },
       { name: "callData", type: "bytes" },
@@ -95,28 +82,20 @@ export const ADDR_RESOLVER_ABI = [
 ] as const;
 
 /**
- * Converts the executor policy getter result into the relayer validation shape.
+ * Minimal resolver ABI for reading ENS text records used as V1 policy source of truth.
  */
-export function policyFromContractResult(result: PolicyContractResult): RelayerPolicy {
-  const [
-    ownerNode,
-    ownerWallet,
-    target,
-    selector,
-    maxValueWei,
-    maxGasReimbursementWei,
-    expiresAt,
-    enabled
-  ] = result;
+export const TEXT_RESOLVER_ABI = [
+  {
+    type: "function",
+    name: "text",
+    stateMutability: "view",
+    inputs: [
+      { name: "node", type: "bytes32" },
+      { name: "key", type: "string" }
+    ],
+    outputs: [{ name: "value", type: "string" }]
+  }
+] as const;
 
-  return {
-    ownerNode: normalizeBytes32(ownerNode),
-    ownerWallet: normalizeAddress(ownerWallet, "preserve"),
-    target: normalizeAddress(target, "preserve"),
-    selector: normalizeSelector(selector),
-    maxValueWei: assertUint256(maxValueWei),
-    maxGasReimbursementWei: assertUint256(maxGasReimbursementWei),
-    expiresAt: assertUint64(expiresAt),
-    enabled
-  };
-}
+export { normalizePolicySnapshot };
+export type { PolicySnapshot };

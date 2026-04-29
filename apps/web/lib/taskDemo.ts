@@ -1,10 +1,13 @@
 import {
   buildTaskIntentTypedData,
   hashCallData,
+  hashPolicySnapshot,
   hashTaskIntent,
   namehashEnsName,
+  normalizePolicySnapshot,
   recoverSignerAddress,
   type Hex,
+  type PolicySnapshot,
   type TaskIntentMessage,
   type TaskIntentTypedData
 } from "@agentpassport/config";
@@ -21,6 +24,7 @@ export type TaskRunDraftInput = {
   metadataURI: string;
   nonce: bigint;
   ownerName: string;
+  policySnapshot: PolicySnapshot;
   taskDescription: string;
   taskLogAddress: Hex;
   valueWei?: bigint;
@@ -37,6 +41,7 @@ export type TaskRunDraft = {
   digest: Hex;
   intent: TaskIntentMessage;
   ownerNode: Hex;
+  policySnapshot: PolicySnapshot;
   taskHash: Hex;
   typedData: TaskIntentTypedData;
 };
@@ -44,13 +49,24 @@ export type TaskRunDraft = {
 export type RelayerExecutePayload = {
   callData: Hex;
   intent: TaskIntentMessage;
+  policySnapshot: PolicySnapshot;
   signature: Hex;
 };
 
 export type SerializableRelayerExecutePayload = {
   callData: Hex;
-  intent: Record<"agentNode" | "target" | "callDataHash" | "value" | "nonce" | "expiresAt", string>;
+  intent: Record<"agentNode" | "policyDigest" | "target" | "callDataHash" | "value" | "nonce" | "expiresAt", string>;
+  policySnapshot: SerializedPolicySnapshot;
   signature: Hex;
+};
+
+export type SerializedPolicySnapshot = {
+  enabled: boolean;
+  expiresAt: string;
+  maxGasReimbursementWei: string;
+  maxValueWei: string;
+  selector: Hex;
+  target: Hex;
 };
 
 export type StoredSignedTaskPayload = SerializableRelayerExecutePayload & {
@@ -89,6 +105,8 @@ export function buildTaskRunDraft(input: TaskRunDraftInput): TaskRunDraft {
   const agentNode = namehashEnsName(agentName);
   const ownerNode = namehashEnsName(ownerName);
   const taskHash = keccak256(toHex(taskDescription));
+  const policySnapshot = normalizePolicySnapshot(input.policySnapshot);
+  const policyDigest = hashPolicySnapshot(agentNode, policySnapshot);
   const callData = encodeFunctionData({
     abi: TASK_LOG_ABI,
     functionName: "recordTask",
@@ -99,6 +117,7 @@ export function buildTaskRunDraft(input: TaskRunDraftInput): TaskRunDraft {
     callDataHash: hashCallData(callData),
     expiresAt: input.expiresAt,
     nonce: input.nonce,
+    policyDigest,
     target: input.taskLogAddress,
     value: input.valueWei ?? 0n
   };
@@ -110,6 +129,7 @@ export function buildTaskRunDraft(input: TaskRunDraftInput): TaskRunDraft {
     digest: hashTaskIntent(typedData.message, input.chainId, input.executorAddress),
     intent: typedData.message,
     ownerNode,
+    policySnapshot,
     taskHash,
     typedData
   };
@@ -139,6 +159,7 @@ export function serializeRelayerExecutePayload(payload: RelayerExecutePayload): 
   return {
     callData: payload.callData,
     intent: serializeTaskIntent(payload.intent),
+    policySnapshot: serializePolicySnapshot(payload.policySnapshot),
     signature: payload.signature
   };
 }
@@ -152,6 +173,7 @@ export function buildStoredSignedTaskPayload(input: {
   digest: Hex;
   intent: TaskIntentMessage;
   ownerName: string;
+  policySnapshot: PolicySnapshot;
   recoveredSigner: Hex | null;
   signature: Hex;
   taskHash: Hex;
@@ -168,6 +190,7 @@ export function buildStoredSignedTaskPayload(input: {
     intent: serializeTaskIntent(input.intent),
     ownerName,
     ownerNode: namehashEnsName(ownerName),
+    policySnapshot: serializePolicySnapshot(input.policySnapshot),
     recoveredSigner: input.recoveredSigner,
     signature: input.signature,
     taskHash: input.taskHash,
@@ -203,6 +226,7 @@ export function storedPayloadToRelayerBody(payload: StoredSignedTaskPayload): Se
   return {
     callData: payload.callData,
     intent: payload.intent,
+    policySnapshot: payload.policySnapshot,
     signature: payload.signature
   };
 }
@@ -295,8 +319,21 @@ function serializeTaskIntent(intent: TaskIntentMessage): SerializableRelayerExec
     callDataHash: intent.callDataHash,
     expiresAt: intent.expiresAt.toString(),
     nonce: intent.nonce.toString(),
+    policyDigest: intent.policyDigest,
     target: intent.target,
     value: intent.value.toString()
+  };
+}
+
+export function serializePolicySnapshot(policySnapshot: PolicySnapshot): SerializedPolicySnapshot {
+  const normalized = normalizePolicySnapshot(policySnapshot);
+  return {
+    enabled: normalized.enabled,
+    expiresAt: normalized.expiresAt.toString(),
+    maxGasReimbursementWei: normalized.maxGasReimbursementWei.toString(),
+    maxValueWei: normalized.maxValueWei.toString(),
+    selector: normalized.selector,
+    target: normalized.target
   };
 }
 

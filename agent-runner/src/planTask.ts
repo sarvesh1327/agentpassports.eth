@@ -1,5 +1,5 @@
-import type { Hex, TaskIntentMessage } from "../../packages/config/src/index.ts";
-import { hashCallData, taskLogRecordTaskSelector } from "../../packages/config/src/index.ts";
+import type { Hex, PolicySnapshot, TaskIntentMessage } from "../../packages/config/src/index.ts";
+import { hashCallData, hashPolicySnapshot, normalizePolicySnapshot, taskLogRecordTaskSelector } from "../../packages/config/src/index.ts";
 import {
   assertUint256,
   assertUint64,
@@ -19,6 +19,7 @@ export type TaskPlanInput = {
   metadataURI: string;
   nonce: bigint;
   ownerNode: Hex;
+  policySnapshot: PolicySnapshot;
   taskDescription: string;
   taskLogAddress: Hex;
   valueWei?: bigint;
@@ -28,6 +29,7 @@ export type TaskPlan = {
   callData: Hex;
   intent: TaskIntentMessage;
   metadataURI: string;
+  policySnapshot: PolicySnapshot;
   taskHash: Hex;
 };
 
@@ -48,6 +50,8 @@ export function buildTaskPlan(input: TaskPlanInput): TaskPlan {
   const nonce = assertUint256(input.nonce);
   const expiresAt = assertUint64(input.expiresAt);
   const metadataURI = normalizeMetadataURI(input.metadataURI);
+  const policySnapshot = normalizePolicySnapshot(input.policySnapshot);
+  const policyDigest = hashPolicySnapshot(agentNode, policySnapshot);
   const taskHash = keccak256Utf8(input.taskDescription);
   const callData = encodeRecordTaskCallData(agentNode, ownerNode, taskHash, metadataURI);
 
@@ -59,9 +63,11 @@ export function buildTaskPlan(input: TaskPlanInput): TaskPlan {
       callDataHash: hashCallData(callData),
       value,
       nonce,
+      policyDigest,
       expiresAt
     },
     metadataURI,
+    policySnapshot,
     taskHash
   };
 }

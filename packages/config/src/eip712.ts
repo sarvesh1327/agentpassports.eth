@@ -15,17 +15,28 @@ import { keccak256Hex, keccak256Utf8 } from "./keccak.ts";
 
 const TASK_LOG_RECORD_TASK_SIGNATURE = "recordTask(bytes32,bytes32,bytes32,string)";
 const TASK_INTENT_TYPE =
-  "TaskIntent(bytes32 agentNode,address target,bytes32 callDataHash,uint256 value,uint256 nonce,uint64 expiresAt)";
+  "TaskIntent(bytes32 agentNode,bytes32 policyDigest,address target,bytes32 callDataHash,uint256 value,uint256 nonce,uint64 expiresAt)";
 const EIP_712_DOMAIN_TYPE =
   "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)";
 
 const TASK_INTENT_TYPES = [
   { name: "agentNode", type: "bytes32" },
+  { name: "policyDigest", type: "bytes32" },
   { name: "target", type: "address" },
   { name: "callDataHash", type: "bytes32" },
   { name: "value", type: "uint256" },
   { name: "nonce", type: "uint256" },
   { name: "expiresAt", type: "uint64" }
+] as const;
+
+export const POLICY_SNAPSHOT_TEXT_KEYS = [
+  "agent.status",
+  "agent.policy.digest",
+  "agent.policy.target",
+  "agent.policy.selector",
+  "agent.policy.maxValueWei",
+  "agent.policy.maxGasReimbursementWei",
+  "agent.policy.expiresAt"
 ] as const;
 
 /**
@@ -43,7 +54,7 @@ export function hashCallData(callData: Hex): Hex {
 }
 
 /**
- * Builds viem-compatible EIP-712 data for AgentPolicyExecutor.TaskIntent.
+ * Builds viem-compatible EIP-712 data for AgentEnsExecutor.TaskIntent.
  */
 export function buildTaskIntentTypedData(
   intent: TaskIntentMessage,
@@ -53,7 +64,7 @@ export function buildTaskIntentTypedData(
   const message = normalizeTaskIntent(intent);
   return {
     domain: {
-      name: "AgentPolicyExecutor",
+      name: "AgentEnsExecutor",
       version: "1",
       chainId,
       verifyingContract: normalizeAddress(executorAddress, "preserve")
@@ -75,6 +86,7 @@ export function hashTaskIntentStruct(intent: TaskIntentMessage): Hex {
     concatBytes(
       hexToBytes(keccak256Utf8(TASK_INTENT_TYPE)),
       hexToBytes(normalizedIntent.agentNode),
+      hexToBytes(normalizedIntent.policyDigest),
       encodeAddress(normalizedIntent.target),
       hexToBytes(normalizedIntent.callDataHash),
       encodeUint256(normalizedIntent.value),
@@ -85,7 +97,7 @@ export function hashTaskIntentStruct(intent: TaskIntentMessage): Hex {
 }
 
 /**
- * Hashes TaskIntent as an EIP-712 digest accepted by AgentPolicyExecutor.
+ * Hashes TaskIntent as an EIP-712 digest accepted by AgentEnsExecutor.
  */
 export function hashTaskIntent(intent: TaskIntentMessage, chainId: bigint, executorAddress: Hex): Hex {
   const domainSeparator = hashTaskIntentDomain(chainId, executorAddress);
@@ -97,7 +109,7 @@ function hashTaskIntentDomain(chainId: bigint, executorAddress: Hex): Hex {
   return keccak256Hex(
     concatBytes(
       hexToBytes(keccak256Utf8(EIP_712_DOMAIN_TYPE)),
-      hexToBytes(keccak256Utf8("AgentPolicyExecutor")),
+      hexToBytes(keccak256Utf8("AgentEnsExecutor")),
       hexToBytes(keccak256Utf8("1")),
       encodeUint256(chainId),
       encodeAddress(executorAddress)
@@ -112,6 +124,7 @@ function selectorForSignature(signature: string): Hex {
 function normalizeTaskIntent(intent: TaskIntentMessage): TaskIntentMessage {
   return {
     agentNode: normalizeBytes32(intent.agentNode),
+    policyDigest: normalizeBytes32(intent.policyDigest),
     target: normalizeAddress(intent.target, "preserve"),
     callDataHash: normalizeBytes32(intent.callDataHash),
     value: assertUint256(intent.value),

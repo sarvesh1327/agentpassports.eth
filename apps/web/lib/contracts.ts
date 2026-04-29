@@ -8,6 +8,13 @@ export const AGENT_TEXT_RECORD_KEYS = [
   "agent.kind",
   "agent.capabilities",
   "agent.policy.uri",
+  "agent.policy.schema",
+  "agent.policy.digest",
+  "agent.policy.target",
+  "agent.policy.selector",
+  "agent.policy.maxValueWei",
+  "agent.policy.maxGasReimbursementWei",
+  "agent.policy.expiresAt",
   "agent.policy.hash",
   "agent.executor",
   "agent.status",
@@ -211,11 +218,24 @@ export const AGENT_POLICY_EXECUTOR_ABI = [
         type: "tuple",
         components: [
           { name: "agentNode", type: "bytes32" },
+          { name: "policyDigest", type: "bytes32" },
           { name: "target", type: "address" },
           { name: "callDataHash", type: "bytes32" },
           { name: "value", type: "uint256" },
           { name: "nonce", type: "uint256" },
           { name: "expiresAt", type: "uint64" }
+        ]
+      },
+      {
+        name: "policy",
+        type: "tuple",
+        components: [
+          { name: "target", type: "address" },
+          { name: "selector", type: "bytes4" },
+          { name: "maxValueWei", type: "uint96" },
+          { name: "maxGasReimbursementWei", type: "uint96" },
+          { name: "expiresAt", type: "uint64" },
+          { name: "enabled", type: "bool" }
         ]
       },
       { name: "callData", type: "bytes" },
