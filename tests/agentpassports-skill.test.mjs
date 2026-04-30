@@ -182,6 +182,65 @@ test("MCP safety flow skill teaches exact AgentPassports MCP tool order and refu
   assert.match(skill, /digest mismatch/i, "MCP skill should reject policy digest mismatches");
 });
 
+
+test("AgentPassports skill docs teach KeeperHub V3 live product model and tool order", async () => {
+  const skill = await readText("skills/agentpassports/SKILL.md");
+  const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
+  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
+  const source = `${skill}\n${flow}\n${walkthrough}`;
+
+  assertMentionsAll(
+    source,
+    [
+      "AgentPassports.*ENS trust firewall|ENS trust firewall.*AgentPassports",
+      "KeeperHub.*execution runner|execution runner.*KeeperHub",
+      "Run attestation.*approved.*blocked|approved.*blocked.*Run attestation",
+      "keeperhub_list_workflows",
+      "keeperhub_create_gate_workflow",
+      "KEEPERHUB_WORKFLOW_ID",
+      "resolve_agent_passport",
+      "keeperhub_validate_agent_task",
+      "keeperhub_execute_approved_workflow",
+      "keeperhub_get_execution_status",
+      "keeperhub_get_execution_logs",
+      "keeperhub_emit_run_attestation",
+      "keeperhub_build_workflow_payload"
+    ],
+    "KeeperHub V3 skill docs"
+  );
+});
+
+test("AgentPassports skill docs define KeeperHub V3 safety boundaries", async () => {
+  const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
+  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
+  const source = `${flow}\n${walkthrough}`;
+
+  assertMentionsAll(
+    source,
+    [
+      "must not call KeeperHub|do not call KeeperHub",
+      "gate.*blocks|blocked.*gate",
+      "never signs private keys|never sign.*private key|does not sign.*private key",
+      "does not submit.*onchain AgentPassports relayer transaction|does not submit.*relayer transaction",
+      "build unsigned intent",
+      "sign locally",
+      "submit_task",
+      "tx hash.*attestation|attestation.*tx hash",
+      "do not paste.*KEEPERHUB_API_KEY|KEEPERHUB_API_KEY.*do not paste",
+      "wallet secrets",
+      "\.agentPassports/keys\.txt",
+      "operator/server env vars",
+      "KEEPERHUB_API_BASE_URL",
+      "inactive|missing signer|missing policy digest",
+      "blocked attestation",
+      "manual trigger.*not preserve arbitrary execution body|arbitrary execution body.*not.*preserve"
+    ],
+    "KeeperHub V3 safety boundaries"
+  );
+
+  assert.doesNotMatch(source, /kh_[A-Za-z0-9]/, "skill docs must not contain KeeperHub API keys");
+});
+
 test("MCP safety flow skill teaches V2 Uniswap Swapper tool order", async () => {
   const skill = await readText("skills/agentpassports/SKILL.md");
   const flow = await readText("skills/agentpassports/mcp-safety-flow.md");

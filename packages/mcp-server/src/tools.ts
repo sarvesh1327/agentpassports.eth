@@ -55,6 +55,11 @@ export type AgentPassportToolName =
   | "keeperhub_validate_agent_task"
   | "keeperhub_build_workflow_payload"
   | "keeperhub_emit_run_attestation"
+  | "keeperhub_list_workflows"
+  | "keeperhub_create_gate_workflow"
+  | "keeperhub_execute_approved_workflow"
+  | "keeperhub_get_execution_status"
+  | "keeperhub_get_execution_logs"
   | "uniswap_check_approval"
   | "uniswap_quote"
   | "uniswap_validate_swap_against_ens_policy"
@@ -141,6 +146,46 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
       reasons: reasonsSchema,
       blockers: z.array(z.string().min(1)).optional()
     }
+  },
+  {
+    name: "keeperhub_list_workflows",
+    description:
+      "List workflows from the live KeeperHub API using the runtime KEEPERHUB_API_KEY. This helps agents find reusable KeeperHub workflows without exposing secrets, signing payloads, or bypassing ENS policy checks.",
+    inputShape: {}
+  },
+  {
+    name: "keeperhub_create_gate_workflow",
+    description:
+      "Create the verified AgentPassports V3 KeeperHub gate workflow using the live KeeperHub API. The workflow definition includes the required name, nodes, and edges shape, contains no secrets, and is intended to run only after ENS policy gating.",
+    inputShape: {
+      name: z.string().min(1).optional().describe("Optional KeeperHub workflow name. Defaults to a timestamped AgentPassports V3 name."),
+      description: z.string().min(1).optional().describe("Optional public workflow description. Do not include secrets.")
+    }
+  },
+  {
+    name: "keeperhub_execute_approved_workflow",
+    description:
+      "Run the full live V3 KeeperHub path after AgentPassports ENS gating. It resolves ENS, validates policy, blocks without calling KeeperHub when disallowed, builds an unsigned workflow payload when approved, executes a configured KeeperHub workflow, reads status/logs, and returns a run attestation. It never signs or submits private keys.",
+    inputShape: {
+      agentName: ensName,
+      task: taskSchema,
+      metadataURI: z.string().min(1),
+      workflowId: z.string().min(1).optional().describe("KeeperHub workflow id. Defaults to KEEPERHUB_WORKFLOW_ID."),
+      ttlSeconds: z.number().int().positive().max(86_400).optional(),
+      trustThreshold
+    }
+  },
+  {
+    name: "keeperhub_get_execution_status",
+    description:
+      "Fetch a live KeeperHub execution status by execution id. Use after keeperhub_execute_approved_workflow to verify whether KeeperHub completed the ENS-approved workflow. Requires runtime API key and never returns secrets.",
+    inputShape: { executionId: z.string().min(1) }
+  },
+  {
+    name: "keeperhub_get_execution_logs",
+    description:
+      "Fetch live KeeperHub execution logs by execution id and return safe JSON, including runId when present. Use this as audit evidence for AgentPassports ENS-gated run attestations. Requires runtime API key and never returns secrets.",
+    inputShape: { executionId: z.string().min(1) }
   },
   {
     name: "uniswap_check_approval",

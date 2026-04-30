@@ -1,6 +1,40 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { normalizeEnsName } from "@agentpassport/sdk";
+import { KEEPERHUB_WORKFLOW_NAME } from "./keeperhub.ts";
 import type { createAgentPassportHandlers } from "./runtime.ts";
+
+export const KEEPERHUB_GATE_RESOURCE_TEMPLATE = "agentpassport://keeperhub/{agentName}";
+
+export function buildKeeperHubResourceGuide(agentName: string) {
+  const normalizedAgentName = normalizeEnsName(agentName);
+  return {
+    agentName: normalizedAgentName,
+    policySource: "ENS",
+    workflowName: KEEPERHUB_WORKFLOW_NAME,
+    executionMode: "exportable-action-pack",
+    liveKeeperHubSubmit: false,
+    requiredToolOrder: [
+      "resolve_agent_passport",
+      "keeperhub_validate_agent_task",
+      "keeperhub_build_workflow_payload",
+      "keeperhub_emit_run_attestation"
+    ],
+    safetyBoundaries: [
+      "Resolve live ENS records before every KeeperHub workflow.",
+      "Return blocked decisions for inactive status, policy digest mismatch, task-policy failures, or trust threshold failures.",
+      "Use external signing only; MCP does not read or store private keys.",
+      "No live KeeperHub API call is made by this resource or by the current action-pack export path.",
+      "Uniswap remains experimental and full gasless sponsored swaps are frozen."
+    ],
+    workflowActionPack: "packages/mcp-server/keeperhub/action-pack.md",
+    workflowTemplate: "packages/mcp-server/keeperhub/workflow-template.json",
+    runAttestationSchema: {
+      schema: "agentpassport.keeperhubRunAttestation.v1",
+      required: ["schema", "agentName", "decision", "taskHash", "policyDigest", "reasons", "blockers", "createdAt"],
+      optional: ["keeperhubRunId", "txHash"]
+    }
+  };
+}
 
 type AgentPassportHandlers = ReturnType<typeof createAgentPassportHandlers>;
 
@@ -63,6 +97,17 @@ export function registerAgentPassportResources(server: McpServer, handlers: Agen
         tools: ["check_task_against_policy", "build_task_intent", "submit_task"]
       });
     }
+  );
+
+  server.registerResource(
+    "keeperhub_gate",
+    new ResourceTemplate(KEEPERHUB_GATE_RESOURCE_TEMPLATE, { list: undefined }),
+    {
+      description: "V3 KeeperHub Gate action-pack guidance for one ENS AgentPassport, including tool order, safety boundaries, workflow artifact paths, and run attestation schema.",
+      mimeType: "application/json",
+      title: "AgentPassports KeeperHub Gate"
+    },
+    async (uri, variables) => jsonResource(uri, buildKeeperHubResourceGuide(requiredVariable(variables, "agentName")))
   );
 }
 

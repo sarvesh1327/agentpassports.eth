@@ -1,0 +1,65 @@
+{
+  "name": "AgentPassports Execute ENS-Verified Task",
+  "version": "v1-live",
+  "executionMode": "live-keeperhub-api",
+  "liveKeeperHubSubmit": true,
+  "policySource": "ENS",
+  "verifiedKeeperHubEndpoints": {
+    "listWorkflows": "GET /api/workflows",
+    "createWorkflow": "POST /api/workflows/create",
+    "executeWorkflow": "POST /api/workflow/{workflowId}/execute",
+    "executionStatus": "GET /api/workflows/executions/{executionId}/status",
+    "executionLogs": "GET /api/workflows/executions/{executionId}/logs"
+  },
+  "requiredToolOrder": [
+    "resolve_agent_passport",
+    "keeperhub_validate_agent_task",
+    "keeperhub_create_gate_workflow",
+    "keeperhub_execute_approved_workflow",
+    "keeperhub_get_execution_status",
+    "keeperhub_get_execution_logs",
+    "keeperhub_emit_run_attestation"
+  ],
+  "keeperHubWorkflowDefinition": {
+    "requiredFields": ["name", "nodes", "edges"],
+    "nodes": [
+      {
+        "id": "agentpassports_gate_trigger",
+        "type": "trigger",
+        "position": { "x": 0, "y": 0 },
+        "data": {
+          "type": "trigger",
+          "label": "AgentPassports Gate Trigger",
+          "config": { "triggerType": "Manual" },
+          "status": "idle",
+          "description": "Manual trigger for an AgentPassports-approved KeeperHub payload"
+        }
+      }
+    ],
+    "edges": []
+  },
+  "inputs": {
+    "agentName": "ENS agent name",
+    "task": {
+      "description": "Natural-language task to gate",
+      "ownerName": "Optional owner ENS name",
+      "valueWei": "Optional ETH value, defaults to 0"
+    },
+    "metadataURI": "Task proof URI used by the unsigned AgentPassports intent",
+    "workflowId": "Optional KeeperHub workflow id; defaults to KEEPERHUB_WORKFLOW_ID"
+  },
+  "outputs": {
+    "gateDecision": "approved or blocked AgentPassports KeeperHub Gate decision",
+    "workflowPayload": "Unsigned AgentPassports workflow payload produced only after approval",
+    "keeperhub": "Live KeeperHub execution/status/log evidence",
+    "runAttestation": "agentpassport.keeperhubRunAttestation.v1 JSON"
+  },
+  "safetyBoundaries": [
+    "Resolve live ENS before every run",
+    "Do not sign inside MCP",
+    "Do not expose KEEPERHUB_API_KEY",
+    "Do not call KeeperHub when the gate is blocked",
+    "Do not approve blocked policy/status/preflight failures",
+    "Arbitrary execution body persistence is not proven for the simple manual trigger workflow"
+  ]
+}

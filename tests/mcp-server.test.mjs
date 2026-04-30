@@ -36,6 +36,11 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "keeperhub_validate_agent_task",
     "keeperhub_build_workflow_payload",
     "keeperhub_emit_run_attestation",
+    "keeperhub_list_workflows",
+    "keeperhub_create_gate_workflow",
+    "keeperhub_execute_approved_workflow",
+    "keeperhub_get_execution_status",
+    "keeperhub_get_execution_logs",
     "uniswap_check_approval",
     "uniswap_validate_swap_against_ens_policy",
     "uniswap_quote",
@@ -63,6 +68,14 @@ test("MCP tools use zod schemas with the required public arguments", async () =>
   assert.deepEqual(Object.keys(byName.check_task_against_policy.inputShape), ["agentName", "task"]);
   assert.deepEqual(Object.keys(byName.build_task_intent.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds"]);
   assert.deepEqual(Object.keys(byName.submit_task.inputShape), ["agentName", "intent", "policySnapshot", "callData", "signature"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_validate_agent_task.inputShape), ["agentName", "task", "trustThreshold"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_build_workflow_payload.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds", "trustThreshold"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_emit_run_attestation.inputShape), ["agentName", "decision", "taskDescription", "policyDigest", "txHash", "keeperhubRunId", "reasons", "blockers"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_list_workflows.inputShape), []);
+  assert.deepEqual(Object.keys(byName.keeperhub_create_gate_workflow.inputShape), ["name", "description"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_execute_approved_workflow.inputShape), ["agentName", "task", "metadataURI", "workflowId", "ttlSeconds", "trustThreshold"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_get_execution_status.inputShape), ["executionId"]);
+  assert.deepEqual(Object.keys(byName.keeperhub_get_execution_logs.inputShape), ["executionId"]);
   assert.deepEqual(Object.keys(byName.uniswap_check_approval.inputShape), ["agentName", "amount", "chainId", "token"]);
   assert.deepEqual(Object.keys(byName.uniswap_validate_swap_against_ens_policy.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
   assert.deepEqual(Object.keys(byName.uniswap_quote.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);

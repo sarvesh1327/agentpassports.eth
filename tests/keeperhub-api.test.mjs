@@ -1,0 +1,137 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+const API_KEY = "kh_test_secret_should_not_leak";
+const BASE_URL = "https://app.keeperhub.com";
+
+function createJsonResponse(body, init = {}) {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: { "content-type": "application/json" }
+  });
+}
+
+test("KeeperHub API config reads env safely with defaults", async () => {
+  const { loadKeeperHubApiConfig } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+
+  const config = loadKeeperHubApiConfig({ KEEPERHUB_API_KEY: API_KEY, KEEPERHUB_WORKFLOW_ID: "wf_default" });
+
+  assert.equal(config.apiBaseUrl, BASE_URL);
+  assert.equal(config.apiKey, API_KEY);
+  assert.equal(config.defaultWorkflowId, "wf_default");
+});
+
+test("KeeperHub workflow definition uses verified name/nodes/edges shape", async () => {
+  const { buildAgentPassportsKeeperHubWorkflowDefinition } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+
+  const definition = buildAgentPassportsKeeperHubWorkflowDefinition({ name: "AgentPassports V3 KeeperHub Gate Test" });
+
+  assert.equal(definition.name, "AgentPassports V3 KeeperHub Gate Test");
+  assert.match(definition.description, /AgentPassports V3 live integration workflow/i);
+  assert.ok(Array.isArray(definition.nodes));
+  assert.ok(Array.isArray(definition.edges));
+  assert.equal(definition.nodes[0].id, "agentpassports_gate_trigger");
+  assert.equal(definition.nodes[0].type, "trigger");
+  assert.equal(definition.nodes[0].data.config.triggerType, "Manual");
+  assert.deepEqual(definition.edges, []);
+  assert.equal(JSON.stringify(definition).includes(API_KEY), false);
+});
+
+test("KeeperHub API client calls verified endpoints with bearer auth", async () => {
+  const {
+    createKeeperHubWorkflow,
+    executeKeeperHubWorkflow,
+    getKeeperHubExecutionLogs,
+    getKeeperHubExecutionStatus,
+    listKeeperHubWorkflows
+  } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/api/workflows") && (!init.method || init.method === "GET")) return createJsonResponse([{ id: "wf_1" }]);
+    if (String(url).endsWith("/api/workflows/create")) return createJsonResponse({ workflowId: "wf_created" });
+    if (String(url).endsWith("/api/workflow/wf_created/execute")) return createJsonResponse({ executionId: "exec_1", status: "running" });
+    if (String(url).endsWith("/api/workflows/executions/exec_1/status")) return createJsonResponse({ status: "success" });
+    if (String(url).endsWith("/api/workflows/executions/exec_1/logs")) return createJsonResponse({ runId: "wrun_1", status: "success" });
+    return createJsonResponse({ error: "unexpected" }, { status: 404 });
+  };
+
+  const config = { apiBaseUrl: BASE_URL, apiKey: API_KEY };
+  assert.deepEqual(await listKeeperHubWorkflows(config, fetchImpl), [{ id: "wf_1" }]);
+  assert.deepEqual(await createKeeperHubWorkflow(config, { name: "wf", nodes: [], edges: [] }, fetchImpl), { workflowId: "wf_created" });
+  assert.deepEqual(await executeKeeperHubWorkflow(config, "wf_created", { hello: "world" }, fetchImpl), { executionId: "exec_1", status: "running" });
+  assert.deepEqual(await getKeeperHubExecutionStatus(config, "exec_1", fetchImpl), { status: "success" });
+  assert.deepEqual(await getKeeperHubExecutionLogs(config, "exec_1", fetchImpl), { runId: "wrun_1", status: "success" });
+
+  assert.deepEqual(calls.map((call) => call.url), [
+    `${BASE_URL}/api/workflows`,
+    `${BASE_URL}/api/workflows/create`,
+    `${BASE_URL}/api/workflow/wf_created/execute`,
+    `${BASE_URL}/api/workflows/executions/exec_1/status`,
+    `${BASE_URL}/api/workflows/executions/exec_1/logs`
+  ]);
+  for (const call of calls) {
+    assert.equal(call.init.headers.authorization, `Bearer ${API_KEY}`);
+  }
+  assert.equal(JSON.stringify(calls.map((call) => call.init.body ?? "")).includes(API_KEY), false);
+});
+
+test("KeeperHub API errors are redacted", async () => {
+  const { listKeeperHubWorkflows } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+  const fetchImpl = async () => createJsonResponse({ error: `bad key ${API_KEY}` }, { status: 401 });
+
+  await assert.rejects(
+    () => listKeeperHubWorkflows({ apiBaseUrl: BASE_URL, apiKey: API_KEY }, fetchImpl),
+    (error) => {
+      assert.match(error.message, /KeeperHub API GET \/api\/workflows failed with HTTP 401/);
+      assert.equal(error.message.includes(API_KEY), false);
+      return true;
+    }
+  );
+});
+
+test("KeeperHub helpers extract nested run ids from real logs shape", async () => {
+  const { extractKeeperHubExecutionId, extractKeeperHubRunId } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+
+  assert.equal(extractKeeperHubExecutionId({ executionId: "exec_top" }), "exec_top");
+  assert.equal(extractKeeperHubRunId({ runId: "wrun_top" }), "wrun_top");
+  assert.equal(
+    extractKeeperHubRunId({ execution: { id: "exec_nested", runId: "wrun_nested", status: "success" }, logs: [] }),
+    "wrun_nested"
+  );
+});
+
+test("KeeperHub gated execution helper skips live execution when gate is blocked", async () => {
+  const { executeKeeperHubApprovedFlow } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+  let executeCalls = 0;
+  const gateDecision = {
+    agentName: "assistant.agentpassports.eth",
+    agentNode: "0x" + "11".repeat(32),
+    allowed: false,
+    blockers: ["agent.status must be exactly active"],
+    decision: "blocked",
+    gasBudgetWei: "0",
+    liveSigner: null,
+    policyDigest: "0x" + "22".repeat(32),
+    policySnapshot: {},
+    reasons: [],
+    resolverAddress: null,
+    score: 0,
+    threshold: 70
+  };
+
+  const result = await executeKeeperHubApprovedFlow({
+    executeApproved: async () => {
+      executeCalls += 1;
+      throw new Error("KeeperHub fetch should not be called");
+    },
+    gateDecision,
+    taskDescription: "blocked task"
+  });
+
+  assert.equal(executeCalls, 0);
+  assert.equal(result.gateDecision.decision, "blocked");
+  assert.equal(result.keeperhub.skipped, true);
+  assert.equal(result.attestation.decision, "blocked");
+  assert.deepEqual(result.attestation.blockers, ["agent.status must be exactly active"]);
+});

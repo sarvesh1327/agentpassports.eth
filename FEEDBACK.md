@@ -20,22 +20,29 @@
 
 - The API maps naturally to an agent workflow: check approval, quote, validate, execute.
 - Keeping the API call in MCP/server code makes secret handling straightforward.
+- A live /quote worked on Sepolia for WETH -> UNI, so quote metadata is usable as an experimental policy-gated proof path.
 
 ## Bugs or confusing behavior
 
-- Pending real API testing with a live Uniswap Developer Platform key.
+- `/swap` currently fails with `TRANSFER_FROM_FAILED` because WETH must approve Permit2 before Permit2 can transfer tokens.
+- That approval blocker conflicts with the product constraint that the agent wallet holds no gas token.
+- Owner-funded `AgentEnsExecutor` gas sponsorship cannot directly create ERC20 approval for tokens owned by the agent EOA without a separate delegation/account-abstraction model.
+- Therefore full gasless sponsored swap execution is frozen and should not be part of the main KeeperHub demo path.
 
 ## Documentation gaps
 
-- We need to confirm final request/response field names for `/check_approval`, `/quote`, and `/swap` against the current Uniswap API docs before mainnet demo.
+- `/quote` field shape has been exercised with the live API. `/swap` still needs a proven initial approval/delegation architecture before it can be documented as a complete sponsored-swap flow.
+- If Uniswap is revisited, document the exact Permit2 allowance state, initial ERC20 approval requirement, and who pays gas for that setup transaction.
 
 ## DX friction
 
 - Agentic flows need a clear quote ID / transaction / order object that can be carried between quote and execution tools.
+- Gasless execution needs a clean answer for the initial ERC20 approval to Permit2 while preserving the rule that the agent wallet holds no gas token.
 
 ## Missing features we wished existed
 
 - A compact, canonical policy-validation schema for API consumers would make agent guardrails easier to standardize.
+- A supported account/delegation flow for owner-sponsored initial ERC20 approvals would make sponsored swaps much easier to demo safely.
 
 ## Screenshots / logs
 

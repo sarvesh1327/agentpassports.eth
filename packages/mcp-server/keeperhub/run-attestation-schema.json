@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agentpassport.keeperhubRunAttestation.v1",
+  "title": "AgentPassports KeeperHub Run Attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "agentName",
+    "decision",
+    "taskHash",
+    "policyDigest",
+    "reasons",
+    "blockers",
+    "createdAt"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agentpassport.keeperhubRunAttestation.v1"
+    },
+    "agentName": {
+      "type": "string"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "blocked"]
+    },
+    "taskHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "policyDigest": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "keeperhubRunId": {
+      "type": "string"
+    },
+    "txHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
