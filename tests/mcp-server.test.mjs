@@ -33,6 +33,9 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "check_task_against_policy",
     "build_task_intent",
     "submit_task",
+    "keeperhub_validate_agent_task",
+    "keeperhub_build_workflow_payload",
+    "keeperhub_emit_run_attestation",
     "uniswap_check_approval",
     "uniswap_validate_swap_against_ens_policy",
     "uniswap_quote",
@@ -63,7 +66,7 @@ test("MCP tools use zod schemas with the required public arguments", async () =>
   assert.deepEqual(Object.keys(byName.uniswap_check_approval.inputShape), ["agentName", "amount", "chainId", "token"]);
   assert.deepEqual(Object.keys(byName.uniswap_validate_swap_against_ens_policy.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
   assert.deepEqual(Object.keys(byName.uniswap_quote.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
-  assert.deepEqual(Object.keys(byName.uniswap_execute_swap.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type", "permit2Signature", "quote", "quoteId"]);
+  assert.deepEqual(Object.keys(byName.uniswap_execute_swap.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type", "permit2Signature", "permitData", "quote"]);
   assert.deepEqual(Object.keys(byName.uniswap_record_swap_proof.inputShape), ["agentName", "amount", "chainId", "policyDigest", "quoteId", "requestId", "routing", "tokenIn", "tokenOut", "txHashOrOrderId"]);
 });
 

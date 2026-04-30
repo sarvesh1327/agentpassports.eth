@@ -33,6 +33,7 @@ import {
   normalizeUniswapSwapResponse,
   validateSwapRequestAgainstPolicy
 } from "./uniswap.ts";
+import { buildKeeperHubGateDecision, buildKeeperHubWorkflowPayload, buildRunAttestation } from "./keeperhub.ts";
 
 const AGENT_TEXT_KEYS = [
   "agent.v",
@@ -179,6 +180,36 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     return { ...validation, agentAddress: policy.agentAddress, agentName: policy.agentName, agentNode: policy.agentNode };
   }
 
+  async function checkTaskAgainstPolicy(args: ToolArgs<"check_task_against_policy">) {
+    const policy = await getPolicy(args.agentName);
+    const selectorAllowed = policy.policySnapshot.selector === taskLogRecordTaskSelector();
+    const targetAllowed = policy.policySnapshot.target.toLowerCase() === config.taskLogAddress.toLowerCase();
+    const valueAllowed = BigInt(args.task.valueWei ?? "0") <= BigInt(policy.policySnapshot.maxValueWei);
+    return { allowed: selectorAllowed && targetAllowed && valueAllowed, policy, selectorAllowed, targetAllowed, valueAllowed };
+  }
+
+  async function buildKeeperHubDecision(args: ToolArgs<"keeperhub_validate_agent_task">) {
+    const passport = await resolvePassport(args.agentName);
+    try {
+      const taskCheck = await checkTaskAgainstPolicy({ agentName: args.agentName, task: args.task });
+      return buildKeeperHubGateDecision({
+        passport,
+        policy: taskCheck.policy,
+        taskCheck,
+        trustThreshold: args.trustThreshold
+      });
+    } catch (error) {
+      // KeeperHub Gate must be demo-safe for revocation and bad-policy paths: a
+      // controlled AgentPassports policy/status failure is a blocked decision, not
+      // a crash that would make the gate unusable. This never approves on error.
+      return buildKeeperHubGateDecision({
+        passport,
+        policyError: error instanceof Error ? error : new Error("policy preflight failed"),
+        trustThreshold: args.trustThreshold
+      });
+    }
+  }
+
   async function buildIntent(args: ToolArgs<"build_task_intent">) {
     const policy = await getPolicy(args.agentName);
     const task = args.task;
@@ -235,13 +266,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       return { agents, ownerName, ownerNode, resolverAddress, version: records["agentpassports.v"] ?? "" };
     },
     get_agent_policy: (args: ToolArgs<"get_agent_policy">) => getPolicy(args.agentName),
-    check_task_against_policy: async (args: ToolArgs<"check_task_against_policy">) => {
-      const policy = await getPolicy(args.agentName);
-      const selectorAllowed = policy.policySnapshot.selector === taskLogRecordTaskSelector();
-      const targetAllowed = policy.policySnapshot.target.toLowerCase() === config.taskLogAddress.toLowerCase();
-      const valueAllowed = BigInt(args.task.valueWei ?? "0") <= BigInt(policy.policySnapshot.maxValueWei);
-      return { allowed: selectorAllowed && targetAllowed && valueAllowed, policy, selectorAllowed, targetAllowed, valueAllowed };
-    },
+    check_task_against_policy: checkTaskAgainstPolicy,
     build_task_intent: buildIntent,
     submit_task: async (args: ToolArgs<"submit_task">) => {
       // The relayer performs the same ENS and signature checks again. This MCP
@@ -257,6 +282,16 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       }
       return { agentName: normalizeEnsName(args.agentName), relayer: body };
     },
+    keeperhub_validate_agent_task: buildKeeperHubDecision,
+    keeperhub_build_workflow_payload: async (args: ToolArgs<"keeperhub_build_workflow_payload">) => {
+      const [passport, gateDecision, intentResult] = await Promise.all([
+        resolvePassport(args.agentName),
+        buildKeeperHubDecision(args),
+        buildIntent(args)
+      ]);
+      return buildKeeperHubWorkflowPayload({ buildIntentResult: intentResult, gateDecision, passport });
+    },
+    keeperhub_emit_run_attestation: async (args: ToolArgs<"keeperhub_emit_run_attestation">) => buildRunAttestation(args as any),
     uniswap_check_approval: async (args: ToolArgs<"uniswap_check_approval">) => {
       const policy = await getSwapPolicy(args.agentName);
       const validation = validateSwapRequestAgainstPolicy(
@@ -281,7 +316,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       const policy = await getSwapPolicy(args.agentName);
       const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
       if (!validation.allowed) throw new Error("Swap request is not allowed by ENS Uniswap policy");
-      const payload = { ...buildUniswapQuotePayload(policy.agentAddress, args as any), permit2Signature: args.permit2Signature, quote: args.quote, quoteId: args.quoteId };
+      const payload = { permitData: args.permitData, quote: args.quote, signature: args.permit2Signature };
       const uniswap = await callUniswapApi("/swap", payload, uniswapRuntimeConfig(config));
       return { agentName: policy.agentName, payload, policyValidation: validation, summary: normalizeUniswapSwapResponse(uniswap), uniswap };
     },

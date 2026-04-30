@@ -12,6 +12,10 @@ const taskSchema = z.object({
   valueWei: uintString.optional().describe("Optional ETH value to send through the executor. Defaults to 0.")
 });
 
+const decisionSchema = z.enum(["approved", "blocked"]);
+const trustThreshold = z.number().int().min(0).max(100).optional().describe("Minimum deterministic KeeperHub gate score. Defaults to 70.");
+const reasonsSchema = z.array(z.string().min(1)).describe("Human-readable KeeperHub gate reasons.");
+
 const intentSchema = z.object({
   agentNode: bytes32,
   policyDigest: bytes32,
@@ -48,6 +52,9 @@ export type AgentPassportToolName =
   | "check_task_against_policy"
   | "build_task_intent"
   | "submit_task"
+  | "keeperhub_validate_agent_task"
+  | "keeperhub_build_workflow_payload"
+  | "keeperhub_emit_run_attestation"
   | "uniswap_check_approval"
   | "uniswap_quote"
   | "uniswap_validate_swap_against_ens_policy"
@@ -109,6 +116,33 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
     inputShape: { agentName: ensName, intent: intentSchema, policySnapshot: policySnapshotSchema, callData: hex, signature: hex }
   },
   {
+    name: "keeperhub_validate_agent_task",
+    description:
+      "Validate whether a live ENS AgentPassport is allowed to enter a KeeperHub workflow. This is a pre-execution gate: it resolves ENS identity, checks exact active status, verifies policy digest compliance, evaluates task policy limits, and returns approved/blocked reasons without signing or calling KeeperHub.",
+    inputShape: { agentName: ensName, task: taskSchema, trustThreshold }
+  },
+  {
+    name: "keeperhub_build_workflow_payload",
+    description:
+      "Build a KeeperHub workflow payload only after the AgentPassports ENS gate approves the task. Returns unsigned AgentPassports intent data, policy facts, gate decision, and signing payload for external signing; it never receives private keys and never calls KeeperHub directly.",
+    inputShape: { agentName: ensName, task: taskSchema, metadataURI: z.string().min(1), ttlSeconds: z.number().int().positive().max(86_400).optional(), trustThreshold }
+  },
+  {
+    name: "keeperhub_emit_run_attestation",
+    description:
+      "Create a portable AgentPassports run attestation for a KeeperHub-approved or KeeperHub-blocked execution. The attestation records ENS agent name, policy digest, task hash, decision, reasons, blockers, optional KeeperHub run id, and optional tx hash for audit trails.",
+    inputShape: {
+      agentName: ensName,
+      decision: decisionSchema,
+      taskDescription: z.string().min(1),
+      policyDigest: bytes32,
+      txHash: bytes32.optional(),
+      keeperhubRunId: z.string().optional(),
+      reasons: reasonsSchema,
+      blockers: z.array(z.string().min(1)).optional()
+    }
+  },
+  {
     name: "uniswap_check_approval",
     description:
       "Call the Uniswap API approval check for an agent wallet after checking the token, amount, and chain against live ENS Uniswap policy. Never exposes the Uniswap API key to the browser or agent.",
@@ -134,12 +168,12 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
   {
     name: "uniswap_execute_swap",
     description:
-      "Execute a previously quoted Uniswap swap for an agent only after rechecking live ENS policy. Requires quote data and optional Permit2 signature. Returns the Uniswap swap response for signing/broadcasting or order settlement.",
+      "Execute a previously quoted Uniswap swap for an agent only after rechecking live ENS policy. Requires the quote object and optional Permit2 signature/data returned from the quote flow. Returns Uniswap swap calldata for executor submission.",
     inputShape: {
       ...swapRequestSchema,
       permit2Signature: hex.optional(),
-      quote: z.record(z.string(), z.unknown()),
-      quoteId: z.string().optional()
+      permitData: z.record(z.string(), z.unknown()).optional(),
+      quote: z.record(z.string(), z.unknown())
     }
   },
   {
