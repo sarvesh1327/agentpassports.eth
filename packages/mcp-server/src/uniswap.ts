@@ -23,11 +23,11 @@ export type ApprovalRequest = {
 
 export type ExecuteSwapRequest = SwapRequest & {
   permit2Signature?: Hex;
+  permitData?: Record<string, unknown>;
   quote: Record<string, unknown>;
-  quoteId?: string;
 };
 
-const DEFAULT_UNISWAP_API_BASE_URL = "https://api.uniswap.org/v1";
+const DEFAULT_UNISWAP_API_BASE_URL = "https://trade-api.gateway.uniswap.org/v1";
 const DEFAULT_QUOTE_PROTOCOLS = ["UNISWAPX_V2", "V4", "V3", "V2"] as const;
 
 /**
@@ -57,7 +57,14 @@ export function validateSwapRequestAgainstPolicy(request: SwapRequest, policy: S
 export async function callUniswapApi(path: string, payload: Record<string, unknown>, config: UniswapRuntimeConfig = {}) {
   const fetchImpl = config.fetchImpl ?? fetch;
   const baseUrl = (config.apiBaseUrl ?? DEFAULT_UNISWAP_API_BASE_URL).replace(/\/$/u, "");
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-universal-router-version": "2.0",
+    "x-permit2-disabled": "false"
+  };
+  if (path === "/quote") {
+    headers["x-erc20eth-enabled"] = "false";
+  }
   if (config.apiKey) {
     headers["x-api-key"] = config.apiKey;
   }
