@@ -48,6 +48,49 @@ Follow this order for every task that may be signed or submitted:
 
 Use `list_owner_agents` only when the user asks to inspect or choose among an owner's registered agents.
 
+## KeeperHub V3 live flow
+
+Use this flow when the user asks for live KeeperHub execution gated by AgentPassports.
+
+Product model:
+
+```text
+AgentPassports = ENS trust firewall / policy gate
+KeeperHub = execution runner
+Run attestation = approved/blocked proof
+```
+
+One-time/operator setup tools and values:
+
+```text
+keeperhub_list_workflows
+keeperhub_create_gate_workflow
+KEEPERHUB_WORKFLOW_ID
+```
+
+`KEEPERHUB_API_KEY`, `KEEPERHUB_API_BASE_URL`, and `KEEPERHUB_WORKFLOW_ID` are operator/server env vars, not agent prompt config. Do not paste `KEEPERHUB_API_KEY`, wallet secrets, `.env` files, or `.agentPassports/keys.txt` into chat, docs, or tool arguments.
+
+Per-task tool order:
+
+```text
+resolve_agent_passport
+keeperhub_validate_agent_task
+keeperhub_execute_approved_workflow
+keeperhub_get_execution_status
+keeperhub_get_execution_logs
+keeperhub_emit_run_attestation
+```
+
+`keeperhub_build_workflow_payload` is the lower-level unsigned payload builder used by the live flow. Use it directly only when the user needs to inspect or export the unsigned AgentPassports workflow payload before live KeeperHub execution.
+
+Safety boundaries:
+
+- Do not call KeeperHub if the AgentPassports gate blocks. If the ENS agent is inactive, has a missing signer, has a missing policy digest, has a digest mismatch, or violates policy, the expected result is a blocked attestation.
+- The MCP/KeeperHub flow never signs private keys and never signs a task intent inside MCP.
+- The MCP/KeeperHub flow does not submit the onchain AgentPassports relayer transaction by itself.
+- If full onchain proof is required after KeeperHub approval: build unsigned intent, sign locally with `skills/agentpassports/sign-intent.ts` or a wallet, call `submit_task`, then include the tx hash in the run attestation.
+- The simple manual trigger workflow may not preserve arbitrary execution body in logs; do not claim KeeperHub logs contain the full AgentPassports payload unless a consuming KeeperHub node proves it.
+
 ## V2 Swapper / Uniswap tool order
 
 Use this flow when the agent passport has the `uniswap-swap` capability and the user asks the agent to quote or execute a swap.

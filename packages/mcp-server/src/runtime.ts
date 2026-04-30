@@ -33,6 +33,18 @@ import {
   normalizeUniswapSwapResponse,
   validateSwapRequestAgainstPolicy
 } from "./uniswap.ts";
+import {
+  buildAgentPassportsKeeperHubWorkflowDefinition,
+  createKeeperHubWorkflow,
+  executeKeeperHubApprovedFlow,
+  executeKeeperHubWorkflow,
+  extractKeeperHubExecutionId,
+  extractKeeperHubRunId,
+  getKeeperHubExecutionLogs,
+  getKeeperHubExecutionStatus,
+  listKeeperHubWorkflows,
+  type KeeperHubApiConfig
+} from "./keeperhubApi.ts";
 import { buildKeeperHubGateDecision, buildKeeperHubWorkflowPayload, buildRunAttestation } from "./keeperhub.ts";
 
 const AGENT_TEXT_KEYS = [
@@ -103,6 +115,9 @@ export type McpServerConfig = {
   relayerUrl: string;
   rpcUrl: string;
   taskLogAddress: Hex;
+  keeperhubApiBaseUrl?: string;
+  keeperhubApiKey?: string;
+  keeperhubWorkflowId?: string;
   uniswapApiBaseUrl?: string;
   uniswapApiKey?: string;
 };
@@ -122,6 +137,9 @@ export function loadMcpConfig(env: Record<string, string | undefined> = process.
     relayerUrl: readUrl(env.RELAYER_URL, "RELAYER_URL"),
     rpcUrl: readUrl(env.RPC_URL ?? env.NEXT_PUBLIC_RPC_URL, "RPC_URL"),
     taskLogAddress: readAddress(env.TASK_LOG_ADDRESS ?? env.NEXT_PUBLIC_TASK_LOG_ADDRESS, "TASK_LOG_ADDRESS"),
+    keeperhubApiBaseUrl: optionalUrl(env.KEEPERHUB_API_BASE_URL ?? "https://app.keeperhub.com"),
+    keeperhubApiKey: optionalSecret(env.KEEPERHUB_API_KEY),
+    keeperhubWorkflowId: optionalSecret(env.KEEPERHUB_WORKFLOW_ID),
     uniswapApiBaseUrl: optionalUrl(env.UNISWAP_API_BASE_URL),
     uniswapApiKey: optionalSecret(env.UNISWAP_API_KEY)
   };
@@ -292,6 +310,52 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       return buildKeeperHubWorkflowPayload({ buildIntentResult: intentResult, gateDecision, passport });
     },
     keeperhub_emit_run_attestation: async (args: ToolArgs<"keeperhub_emit_run_attestation">) => buildRunAttestation(args as any),
+    keeperhub_list_workflows: async () => listKeeperHubWorkflows(keeperHubRuntimeConfig(config)),
+    keeperhub_create_gate_workflow: async (args: ToolArgs<"keeperhub_create_gate_workflow">) => {
+      const definition = buildAgentPassportsKeeperHubWorkflowDefinition({ description: args.description, name: args.name });
+      const keeperhub = await createKeeperHubWorkflow(keeperHubRuntimeConfig(config), definition);
+      return { definition, keeperhub };
+    },
+    keeperhub_execute_approved_workflow: async (args: ToolArgs<"keeperhub_execute_approved_workflow">) => {
+      const passport = await resolvePassport(args.agentName);
+      const gateDecision = await buildKeeperHubDecision(args);
+      return executeKeeperHubApprovedFlow({
+        gateDecision,
+        taskDescription: args.task.description,
+        executeApproved: async () => {
+          const intentResult = await buildIntent(args);
+          const workflowPayload = buildKeeperHubWorkflowPayload({ buildIntentResult: intentResult, gateDecision, passport });
+          const keeperhubConfig = keeperHubRuntimeConfig(config);
+          const workflowId = args.workflowId ?? keeperhubConfig.defaultWorkflowId;
+          if (!workflowId) throw new Error("Missing KeeperHub workflow id. Provide workflowId or set KEEPERHUB_WORKFLOW_ID.");
+          const execution = await executeKeeperHubWorkflow(keeperhubConfig, workflowId, workflowPayload);
+          const executionId = extractKeeperHubExecutionId(execution);
+          const [status, logs] = executionId
+            ? await Promise.all([
+                getKeeperHubExecutionStatus(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) })),
+                getKeeperHubExecutionLogs(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) }))
+              ])
+            : [undefined, undefined];
+          const keeperhubRunId = extractKeeperHubRunId(logs) ?? executionId;
+          return {
+            gateDecision,
+            workflowPayload,
+            keeperhub: { execution, executionId, logs, status, workflowId },
+            attestation: buildRunAttestation({
+              agentName: gateDecision.agentName,
+              blockers: [],
+              decision: "approved",
+              keeperhubRunId,
+              policyDigest: gateDecision.policyDigest,
+              reasons: gateDecision.reasons,
+              taskDescription: args.task.description
+            })
+          };
+        }
+      });
+    },
+    keeperhub_get_execution_status: async (args: ToolArgs<"keeperhub_get_execution_status">) => getKeeperHubExecutionStatus(keeperHubRuntimeConfig(config), args.executionId),
+    keeperhub_get_execution_logs: async (args: ToolArgs<"keeperhub_get_execution_logs">) => getKeeperHubExecutionLogs(keeperHubRuntimeConfig(config), args.executionId),
     uniswap_check_approval: async (args: ToolArgs<"uniswap_check_approval">) => {
       const policy = await getSwapPolicy(args.agentName);
       const validation = validateSwapRequestAgainstPolicy(
@@ -335,6 +399,33 @@ export function schemaFor<TName extends AgentPassportToolName>(name: TName): Rec
   const tool = AGENTPASSPORT_MCP_TOOLS.find((entry) => entry.name === name);
   if (!tool) throw new Error(`Unknown tool ${name}`);
   return tool.inputShape;
+}
+
+function keeperHubRuntimeConfig(config: McpServerConfig): KeeperHubApiConfig {
+  if (!config.keeperhubApiKey) throw new Error("Missing KEEPERHUB_API_KEY");
+  return {
+    apiBaseUrl: config.keeperhubApiBaseUrl ?? "https://app.keeperhub.com",
+    apiKey: config.keeperhubApiKey,
+    defaultWorkflowId: config.keeperhubWorkflowId
+  };
+}
+
+function readExecutionId(value: unknown): string | undefined {
+  if (value && typeof value === "object" && "executionId" in value && typeof (value as any).executionId === "string") {
+    return (value as any).executionId;
+  }
+  return undefined;
+}
+
+function readRunId(value: unknown): string | undefined {
+  if (value && typeof value === "object" && "runId" in value && typeof (value as any).runId === "string") {
+    return (value as any).runId;
+  }
+  return undefined;
+}
+
+function redactedErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "KeeperHub request failed";
 }
 
 function readExecutorBigint(client: ContractReadClient, executorAddress: Hex, functionName: "nextNonce" | "gasBudgetWei", agentNode: Hex): Promise<bigint> {

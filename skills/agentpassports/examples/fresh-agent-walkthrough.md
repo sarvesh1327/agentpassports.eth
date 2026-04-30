@@ -129,6 +129,45 @@ If any step fails, explain the exact failed condition and safe next step, such a
 - Local signer does not match ENS signer; ask the user to register the correct public address in the UI or switch `.agentPassports/keys.txt`.
 - Task is outside policy; ask the user to update the request or policy.
 
+## Optional: KeeperHub V3 live execution
+
+If the user wants KeeperHub V3 live execution, remember the product model:
+
+```text
+AgentPassports = ENS trust firewall / policy gate
+KeeperHub = execution runner
+Run attestation = approved/blocked proof
+```
+
+Operator/server setup may use:
+
+```text
+keeperhub_list_workflows
+keeperhub_create_gate_workflow
+KEEPERHUB_WORKFLOW_ID
+```
+
+Do not ask the agent user to paste `KEEPERHUB_API_KEY`, `KEEPERHUB_API_BASE_URL`, wallet secrets, `.env` files, or `.agentPassports/keys.txt`. These are operator/server env vars, not agent prompt config.
+
+For each KeeperHub task, use:
+
+```text
+resolve_agent_passport
+keeperhub_validate_agent_task
+keeperhub_execute_approved_workflow
+keeperhub_get_execution_status
+keeperhub_get_execution_logs
+keeperhub_emit_run_attestation
+```
+
+`keeperhub_build_workflow_payload` is the lower-level unsigned payload builder used by the live flow.
+
+If the gate blocks because the agent is inactive, has a missing signer, has a missing policy digest, or violates policy, do not call KeeperHub. Return a blocked attestation.
+
+The KeeperHub MCP flow never signs private keys and does not submit the onchain AgentPassports relayer transaction by itself. If full onchain proof is required after KeeperHub approval, build unsigned intent, sign locally with `sign-intent.ts` or a wallet, call `submit_task`, and include the tx hash in the run attestation.
+
+The simple manual trigger workflow may not preserve arbitrary execution body in logs, so do not claim KeeperHub logs contain the full AgentPassports payload unless a consuming KeeperHub node proves it.
+
 ## Optional: V2 Swapper flow
 
 If the user registers this agent as a `Swapper`, the passport should include the `uniswap-swap` capability and ENS records such as:

@@ -1,8 +1,18 @@
 # AgentPassports Skill
 
-Use this skill when a user asks an agent to act through AgentPassports.eth, prove it is authorized by an ENS owner, check an ENS policy, sign a task intent, submit work through the AgentPassports MCP server, or operate as a V2 Uniswap `Swapper` agent with the `uniswap-swap` capability.
+Use this skill when a user asks an agent to act through AgentPassports.eth, prove it is authorized by an ENS owner, check an ENS policy, sign a task intent, submit work through the AgentPassports MCP server, operate as a V2 Uniswap `Swapper` agent with the `uniswap-swap` capability, or run a KeeperHub V3 live workflow through the AgentPassports ENS gate.
 
-AgentPassports is an ENS-native authorization protocol for agents. An owner publishes an agent passport under ENS, including the agent signer address, exact lifecycle status, and an owner-defined policy. The agent must treat ENS as the source of truth before signing or submitting any task.
+AgentPassports is an ENS-native authorization protocol for agents. An owner publishes an agent passport under ENS, including the agent signer address, exact lifecycle status, and an owner-defined policy. The agent must treat ENS as the source of truth before signing, submitting, or executing any task.
+
+## Product model
+
+```text
+AgentPassports = ENS trust firewall / policy gate
+KeeperHub = execution runner
+Run attestation = approved/blocked proof
+```
+
+KeeperHub V3 live execution is not a replacement for AgentPassports policy checks. AgentPassports decides whether an ENS agent is allowed to run; KeeperHub runs only after the gate approves; run attestations preserve proof of both approved and blocked paths.
 
 This skill has two operating parts:
 
