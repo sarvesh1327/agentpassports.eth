@@ -27,14 +27,63 @@ test("KeeperHub workflow definition uses verified name/nodes/edges shape", async
   const definition = buildAgentPassportsKeeperHubWorkflowDefinition({ name: "AgentPassports V3 KeeperHub Gate Test" });
 
   assert.equal(definition.name, "AgentPassports V3 KeeperHub Gate Test");
-  assert.match(definition.description, /AgentPassports V3 live integration workflow/i);
+  assert.match(definition.description, /AgentPassports direct ENS KeeperHub gate/i);
   assert.ok(Array.isArray(definition.nodes));
   assert.ok(Array.isArray(definition.edges));
-  assert.equal(definition.nodes[0].id, "agentpassports_gate_trigger");
+  assert.equal(definition.nodes[0].id, "agentpassports_trigger");
   assert.equal(definition.nodes[0].type, "trigger");
   assert.equal(definition.nodes[0].data.config.triggerType, "Manual");
-  assert.deepEqual(definition.edges, []);
+  assert.ok(definition.edges.length > 0);
   assert.equal(JSON.stringify(definition).includes(API_KEY), false);
+});
+
+test("KeeperHub workflow definition is a direct-ENS-first multi-node Passport/Visa gate", async () => {
+  const { buildAgentPassportsKeeperHubWorkflowDefinition } = await import("../packages/mcp-server/src/keeperhubApi.ts");
+
+  const definition = buildAgentPassportsKeeperHubWorkflowDefinition({ name: "AgentPassports Direct ENS Gate Test" });
+  const nodeIds = definition.nodes.map((node) => node.id);
+  const nodeById = Object.fromEntries(definition.nodes.map((node) => [node.id, node]));
+  const edgePairs = definition.edges.map((edge) => `${edge.source}->${edge.target}:${edge.label ?? edge.data?.label ?? ""}`);
+
+  assert.equal(definition.gateMode, "direct-ens-first");
+  assert.equal(definition.capabilityStatus.directEnsReads, "template-not-live-import-proven");
+  assert.equal(definition.capabilityStatus.conditionBranches, "template-not-live-import-proven");
+
+  for (const id of [
+    "agentpassports_trigger",
+    "ens_resolve_passport",
+    "check_agent_exists",
+    "check_status_active",
+    "check_policy_digest",
+    "check_action_allowed",
+    "agentens_execute",
+    "stamp_blocked_agent_missing",
+    "stamp_blocked_status_inactive",
+    "stamp_blocked_policy_invalid",
+    "stamp_blocked_action_disallowed"
+  ]) {
+    assert.ok(nodeIds.includes(id), `${id} should be present`);
+  }
+
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /eth_call/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_status/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_digest/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /resolver\(bytes32\)|addr\(bytes32\)|text\(bytes32,string\)/);
+
+  for (const id of ["check_agent_exists", "check_status_active", "check_policy_digest", "check_action_allowed"]) {
+    assert.equal(nodeById[id].type, "condition", `${id} should be a visible KeeperHub condition node`);
+  }
+
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_agent_exists->stamp_blocked_agent_missing:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_status_active->stamp_blocked_status_inactive:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_policy_digest->stamp_blocked_policy_invalid:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_action_allowed->stamp_blocked_action_disallowed:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_action_allowed->agentens_execute:true")));
+
+  const executionIncoming = definition.edges.filter((edge) => edge.target === "agentens_execute");
+  assert.deepEqual(executionIncoming.map((edge) => edge.source), ["check_action_allowed"]);
+  assert.equal(JSON.stringify(definition).includes(API_KEY), false);
+  assert.doesNotMatch(JSON.stringify(definition), /privateKey|KEEPERHUB_API_KEY|kh_[A-Za-z0-9]/);
 });
 
 test("KeeperHub API client calls verified endpoints with bearer auth", async () => {

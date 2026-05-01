@@ -4,17 +4,18 @@ Use this skill when an agent needs to prepare or verify the signing key it will 
 
 ## Brief protocol context
 
-AgentPassports.eth lets an ENS owner authorize an agent by publishing the agent public address and owner-defined policy in ENS text records. The agent uses the AgentPassports MCP server to inspect that passport, build safe task intents, and submit signed payloads. ENS remains the source of truth for whether the agent is active and what it may do.
+AgentPassports.eth lets an ENS owner authorize an agent by publishing the agent public address and owner-defined policy in ENS text records. In the current KeeperHub flow, the AgentPassports MCP server only builds unsigned task intents and submits signed payloads to KeeperHub. KeeperHub performs Passport/Visa validation and returns success or error.
 
 ## Required key setup flow
 
 1. Check whether `.agentPassports/keys.txt` exists in the agent's local working directory.
 2. If it exists, read it locally, derive the public address, and show only the public address to the user.
 3. If it does not exist, ask the user whether to provide an existing private key or create a new key pair.
-4. If creating a new key pair, create `.agentPassports/`, write the private key to `.agentPassports/keys.txt`, and set owner-only permissions such as `chmod 600 .agentPassports/keys.txt`.
-5. Ensure `.agentPassports/` is ignored by git. The key file must not commit, upload, or appear in logs.
-6. Give the user the public address and ask the user to complete setup in the AgentPassports UI by registering that address as the agent signer.
-7. After the UI setup is complete, continue with the MCP safety flow to verify the ENS passport before any signing or submission.
+4. If creating a new key pair, use the skill-provided `create-key.ts` helper. Key creation is not an MCP tool; the MCP server does not create or receive private keys.
+5. If creating a new key pair, create `.agentPassports/`, write the private key to `.agentPassports/keys.txt`, and set owner-only permissions such as `chmod 600 .agentPassports/keys.txt`.
+6. Ensure `.agentPassports/` is ignored by git. The key file must not commit, upload, or appear in logs.
+7. Give the user the public address and ask the user to complete setup in the AgentPassports UI by registering that address as the agent signer.
+8. After the UI setup is complete, continue with the MCP thin intent flow to build, locally sign, submit tasks to KeeperHub, and check final KeeperHub status.
 
 ## Agent rules
 
@@ -31,7 +32,7 @@ I will keep the AgentPassports private key locally at .agentPassports/keys.txt a
 
 The agent public address to register in the AgentPassports UI is: 0x...
 
-After the UI publishes the ENS passport and policy, I will verify the passport through MCP before signing or submitting any task.
+After the UI publishes the passport/policy data, I will build unsigned intents through MCP, sign locally, and submit the signed payload to KeeperHub for validation/execution.
 ```
 
 ## Stop conditions

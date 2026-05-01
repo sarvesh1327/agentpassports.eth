@@ -541,15 +541,18 @@ test("run page is repurposed as the MCP task execution guide", async () => {
   for (const label of [
     "AgentPassports MCP",
     "http://localhost:3333/mcp",
-    "agentpassport_execute_task",
-    "resolve_agent_passport",
-    "check_task_against_policy",
+    "agentpassport_keeperhub_gate",
     "build_task_intent",
     "submit_task",
+    "check_task_status",
     "sign-intent.ts",
-    "Policy source: ENS"
+    "Policy authority: KeeperHub"
   ]) {
     assert.match(mcpSource, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented`);
+  }
+
+  for (const removed of ["resolve_agent_passport", "check_task_against_policy"]) {
+    assert.doesNotMatch(mcpSource, new RegExp(removed), `${removed} should not be documented`);
   }
 });
 

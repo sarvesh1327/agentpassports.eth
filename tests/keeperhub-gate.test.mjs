@@ -69,20 +69,17 @@ const BUILD_INTENT_RESULT = {
   taskHash: "0x" + "55".repeat(32)
 };
 
-test("KeeperHub MCP action-pack tools are declared with safety-focused descriptions", async () => {
+test("KeeperHub-specific MCP preflight tools are removed from the thin MCP surface", async () => {
   const { AGENTPASSPORT_MCP_TOOLS } = await import("../packages/mcp-server/src/tools.ts");
   const byName = Object.fromEntries(AGENTPASSPORT_MCP_TOOLS.map((tool) => [tool.name, tool]));
 
-  for (const name of ["keeperhub_validate_agent_task", "keeperhub_build_workflow_payload", "keeperhub_emit_run_attestation"]) {
-    assert.ok(byName[name], `${name} should be registered as an AgentPassports MCP tool`);
-    assert.match(byName[name].description, /KeeperHub/i);
-    assert.match(byName[name].description, /ENS/i);
-    assert.match(byName[name].description, /policy/i);
+  assert.deepEqual(Object.keys(byName).sort(), ["build_task_intent", "check_task_status", "submit_task"]);
+  for (const removed of ["keeperhub_validate_agent_task", "keeperhub_build_workflow_payload", "keeperhub_emit_run_attestation"]) {
+    assert.equal(byName[removed], undefined, `${removed} should not be registered as an MCP tool`);
   }
-
-  assert.deepEqual(Object.keys(byName.keeperhub_validate_agent_task.inputShape), ["agentName", "task", "trustThreshold"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_build_workflow_payload.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds", "trustThreshold"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_emit_run_attestation.inputShape), ["agentName", "decision", "taskDescription", "policyDigest", "txHash", "keeperhubRunId", "reasons", "blockers"]);
+  assert.match(byName.build_task_intent.description, /KeeperHub performs Passport\/Visa validation/i);
+  assert.match(byName.submit_task.description, /check_task_status/i);
+  assert.match(byName.check_task_status.description, /execution id/i);
 });
 
 test("KeeperHub gate decision approves valid ENS passport and policy facts", async () => {
@@ -154,6 +151,32 @@ test("KeeperHub gate decision converts controlled policy errors into blocked dec
   assert.equal(decision.policyDigest, POLICY.policyDigest);
   assert.match(decision.blockers.join("\n"), /agent_status must be exactly active/);
   assert.match(decision.blockers.join("\n"), /policy preflight failed/);
+});
+
+test("blocked KeeperHub run attestation includes failed node, blocked code, and workflow context", async () => {
+  const { buildRunAttestation } = await import("../packages/mcp-server/src/keeperhub.ts");
+
+  const attestation = buildRunAttestation({
+    agentName: ACTIVE_PASSPORT.agentName,
+    agentNode: ACTIVE_PASSPORT.agentNode,
+    blockedCode: "STATUS_NOT_ACTIVE",
+    createdAt: "2026-05-01T00:00:00.000Z",
+    decision: "blocked",
+    failedNodeId: "check_status_active",
+    keeperhubExecutionId: "exec_direct_ens_1",
+    keeperhubRunId: "wrun_direct_ens_1",
+    policyDigest: POLICY.policyDigest,
+    reasons: [],
+    blockers: ["agent_status must be exactly active"],
+    taskDescription: "blocked task"
+  });
+
+  assert.equal(attestation.failedNodeId, "check_status_active");
+  assert.equal(attestation.blockedCode, "STATUS_NOT_ACTIVE");
+  assert.equal(attestation.agentNode, ACTIVE_PASSPORT.agentNode);
+  assert.equal(attestation.keeperhubExecutionId, "exec_direct_ens_1");
+  assert.equal(attestation.keeperhubRunId, "wrun_direct_ens_1");
+  assert.equal(attestation.policyDigest, POLICY.policyDigest);
 });
 test("KeeperHub workflow payload wraps unsigned intent data without private key material", async () => {
   const { buildKeeperHubGateDecision, buildKeeperHubWorkflowPayload } = await import("../packages/mcp-server/src/keeperhub.ts");

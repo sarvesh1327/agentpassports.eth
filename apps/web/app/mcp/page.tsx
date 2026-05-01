@@ -1,23 +1,18 @@
 const TOOLS = [
-  "resolve_agent_passport",
-  "list_owner_agents",
-  "get_agent_policy",
-  "check_task_against_policy",
   "build_task_intent",
-  "submit_task"
+  "submit_task",
+  "check_task_status"
 ] as const;
 
 const RESOURCES = [
-  "agentpassport://agent/{agentName}",
-  "agentpassport://owner/{ownerName}/agents",
-  "agentpassport://policy/{agentName}",
-  "agentpassport://tasks/{agentName}"
+  "agentpassport://tasks/{agentName}",
+  "agentpassport://keeperhub/{agentName}"
 ] as const;
 
 /**
- * Documents the agent-facing MCP runtime. V1 keeps the browser as owner/admin UI
- * only; autonomous agents use MCP for live ENS policy reads and local skill
- * signing for private-key custody.
+ * Documents the agent-facing MCP runtime. The browser stays owner/admin UI only;
+ * autonomous agents use MCP for intent construction/status checks and local skill
+ * signing for private-key custody. KeeperHub owns Passport/Visa validation.
  */
 export default function McpPage() {
   return (
@@ -27,16 +22,16 @@ export default function McpPage() {
         <p>Agent runtime</p>
         <h1 id="mcp-title">AgentPassports MCP</h1>
         <p>
-          Connect your MCP-capable agent to <code className="code-pill">http://localhost:3333/mcp</code>. The MCP server resolves live ENS policy,
-          builds unsigned intents, and submits signed payloads. Policy source: ENS.
+          Connect your MCP-capable agent to <code className="code-pill">http://localhost:3333/mcp</code>. The MCP server is thin: it builds unsigned intents,
+          submits signed payloads to KeeperHub, and checks final status. Policy authority: KeeperHub.
         </p>
       </section>
 
       <section className="mcp-setup-grid" aria-label="MCP setup">
         <article className="glass-panel">
           <span className="status-pill status-pill--success">Prompt</span>
-          <h2>Use agentpassport_execute_task</h2>
-          <p>Guides resolve, policy check, unsigned intent build, local signing, and submission.</p>
+          <h2>Use agentpassport_keeperhub_gate</h2>
+          <p>Guides build, local signing, async KeeperHub submit, and final status polling.</p>
         </article>
         <article className="glass-panel">
           <span className="status-pill status-pill--warning">Private key stays local</span>
@@ -48,13 +43,20 @@ export default function McpPage() {
       <section className="content-card glass-panel" aria-labelledby="mcp-flow-title">
         <h2 id="mcp-flow-title">Safe execution flow</h2>
         <ol>
-          <li>Use the <code className="code-pill">agentpassport_execute_task</code> prompt for guided execution.</li>
-          <li>Call <code className="code-pill">resolve_agent_passport</code> to read live ENS resolver, text records, and addr(agent).</li>
-          <li>Call <code className="code-pill">get_agent_policy</code> and <code className="code-pill">check_task_against_policy</code> before building or signing.</li>
-          <li>Call <code className="code-pill">build_task_intent</code> to receive unsigned intent JSON and typed data.</li>
+          <li>Use the <code className="code-pill">agentpassport_keeperhub_gate</code> prompt for guided execution.</li>
+          <li>Call <code className="code-pill">build_task_intent</code> with explicit public inputs to receive unsigned intent JSON and typed data.</li>
           <li>Sign locally with the skill-provided <code className="code-pill">sign-intent.ts</code> script.</li>
-          <li>Call <code className="code-pill">submit_task</code> with the signed payload.</li>
+          <li>Call <code className="code-pill">submit_task</code> with the signed payload; it returns a KeeperHub execution id quickly by default.</li>
+          <li>Call <code className="code-pill">check_task_status</code> with that execution id until KeeperHub returns final status, logs, errors, and tx hash evidence.</li>
         </ol>
+      </section>
+
+      <section className="content-card glass-panel" aria-labelledby="mcp-authority-title">
+        <h2 id="mcp-authority-title">Authority boundary</h2>
+        <p>
+          KeeperHub performs Passport/Visa validation, policy validation, workflow routing, and execution. MCP does not create keys, receive private keys,
+          perform local authorization checks, or convert KeeperHub output into a local approval decision.
+        </p>
       </section>
 
       <section className="content-card glass-panel" aria-labelledby="mcp-tools-title">
@@ -72,10 +74,10 @@ export default function McpPage() {
       </section>
 
       <section className="content-card glass-panel" aria-labelledby="mcp-refusal-title">
-        <h2 id="mcp-refusal-title">Refusal conditions</h2>
+        <h2 id="mcp-refusal-title">Stop conditions</h2>
         <p>
-          Never sign if ENS <code className="code-pill">agent.status</code> is not exactly <code className="code-pill">active</code>, the policy digest does not match live ENS,
-          the task fails policy preflight, or the local signer does not match ENS <code className="code-pill">addr(agentName)</code>.
+          Stop if a private key would leave the local machine, the unsigned intent JSON is altered before signing, the signature is malformed,
+          or KeeperHub returns a blocked/error status.
         </p>
       </section>
     </main>

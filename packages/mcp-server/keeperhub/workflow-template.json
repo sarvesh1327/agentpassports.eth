@@ -12,31 +12,401 @@
     "executionLogs": "GET /api/workflows/executions/{executionId}/logs"
   },
   "requiredToolOrder": [
-    "resolve_agent_passport",
-    "keeperhub_validate_agent_task",
-    "keeperhub_create_gate_workflow",
-    "keeperhub_execute_approved_workflow",
-    "keeperhub_get_execution_status",
-    "keeperhub_get_execution_logs",
-    "keeperhub_emit_run_attestation"
+    "build_task_intent",
+    "submit_task",
+    "check_task_status"
   ],
   "keeperHubWorkflowDefinition": {
-    "requiredFields": ["name", "nodes", "edges"],
+    "name": "AgentPassports Execute ENS-Verified Task",
+    "description": "AgentPassports direct ENS KeeperHub gate template. KeeperHub reads Passport/Visa state from ENS first and routes failed checks to blocked stamps.",
+    "gateMode": "direct-ens-first",
+    "capabilityStatus": {
+      "directEnsReads": "template-not-live-import-proven",
+      "conditionBranches": "template-not-live-import-proven",
+      "blockedStampRouting": "template-not-live-import-proven",
+      "agentEnsExecuteWrite": "previous-live-proof-web3-write-supported"
+    },
+    "inputs": {
+      "chainId": "{{CHAIN_ID}}",
+      "rpcUrl": "{{RPC_URL}}",
+      "ensRegistryAddress": "{{ENS_REGISTRY}}",
+      "executorAddress": "{{EXECUTOR_ADDRESS}}",
+      "taskLogAddress": "{{TASK_LOG_ADDRESS}}",
+      "requiredTextRecords": [
+        "agent_status",
+        "agent_policy_digest",
+        "agent_policy_target",
+        "agent_policy_selector",
+        "agent_policy_max_value_wei",
+        "agent_policy_max_gas_reimbursement_wei",
+        "agent_policy_expires_at"
+      ]
+    },
     "nodes": [
       {
-        "id": "agentpassports_gate_trigger",
+        "id": "agentpassports_trigger",
         "type": "trigger",
-        "position": { "x": 0, "y": 0 },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
         "data": {
           "type": "trigger",
-          "label": "AgentPassports Gate Trigger",
-          "config": { "triggerType": "Manual" },
+          "label": "AgentPassports action request",
+          "config": {
+            "triggerType": "Manual"
+          },
           "status": "idle",
-          "description": "Manual trigger for an AgentPassports-approved KeeperHub payload"
+          "description": "Receives the agent action request. All subsequent KeeperHub nodes must pass before execution."
+        }
+      },
+      {
+        "id": "ens_resolve_passport",
+        "type": "http-json-rpc",
+        "position": {
+          "x": 320,
+          "y": 0
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Direct ENS Passport/Visa reads",
+          "method": "POST",
+          "url": "{{RPC_URL}}",
+          "description": "KeeperHub direct ENS read node. It performs eth_call reads against the registry/resolver so KeeperHub, not the AgentPassports API, observes live Passport and Visa state.",
+          "config": {
+            "jsonrpc": "2.0",
+            "calls": [
+              {
+                "purpose": "Passport resolver lookup",
+                "to": "{{ENS_REGISTRY}}",
+                "function": "resolver(bytes32)",
+                "params": [
+                  "{{input.agentNode}}"
+                ]
+              },
+              {
+                "purpose": "Passport signer exists",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "addr(bytes32)",
+                "params": [
+                  "{{input.agentNode}}"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_status",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_status"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_digest",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_digest"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_target",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_target"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_selector",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_selector"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_max_value_wei",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_max_value_wei"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_max_gas_reimbursement_wei",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_max_gas_reimbursement_wei"
+                ]
+              },
+              {
+                "purpose": "Visa text record agent_policy_expires_at",
+                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+                "function": "text(bytes32,string)",
+                "params": [
+                  "{{input.agentNode}}",
+                  "agent_policy_expires_at"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "check_agent_exists",
+        "type": "condition",
+        "position": {
+          "x": 640,
+          "y": -180
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Passport exists?",
+          "blockedCode": "MISSING_SIGNER",
+          "description": "Requires nonzero resolver and addr(agent) from live ENS.",
+          "config": {
+            "trueLabel": "continue",
+            "falseLabel": "emit blocked-stamp",
+            "expression": "{{checks.check_agent_exists.passed}}"
+          }
+        }
+      },
+      {
+        "id": "check_status_active",
+        "type": "condition",
+        "position": {
+          "x": 960,
+          "y": -180
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Visa status active?",
+          "blockedCode": "STATUS_NOT_ACTIVE",
+          "description": "Requires ENS text agent_status to be exactly active.",
+          "config": {
+            "trueLabel": "continue",
+            "falseLabel": "emit blocked-stamp",
+            "expression": "{{checks.check_status_active.passed}}"
+          }
+        }
+      },
+      {
+        "id": "check_policy_digest",
+        "type": "condition",
+        "position": {
+          "x": 1280,
+          "y": -180
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Visa digest and fields valid?",
+          "blockedCode": "POLICY_INVALID",
+          "description": "Reconstructs policy fields and compares digest, expiry, target, selector, and spend caps.",
+          "config": {
+            "trueLabel": "continue",
+            "falseLabel": "emit blocked-stamp",
+            "expression": "{{checks.check_policy_digest.passed}}"
+          }
+        }
+      },
+      {
+        "id": "check_action_allowed",
+        "type": "condition",
+        "position": {
+          "x": 1600,
+          "y": -180
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Action inside Visa?",
+          "blockedCode": "ACTION_OUTSIDE_POLICY",
+          "description": "Checks requested task target, selector, and value against the ENS Visa fields.",
+          "config": {
+            "trueLabel": "continue",
+            "falseLabel": "emit blocked-stamp",
+            "expression": "{{checks.check_action_allowed.passed}}"
+          }
+        }
+      },
+      {
+        "id": "stamp_blocked_agent_missing",
+        "type": "stamp/blocked",
+        "position": {
+          "x": 640,
+          "y": 160
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Blocked stamp: AGENT_NOT_FOUND",
+          "blockedCode": "AGENT_NOT_FOUND",
+          "reason": "Passport is missing resolver or signer.",
+          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+        }
+      },
+      {
+        "id": "stamp_blocked_status_inactive",
+        "type": "stamp/blocked",
+        "position": {
+          "x": 960,
+          "y": 160
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Blocked stamp: STATUS_NOT_ACTIVE",
+          "blockedCode": "STATUS_NOT_ACTIVE",
+          "reason": "Visa status is not exactly active.",
+          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+        }
+      },
+      {
+        "id": "stamp_blocked_policy_invalid",
+        "type": "stamp/blocked",
+        "position": {
+          "x": 1280,
+          "y": 160
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Blocked stamp: POLICY_INVALID",
+          "blockedCode": "POLICY_INVALID",
+          "reason": "Visa digest, expiry, or policy fields are invalid.",
+          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+        }
+      },
+      {
+        "id": "stamp_blocked_action_disallowed",
+        "type": "stamp/blocked",
+        "position": {
+          "x": 1600,
+          "y": 160
+        },
+        "capabilityStatus": "template-not-live-import-proven",
+        "data": {
+          "label": "Blocked stamp: ACTION_OUTSIDE_POLICY",
+          "blockedCode": "ACTION_OUTSIDE_POLICY",
+          "reason": "Requested action is outside the Visa grant.",
+          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+        }
+      },
+      {
+        "id": "agentens_execute",
+        "type": "web3/write-contract",
+        "position": {
+          "x": 1920,
+          "y": -180
+        },
+        "capabilityStatus": "previous-live-proof-web3-write-supported",
+        "data": {
+          "label": "Execute after Passport/Visa approval",
+          "description": "Execution is reachable only from the true edge of check_action_allowed, so KeeperHub visibly blocks before any onchain write when a Passport or Visa check fails.",
+          "config": {
+            "contractAddress": "{{EXECUTOR_ADDRESS}}",
+            "function": "AgentEnsExecutor.execute",
+            "targetPolicyAddress": "{{TASK_LOG_ADDRESS}}",
+            "valueSource": "{{input.signedAgentPassportsPayload}}"
+          }
         }
       }
     ],
-    "edges": []
+    "edges": [
+      {
+        "id": "agentpassports_trigger__request__ens_resolve_passport",
+        "source": "agentpassports_trigger",
+        "target": "ens_resolve_passport",
+        "label": "request",
+        "data": {
+          "label": "request"
+        }
+      },
+      {
+        "id": "ens_resolve_passport__resolved__check_agent_exists",
+        "source": "ens_resolve_passport",
+        "target": "check_agent_exists",
+        "label": "resolved",
+        "data": {
+          "label": "resolved"
+        }
+      },
+      {
+        "id": "check_agent_exists__true__check_status_active",
+        "source": "check_agent_exists",
+        "target": "check_status_active",
+        "label": "true",
+        "data": {
+          "label": "true"
+        }
+      },
+      {
+        "id": "check_agent_exists__false__stamp_blocked_agent_missing",
+        "source": "check_agent_exists",
+        "target": "stamp_blocked_agent_missing",
+        "label": "false",
+        "data": {
+          "label": "false"
+        }
+      },
+      {
+        "id": "check_status_active__true__check_policy_digest",
+        "source": "check_status_active",
+        "target": "check_policy_digest",
+        "label": "true",
+        "data": {
+          "label": "true"
+        }
+      },
+      {
+        "id": "check_status_active__false__stamp_blocked_status_inactive",
+        "source": "check_status_active",
+        "target": "stamp_blocked_status_inactive",
+        "label": "false",
+        "data": {
+          "label": "false"
+        }
+      },
+      {
+        "id": "check_policy_digest__true__check_action_allowed",
+        "source": "check_policy_digest",
+        "target": "check_action_allowed",
+        "label": "true",
+        "data": {
+          "label": "true"
+        }
+      },
+      {
+        "id": "check_policy_digest__false__stamp_blocked_policy_invalid",
+        "source": "check_policy_digest",
+        "target": "stamp_blocked_policy_invalid",
+        "label": "false",
+        "data": {
+          "label": "false"
+        }
+      },
+      {
+        "id": "check_action_allowed__true__agentens_execute",
+        "source": "check_action_allowed",
+        "target": "agentens_execute",
+        "label": "true",
+        "data": {
+          "label": "true"
+        }
+      },
+      {
+        "id": "check_action_allowed__false__stamp_blocked_action_disallowed",
+        "source": "check_action_allowed",
+        "target": "stamp_blocked_action_disallowed",
+        "label": "false",
+        "data": {
+          "label": "false"
+        }
+      }
+    ]
   },
   "inputs": {
     "agentName": "ENS agent name",

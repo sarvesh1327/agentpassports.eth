@@ -10,42 +10,36 @@ type KeeperHubGatePromptArgs = {
 };
 
 /**
- * Builds the human/agent-facing V3 KeeperHub prompt text separately from MCP
- * registration so tests can lock the safety flow without constructing a server.
- * Security boundary: this text must guide external signing only and must never
- * ask an agent to paste private-key material into MCP.
+ * Builds the human/agent-facing KeeperHub prompt text separately from MCP
+ * registration so tests can lock the thin safety boundary without constructing
+ * a server.
  */
 export function buildKeeperHubGatePromptText(args: KeeperHubGatePromptArgs): string {
   return [
-    `Prepare a KeeperHub-gated AgentPassports workflow for ${args.agentName}.`,
+    `Prepare a KeeperHub-submitted AgentPassports task for ${args.agentName}.`,
     `Requested task: ${args.task}`,
-    args.metadataURI ? `Preferred metadataURI: ${args.metadataURI}` : "Choose or ask for a metadataURI before building a workflow payload.",
+    args.metadataURI ? `Preferred metadataURI: ${args.metadataURI}` : "Choose or ask for a metadataURI before building the intent.",
     "",
-    "V3 KeeperHub Gate flow:",
-    "1. Call resolve_agent_passport to read the live ENS resolver, addr(agent), gas budget, and AgentPassports text records.",
-    "2. Call keeperhub_validate_agent_task to produce a deterministic approved or blocked decision from ENS status, policy digest, task limits, and trust threshold.",
-    "3. If blocked, stop before execution and call keeperhub_emit_run_attestation with the blockers as audit evidence.",
-    "4. If approved, call keeperhub_build_workflow_payload to create the unsigned KeeperHub workflow/action-pack payload.",
-    "5. Use external signing only. MCP does not sign, does not call live KeeperHub APIs in this iteration, and must never receive a private key.",
-    "6. Export or submit the workflow through a verified KeeperHub path outside MCP, then call keeperhub_emit_run_attestation with the KeeperHub run id and tx hash when available.",
-    "7. Report the agentName, policy digest, approved/blocked decision, reasons, blockers, workflow payload URI or run id, and attestation JSON.",
+    "Thin MCP / KeeperHub-authoritative flow:",
+    "1. Call build_task_intent with explicit task + policySnapshot inputs to get unsigned intent JSON, calldata, and signingPayload.",
+    "2. Save the exact build_task_intent response as build-task-intent.json.",
+    "3. Sign locally outside MCP using skills/agentpassports/sign-intent.ts and the local .agentPassports/keys.txt file.",
+    "4. Call submit_task with intent, policySnapshot, callData, and signature. It returns the KeeperHub execution id/handle by default; do not wait inside the MCP call.",
+    "5. Call check_task_status with the KeeperHub execution id to read final/current status, logs, and tx hashes.",
+    "6. Treat KeeperHub as the Passport/Visa validator. Return KeeperHub execution id, status/logs, tx hash, or KeeperHub error back to the user.",
     "",
-    "Never paste private keys, never sign stale ENS policy, never approve on policy/preflight errors, and never bypass the KeeperHub Gate."
+    "MCP must not resolve ENS, read policy, check active status, verify signer ownership, check target/selector/value, create keys, or receive private keys."
   ].join("\n");
 }
 
-/**
- * Registers the canonical V1 task-execution prompt. The prompt deliberately keeps
- * signing outside MCP: the server builds unsigned intent JSON, while the agent
- * signs locally with the skill-provided script and its .agentPassports key file.
- */
+/** Registers the canonical thin AgentPassports task prompt. */
 export function registerAgentPassportPrompts(server: McpServer): void {
   server.registerPrompt(
     "agentpassport_execute_task",
     {
-      title: "Execute an AgentPassport task safely",
+      title: "Execute an AgentPassport task through KeeperHub",
       description:
-        "Guide an autonomous agent through ENS resolution, policy preflight, unsigned intent building, local skill signing, and relayer submission without exposing private keys to MCP.",
+        "Guide an autonomous agent through the thin MCP flow: build unsigned intent, sign outside MCP with the skill script, submit signed payload to KeeperHub, then check final status by execution id.",
       argsSchema: {
         agentName: z.string().describe("Agent ENS name, for example assistant.alice.eth."),
         task: z.string().describe("Natural-language task to record through AgentPassports."),
@@ -53,29 +47,13 @@ export function registerAgentPassportPrompts(server: McpServer): void {
       }
     },
     (args) => ({
-      description: "AgentPassports V1 ENS-policy task execution flow",
+      description: "AgentPassports thin KeeperHub task execution flow",
       messages: [
         {
           role: "user",
           content: {
             type: "text",
-            text: [
-              `Execute an AgentPassports task for ${args.agentName}.`,
-              `Requested task: ${args.task}`,
-              args.metadataURI ? `Preferred metadataURI: ${args.metadataURI}` : "Choose or ask for a metadataURI before building the intent.",
-              "",
-              "Mandatory safety flow:",
-              "1. Call resolve_agent_passport to read the live ENS resolver, addr(agent), and text records.",
-              "2. Call get_agent_policy and confirm agent.status is exactly active and Policy source: ENS.",
-              "3. Call check_task_against_policy. Never sign if it returns disallowed or if the policy digest does not match live ENS.",
-              "4. Call build_task_intent to get unsigned intent JSON, calldata, and signingPayload. MCP does not sign and must not receive the private key.",
-              "5. Save the build_task_intent response as build-task-intent.json and sign locally using the skill-provided sign-intent.ts script with .agentPassports/keys.txt.",
-              "6. Verify the local script signer matches the live ENS addr(agent). Never sign or submit if it does not match.",
-              "7. Call submit_task with the signed intent, policySnapshot, callData, and signature.",
-              "8. Return the relayer result, transaction hash when available, agentName, policy digest, and the safety checks performed.",
-              "",
-              "Never sign stale policy, never bypass check_task_against_policy, and never paste or upload the private key."
-            ].join("\n")
+            text: buildKeeperHubGatePromptText(args)
           }
         }
       ]
@@ -85,17 +63,17 @@ export function registerAgentPassportPrompts(server: McpServer): void {
   server.registerPrompt(
     KEEPERHUB_GATE_PROMPT_NAME,
     {
-      title: "Gate a KeeperHub workflow with AgentPassports",
+      title: "Submit an AgentPassports task to KeeperHub",
       description:
-        "Guide an autonomous agent through the V3 AgentPassports KeeperHub Gate: live ENS resolution, approved/blocked gate decision, unsigned workflow payload, external signing, and run attestation.",
+        "Build an unsigned AgentPassports intent, sign it outside MCP, submit it to KeeperHub, and check KeeperHub final status without MCP-side policy checks.",
       argsSchema: {
         agentName: z.string().describe("Agent ENS name, for example assistant.alice.eth."),
-        task: z.string().describe("Natural-language task to gate before KeeperHub execution."),
-        metadataURI: z.string().optional().describe("Optional proof URI to include when building the KeeperHub workflow payload.")
+        task: z.string().describe("Natural-language task to submit to KeeperHub."),
+        metadataURI: z.string().optional().describe("Optional proof URI to include in the built intent and KeeperHub payload.")
       }
     },
     (args) => ({
-      description: "AgentPassports V3 KeeperHub Gate workflow",
+      description: "AgentPassports KeeperHub-authoritative submit flow",
       messages: [
         {
           role: "user",

@@ -1,82 +1,28 @@
 import {
   ENS_REGISTRY_ADDRESS,
   buildTaskIntentTypedData,
-  getAgentAddress,
-  getAgentTextRecords,
-  getResolverAddress,
   hashCallData,
   hashPolicySnapshot,
-  hashTaskIntent,
   namehashEnsName,
   normalizeEnsName,
+  normalizePolicySnapshot,
   parentEnsName,
-  parseOwnerAgentLabels,
-  policySnapshotFromTextRecords,
   serializePolicySnapshot,
   serializeTaskIntent,
-  swapPolicyFromTextRecords,
-  taskLogRecordTaskSelector,
-  assertExactActiveStatus,
-  assertPolicyDigestMatches,
   type ContractReadClient,
   type Hex,
+  type PolicySnapshot,
   type TaskIntentMessage
 } from "@agentpassport/sdk";
 import { createPublicClient, defineChain, encodeFunctionData, http, keccak256, stringToHex } from "viem";
 import { AGENTPASSPORT_MCP_TOOLS, type AgentPassportToolName } from "./tools.ts";
 import {
-  buildSwapProofMetadata,
-  buildUniswapApprovalPayload,
-  buildUniswapQuotePayload,
-  callUniswapApi,
-  normalizeUniswapQuoteResponse,
-  normalizeUniswapSwapResponse,
-  validateSwapRequestAgainstPolicy
-} from "./uniswap.ts";
-import {
-  buildAgentPassportsKeeperHubWorkflowDefinition,
-  createKeeperHubWorkflow,
-  executeKeeperHubApprovedFlow,
   executeKeeperHubWorkflow,
   extractKeeperHubExecutionId,
-  extractKeeperHubRunId,
   getKeeperHubExecutionLogs,
   getKeeperHubExecutionStatus,
-  listKeeperHubWorkflows,
   type KeeperHubApiConfig
 } from "./keeperhubApi.ts";
-import { buildKeeperHubGateDecision, buildKeeperHubWorkflowPayload, buildRunAttestation } from "./keeperhub.ts";
-
-const AGENT_TEXT_KEYS = [
-  "agent_v",
-  "agent_owner",
-  "agent_kind",
-  "agent_capabilities",
-  "agent_executor",
-  "agent_status",
-  "agent_policy_schema",
-  "agent_policy_uri",
-  "agent_policy_digest",
-  "agent_policy_target",
-  "agent_policy_selector",
-  "agent_policy_max_value_wei",
-  "agent_policy_max_gas_reimbursement_wei",
-  "agent_policy_expires_at",
-  "agent_policy_uniswap_chain_id",
-  "agent_policy_uniswap_allowed_token_in",
-  "agent_policy_uniswap_allowed_token_out",
-  "agent_policy_uniswap_max_input_amount",
-  "agent_policy_uniswap_max_slippage_bps",
-  "agent_policy_uniswap_deadline_seconds",
-  "agent_policy_uniswap_enabled",
-  "agent_policy_uniswap_recipient",
-  "agent_policy_uniswap_router",
-  "agent_policy_uniswap_selector"
-] as const;
-
-const OWNER_INDEX_VERSION_KEY = "agnetpassports_no" as const;
-const OWNER_INDEX_AGENTS_KEY = "agentpasspports_agents" as const;
-const OWNER_INDEX_KEYS = [OWNER_INDEX_VERSION_KEY, OWNER_INDEX_AGENTS_KEY] as const;
 
 const EXECUTOR_READ_ABI = [
   {
@@ -85,13 +31,6 @@ const EXECUTOR_READ_ABI = [
     stateMutability: "view",
     inputs: [{ name: "agentNode", type: "bytes32" }],
     outputs: [{ name: "nonce", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "gasBudgetWei",
-    stateMutability: "view",
-    inputs: [{ name: "agentNode", type: "bytes32" }],
-    outputs: [{ name: "budget", type: "uint256" }]
   }
 ] as const;
 
@@ -114,40 +53,33 @@ export type McpServerConfig = {
   chainId: bigint;
   ensRegistryAddress: Hex;
   executorAddress: Hex;
-  relayerUrl: string;
   rpcUrl: string;
   taskLogAddress: Hex;
   keeperhubApiBaseUrl?: string;
   keeperhubApiKey?: string;
   keeperhubWorkflowId?: string;
-  uniswapApiBaseUrl?: string;
-  uniswapApiKey?: string;
 };
 
 type ToolArgs<TName extends AgentPassportToolName> = Record<string, any>;
 
 /**
- * Reads MCP configuration from environment variables. The MCP server is an agent
- * runtime, so it uses the non-NEXT_PUBLIC names from the CLI/runner path and
- * never asks the browser for secrets.
+ * Reads MCP configuration from environment variables. The MCP server is now a
+ * thin build/submit bridge: no relayer URL or private key belongs here.
  */
 export function loadMcpConfig(env: Record<string, string | undefined> = process.env): McpServerConfig {
   return {
     chainId: readBigint(env.CHAIN_ID ?? env.NEXT_PUBLIC_CHAIN_ID, "CHAIN_ID"),
     ensRegistryAddress: optionalAddress(env.ENS_REGISTRY ?? env.NEXT_PUBLIC_ENS_REGISTRY) ?? ENS_REGISTRY_ADDRESS,
     executorAddress: readAddress(env.EXECUTOR_ADDRESS ?? env.NEXT_PUBLIC_EXECUTOR_ADDRESS, "EXECUTOR_ADDRESS"),
-    relayerUrl: readUrl(env.RELAYER_URL, "RELAYER_URL"),
-    rpcUrl: readUrl(env.RPC_URL ?? env.NEXT_PUBLIC_RPC_URL, "RPC_URL"),
+    rpcUrl: readUrl(env.RPC_URL ?? env.SEPOLIA_RPC_URL ?? env.NEXT_PUBLIC_RPC_URL, "RPC_URL"),
     taskLogAddress: readAddress(env.TASK_LOG_ADDRESS ?? env.NEXT_PUBLIC_TASK_LOG_ADDRESS, "TASK_LOG_ADDRESS"),
     keeperhubApiBaseUrl: optionalUrl(env.KEEPERHUB_API_BASE_URL ?? "https://app.keeperhub.com"),
     keeperhubApiKey: optionalSecret(env.KEEPERHUB_API_KEY),
-    keeperhubWorkflowId: optionalSecret(env.KEEPERHUB_WORKFLOW_ID),
-    uniswapApiBaseUrl: optionalUrl(env.UNISWAP_API_BASE_URL),
-    uniswapApiKey: optionalSecret(env.UNISWAP_API_KEY)
+    keeperhubWorkflowId: optionalSecret(env.KEEPERHUB_WORKFLOW_ID)
   };
 }
 
-/** Creates the minimal viem read client needed by shared ENS helpers. */
+/** Creates the minimal viem read client needed for nonce/block reads. */
 export function createMcpPublicClient(config: McpServerConfig): ContractReadClient {
   const id = Number(config.chainId);
   const chain = defineChain({
@@ -160,94 +92,28 @@ export function createMcpPublicClient(config: McpServerConfig): ContractReadClie
 }
 
 /**
- * Builds MCP handlers separately from transport setup so tests can call the
- * business logic directly and the stdio entrypoint stays tiny.
+ * Creates MCP handlers separately from transport setup so tests can call the
+ * business logic directly and the stdio/HTTP entrypoints stay tiny.
  */
 export function createAgentPassportHandlers(config: McpServerConfig, client = createMcpPublicClient(config)) {
-  async function resolvePassport(agentName: string) {
-    const name = normalizeEnsName(agentName);
-    const agentNode = namehashEnsName(name);
-    const resolverAddress = await getResolverAddress({ client, ensRegistryAddress: config.ensRegistryAddress, node: agentNode });
-    const [agentAddress, textRecords, nextNonce, gasBudgetWei] = await Promise.all([
-      getAgentAddress({ agentNode, client, resolverAddress }),
-      getAgentTextRecords({ agentNode, client, keys: AGENT_TEXT_KEYS, resolverAddress }),
-      readExecutorBigint(client, config.executorAddress, "nextNonce", agentNode),
-      readExecutorBigint(client, config.executorAddress, "gasBudgetWei", agentNode)
-    ]);
-
-    return { agentAddress, agentName: name, agentNode, gasBudgetWei: gasBudgetWei.toString(), nextNonce: nextNonce.toString(), resolverAddress, textRecords };
-  }
-
-  async function getPolicy(agentName: string) {
-    const passport = await resolvePassport(agentName);
-    assertExactActiveStatus(passport.textRecords["agent_status"] ?? "");
-    const policySnapshot = policySnapshotFromTextRecords(passport.agentNode, passport.textRecords);
-    const computedDigest = hashPolicySnapshot(passport.agentNode, policySnapshot);
-    assertPolicyDigestMatches(computedDigest, passport.textRecords["agent_policy_digest"] as Hex);
-    return { agentName: passport.agentName, agentNode: passport.agentNode, policyDigest: computedDigest, policySnapshot: serializePolicySnapshot(policySnapshot), policyUri: passport.textRecords["agent_policy_uri"] ?? "", status: passport.textRecords["agent_status"] ?? "" };
-  }
-
-  async function getSwapPolicy(agentName: string) {
-    const passport = await resolvePassport(agentName);
-    assertExactActiveStatus(passport.textRecords["agent_status"] ?? "");
-    if (!passport.agentAddress) throw new Error("Agent ENS addr() is required for Uniswap API calls");
-    return { agentAddress: passport.agentAddress, agentName: passport.agentName, agentNode: passport.agentNode, swapPolicy: swapPolicyFromTextRecords(passport.textRecords) };
-  }
-
-  async function validateUniswapSwap(args: ToolArgs<"uniswap_validate_swap_against_ens_policy">) {
-    const policy = await getSwapPolicy(args.agentName);
-    const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
-    return { ...validation, agentAddress: policy.agentAddress, agentName: policy.agentName, agentNode: policy.agentNode };
-  }
-
-  async function checkTaskAgainstPolicy(args: ToolArgs<"check_task_against_policy">) {
-    const policy = await getPolicy(args.agentName);
-    const selectorAllowed = policy.policySnapshot.selector === taskLogRecordTaskSelector();
-    const targetAllowed = policy.policySnapshot.target.toLowerCase() === config.taskLogAddress.toLowerCase();
-    const valueAllowed = BigInt(args.task.valueWei ?? "0") <= BigInt(policy.policySnapshot.maxValueWei);
-    return { allowed: selectorAllowed && targetAllowed && valueAllowed, policy, selectorAllowed, targetAllowed, valueAllowed };
-  }
-
-  async function buildKeeperHubDecision(args: ToolArgs<"keeperhub_validate_agent_task">) {
-    const passport = await resolvePassport(args.agentName);
-    try {
-      const taskCheck = await checkTaskAgainstPolicy({ agentName: args.agentName, task: args.task });
-      return buildKeeperHubGateDecision({
-        passport,
-        policy: taskCheck.policy,
-        taskCheck,
-        trustThreshold: args.trustThreshold
-      });
-    } catch (error) {
-      // KeeperHub Gate must be demo-safe for revocation and bad-policy paths: a
-      // controlled AgentPassports policy/status failure is a blocked decision, not
-      // a crash that would make the gate unusable. This never approves on error.
-      return buildKeeperHubGateDecision({
-        passport,
-        policyError: error instanceof Error ? error : new Error("policy preflight failed"),
-        trustThreshold: args.trustThreshold
-      });
-    }
-  }
-
   async function buildIntent(args: ToolArgs<"build_task_intent">) {
-    const policy = await getPolicy(args.agentName);
+    const agentName = normalizeEnsName(args.agentName);
+    const agentNode = namehashEnsName(agentName);
     const task = args.task;
-    const ownerName = task.ownerName ? normalizeEnsName(task.ownerName) : parentEnsName(args.agentName);
+    const ownerName = task.ownerName ? normalizeEnsName(task.ownerName) : parentEnsName(agentName);
     const ownerNode = namehashEnsName(ownerName);
-    const nonce = await readExecutorBigint(client, config.executorAddress, "nextNonce", policy.agentNode);
-    const block = await client.getBlock?.({ blockTag: "latest" });
-    const now = block?.timestamp ?? BigInt(Math.floor(Date.now() / 1000));
-    const expiresAt = now + BigInt(args.ttlSeconds ?? 600);
+    const policySnapshot = normalizePolicySnapshotInput(args.policySnapshot);
+    const nonce = args.nonce === undefined ? await readExecutorBigint(client, config.executorAddress, "nextNonce", agentNode) : BigInt(args.nonce);
+    const expiresAt = args.expiresAt === undefined ? await readExpiresAt(client, args.ttlSeconds) : BigInt(args.expiresAt);
     const taskHash = keccak256(stringToHex(task.description));
     const callData = encodeFunctionData({
       abi: TASK_LOG_ABI,
       functionName: "recordTask",
-      args: [policy.agentNode, ownerNode, taskHash, args.metadataURI]
+      args: [agentNode, ownerNode, taskHash, args.metadataURI]
     });
     const intent: TaskIntentMessage = {
-      agentNode: policy.agentNode,
-      policyDigest: policy.policyDigest,
+      agentNode,
+      policyDigest: hashPolicySnapshot(agentNode, policySnapshot),
       target: config.taskLogAddress,
       callDataHash: hashCallData(callData),
       value: BigInt(task.valueWei ?? "0"),
@@ -256,6 +122,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     };
 
     return {
+      agentName,
       callData,
       chainId: config.chainId.toString(),
       executorAddress: config.executorAddress,
@@ -263,7 +130,7 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       metadataURI: args.metadataURI,
       ownerName,
       ownerNode,
-      policySnapshot: policy.policySnapshot,
+      policySnapshot: serializePolicySnapshot(policySnapshot),
       signingPayload: {
         chainId: config.chainId.toString(),
         executorAddress: config.executorAddress,
@@ -274,126 +141,77 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     };
   }
 
-  return {
-    resolve_agent_passport: (args: ToolArgs<"resolve_agent_passport">) => resolvePassport(args.agentName),
-    list_owner_agents: async (args: ToolArgs<"list_owner_agents">) => {
-      const ownerName = normalizeEnsName(args.ownerName);
-      const ownerNode = namehashEnsName(ownerName);
-      const resolverAddress = await getResolverAddress({ client, ensRegistryAddress: config.ensRegistryAddress, node: ownerNode });
-      const records = await getAgentTextRecords({ agentNode: ownerNode, client, keys: OWNER_INDEX_KEYS, resolverAddress });
-      const agentNames = parseOwnerAgentLabels(records[OWNER_INDEX_AGENTS_KEY] ?? "");
-      const agents = await Promise.all(agentNames.map((agentName) => resolvePassport(agentName.includes(".") ? agentName : `${agentName}.${ownerName}`)));
-      return { agents, ownerName, ownerNode, resolverAddress, version: records[OWNER_INDEX_VERSION_KEY] ?? "" };
-    },
-    get_agent_policy: (args: ToolArgs<"get_agent_policy">) => getPolicy(args.agentName),
-    check_task_against_policy: checkTaskAgainstPolicy,
-    build_task_intent: buildIntent,
-    submit_task: async (args: ToolArgs<"submit_task">) => {
-      // The relayer performs the same ENS and signature checks again. This MCP
-      // tool still requires agentName so agents keep a human-readable audit trail.
-      const response = await fetch(config.relayerUrl, {
-        body: JSON.stringify(args),
-        headers: { "content-type": "application/json" },
-        method: "POST"
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(typeof body?.details === "string" ? body.details : `Relayer failed with HTTP ${response.status}`);
-      }
-      return { agentName: normalizeEnsName(args.agentName), relayer: body };
-    },
-    keeperhub_validate_agent_task: buildKeeperHubDecision,
-    keeperhub_build_workflow_payload: async (args: ToolArgs<"keeperhub_build_workflow_payload">) => {
-      const [passport, gateDecision, intentResult] = await Promise.all([
-        resolvePassport(args.agentName),
-        buildKeeperHubDecision(args),
-        buildIntent(args)
-      ]);
-      return buildKeeperHubWorkflowPayload({ buildIntentResult: intentResult, gateDecision, passport });
-    },
-    keeperhub_emit_run_attestation: async (args: ToolArgs<"keeperhub_emit_run_attestation">) => buildRunAttestation(args as any),
-    keeperhub_list_workflows: async () => listKeeperHubWorkflows(keeperHubRuntimeConfig(config)),
-    keeperhub_create_gate_workflow: async (args: ToolArgs<"keeperhub_create_gate_workflow">) => {
-      const definition = buildAgentPassportsKeeperHubWorkflowDefinition({ description: args.description, name: args.name });
-      const keeperhub = await createKeeperHubWorkflow(keeperHubRuntimeConfig(config), definition);
-      return { definition, keeperhub };
-    },
-    keeperhub_execute_approved_workflow: async (args: ToolArgs<"keeperhub_execute_approved_workflow">) => {
-      const passport = await resolvePassport(args.agentName);
-      const gateDecision = await buildKeeperHubDecision(args);
-      return executeKeeperHubApprovedFlow({
-        gateDecision,
-        taskDescription: args.task.description,
-        executeApproved: async () => {
-          const intentResult = await buildIntent(args);
-          const workflowPayload = buildKeeperHubWorkflowPayload({ buildIntentResult: intentResult, gateDecision, passport });
-          const keeperhubConfig = keeperHubRuntimeConfig(config);
-          const workflowId = args.workflowId ?? keeperhubConfig.defaultWorkflowId;
-          if (!workflowId) throw new Error("Missing KeeperHub workflow id. Provide workflowId or set KEEPERHUB_WORKFLOW_ID.");
-          const execution = await executeKeeperHubWorkflow(keeperhubConfig, workflowId, workflowPayload);
-          const executionId = extractKeeperHubExecutionId(execution);
-          const [status, logs] = executionId
-            ? await Promise.all([
-                getKeeperHubExecutionStatus(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) })),
-                getKeeperHubExecutionLogs(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) }))
-              ])
-            : [undefined, undefined];
-          const keeperhubRunId = extractKeeperHubRunId(logs) ?? executionId;
-          return {
-            gateDecision,
-            workflowPayload,
-            keeperhub: { execution, executionId, logs, status, workflowId },
-            attestation: buildRunAttestation({
-              agentName: gateDecision.agentName,
-              blockers: [],
-              decision: "approved",
-              keeperhubRunId,
-              policyDigest: gateDecision.policyDigest,
-              reasons: gateDecision.reasons,
-              taskDescription: args.task.description
-            })
-          };
-        }
-      });
-    },
-    keeperhub_get_execution_status: async (args: ToolArgs<"keeperhub_get_execution_status">) => getKeeperHubExecutionStatus(keeperHubRuntimeConfig(config), args.executionId),
-    keeperhub_get_execution_logs: async (args: ToolArgs<"keeperhub_get_execution_logs">) => getKeeperHubExecutionLogs(keeperHubRuntimeConfig(config), args.executionId),
-    uniswap_check_approval: async (args: ToolArgs<"uniswap_check_approval">) => {
-      const policy = await getSwapPolicy(args.agentName);
-      const validation = validateSwapRequestAgainstPolicy(
-        { amount: args.amount, chainId: args.chainId, slippageBps: "0", tokenIn: args.token, tokenOut: policy.swapPolicy.allowedTokensOut[0] },
-        policy.swapPolicy
-      );
-      if (!validation.policyEnabled || !validation.chainAllowed || !validation.tokenInAllowed || !validation.amountAllowed) {
-        throw new Error("Approval request is not allowed by ENS Uniswap policy");
-      }
-      const payload = buildUniswapApprovalPayload(policy.agentAddress, args as any);
-      return { agentName: policy.agentName, payload, uniswap: await callUniswapApi("/check_approval", payload, uniswapRuntimeConfig(config)) };
-    },
-    uniswap_quote: async (args: ToolArgs<"uniswap_quote">) => {
-      const policy = await getSwapPolicy(args.agentName);
-      const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
-      if (!validation.allowed) throw new Error("Quote request is not allowed by ENS Uniswap policy");
-      const payload = buildUniswapQuotePayload(policy.agentAddress, args as any);
-      const uniswap = await callUniswapApi("/quote", payload, uniswapRuntimeConfig(config));
-      return { agentName: policy.agentName, payload, policyValidation: validation, summary: normalizeUniswapQuoteResponse(uniswap), uniswap };
-    },
-    uniswap_execute_swap: async (args: ToolArgs<"uniswap_execute_swap">) => {
-      const policy = await getSwapPolicy(args.agentName);
-      const validation = validateSwapRequestAgainstPolicy(args as any, policy.swapPolicy);
-      if (!validation.allowed) throw new Error("Swap request is not allowed by ENS Uniswap policy");
-      const payload = { permitData: args.permitData, quote: args.quote, signature: args.permit2Signature };
-      const uniswap = await callUniswapApi("/swap", payload, uniswapRuntimeConfig(config));
-      return { agentName: policy.agentName, payload, policyValidation: validation, summary: normalizeUniswapSwapResponse(uniswap), uniswap };
-    },
-    uniswap_validate_swap_against_ens_policy: validateUniswapSwap,
-    uniswap_record_swap_proof: async (args: ToolArgs<"uniswap_record_swap_proof">) => {
-      const passport = await resolvePassport(args.agentName);
-      return {
-        agentName: passport.agentName,
-        metadata: buildSwapProofMetadata({ ...(args as any), agentName: passport.agentName, agentNode: passport.agentNode })
-      };
+  async function submitTask(args: ToolArgs<"submit_task">) {
+    const keeperhubConfig = keeperHubRuntimeConfig(config);
+    const workflowId = args.workflowId ?? keeperhubConfig.defaultWorkflowId;
+    if (!workflowId) throw new Error("Missing KeeperHub workflow id. Provide workflowId or set KEEPERHUB_WORKFLOW_ID.");
+
+    const agentName = normalizeEnsName(args.agentName);
+    const intent = normalizeTaskIntentInput(args.intent);
+    const policySnapshot = normalizePolicySnapshotInput(args.policySnapshot);
+    const serializedIntent = serializeTaskIntent(intent);
+    const serializedPolicySnapshot = serializePolicySnapshot(policySnapshot);
+    const payload = {
+      agentName,
+      agentNode: serializedIntent.agentNode,
+      policyDigest: serializedIntent.policyDigest,
+      requestedTarget: serializedIntent.target,
+      requestedSelector: serializedPolicySnapshot.selector,
+      valueWei: serializedIntent.value,
+      functionArgs: JSON.stringify([serializedIntent, serializedPolicySnapshot, args.callData, args.signature]),
+      callData: args.callData,
+      intent: serializedIntent,
+      policySnapshot: serializedPolicySnapshot,
+      signature: args.signature,
+      metadataURI: args.metadataURI,
+      taskDescription: args.taskDescription
+    };
+
+    const execution = await executeKeeperHubWorkflow(keeperhubConfig, workflowId, { input: payload });
+    const executionId = extractKeeperHubExecutionId(execution);
+    let status: unknown;
+    let logs: unknown;
+    if ((args.waitForResult ?? false) && executionId) {
+      status = await pollKeeperHubStatus(keeperhubConfig, executionId, args.pollAttempts, args.pollIntervalMs);
+      logs = await getKeeperHubExecutionLogs(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) }));
     }
+
+    return {
+      agentName,
+      keeperhub: {
+        execution,
+        executionId,
+        logs,
+        status,
+        txHashes: Array.from(collectTransactionHashes({ execution, logs, status })),
+        workflowId
+      },
+      payload
+    };
+  }
+
+  async function checkTaskStatus(args: ToolArgs<"check_task_status">) {
+    const keeperhubConfig = keeperHubRuntimeConfig(config);
+    const executionId = String(args.executionId);
+    const status = await getKeeperHubExecutionStatus(keeperhubConfig, executionId);
+    const logs = (args.includeLogs ?? true)
+      ? await getKeeperHubExecutionLogs(keeperhubConfig, executionId).catch((error) => ({ error: redactedErrorMessage(error) }))
+      : undefined;
+
+    return {
+      keeperhub: {
+        executionId,
+        logs,
+        status,
+        txHashes: Array.from(collectTransactionHashes({ logs, status }))
+      }
+    };
+  }
+
+  return {
+    build_task_intent: buildIntent,
+    submit_task: submitTask,
+    check_task_status: checkTaskStatus
   };
 }
 
@@ -412,25 +230,70 @@ function keeperHubRuntimeConfig(config: McpServerConfig): KeeperHubApiConfig {
   };
 }
 
-function readExecutionId(value: unknown): string | undefined {
-  if (value && typeof value === "object" && "executionId" in value && typeof (value as any).executionId === "string") {
-    return (value as any).executionId;
+async function pollKeeperHubStatus(config: KeeperHubApiConfig, executionId: string, pollAttempts?: number, pollIntervalMs?: number): Promise<unknown> {
+  const attempts = pollAttempts ?? 45;
+  const intervalMs = pollIntervalMs ?? 5_000;
+  let status: unknown;
+  for (let index = 0; index < attempts; index += 1) {
+    if (index > 0) await sleep(index < 4 ? Math.min(intervalMs, 2_000) : intervalMs);
+    status = await getKeeperHubExecutionStatus(config, executionId);
+    const state = finalKeeperHubState(status);
+    if (state && !["running", "queued", "pending", "in_progress", "processing"].includes(state.toLowerCase())) break;
   }
-  return undefined;
+  return status;
 }
 
-function readRunId(value: unknown): string | undefined {
-  if (value && typeof value === "object" && "runId" in value && typeof (value as any).runId === "string") {
-    return (value as any).runId;
+function finalKeeperHubState(value: unknown): string | undefined {
+  const record = value && typeof value === "object" ? (value as Record<string, any>) : undefined;
+  const state = record?.status ?? record?.state ?? record?.execution?.status ?? record?.execution?.state ?? record?.data?.status ?? record?.data?.state;
+  return typeof state === "string" ? state : undefined;
+}
+
+function collectTransactionHashes(value: unknown, out = new Set<string>()): Set<string> {
+  if (!value || typeof value !== "object") return out;
+  if (Array.isArray(value)) {
+    for (const item of value) collectTransactionHashes(item, out);
+    return out;
   }
-  return undefined;
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if ((key === "transactionHash" || key === "txHash") && typeof item === "string" && /^0x[0-9a-fA-F]{64}$/u.test(item)) {
+      out.add(item);
+    }
+    collectTransactionHashes(item, out);
+  }
+  return out;
 }
 
-function redactedErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "KeeperHub request failed";
+function normalizePolicySnapshotInput(value: any): PolicySnapshot {
+  return normalizePolicySnapshot({
+    enabled: Boolean(value.enabled),
+    expiresAt: BigInt(value.expiresAt),
+    maxGasReimbursementWei: BigInt(value.maxGasReimbursementWei),
+    maxValueWei: BigInt(value.maxValueWei),
+    selector: value.selector as Hex,
+    target: value.target as Hex
+  });
 }
 
-function readExecutorBigint(client: ContractReadClient, executorAddress: Hex, functionName: "nextNonce" | "gasBudgetWei", agentNode: Hex): Promise<bigint> {
+function normalizeTaskIntentInput(value: any): TaskIntentMessage {
+  return {
+    agentNode: value.agentNode as Hex,
+    policyDigest: value.policyDigest as Hex,
+    target: value.target as Hex,
+    callDataHash: value.callDataHash as Hex,
+    value: BigInt(value.value),
+    nonce: BigInt(value.nonce),
+    expiresAt: BigInt(value.expiresAt)
+  };
+}
+
+async function readExpiresAt(client: ContractReadClient, ttlSeconds?: number): Promise<bigint> {
+  const block = await client.getBlock?.({ blockTag: "latest" });
+  const now = block?.timestamp ?? BigInt(Math.floor(Date.now() / 1000));
+  return now + BigInt(ttlSeconds ?? 600);
+}
+
+function readExecutorBigint(client: ContractReadClient, executorAddress: Hex, functionName: "nextNonce", agentNode: Hex): Promise<bigint> {
   return client.readContract({ address: executorAddress, abi: EXECUTOR_READ_ABI, functionName, args: [agentNode] }) as Promise<bigint>;
 }
 
@@ -452,10 +315,6 @@ function readBigint(value: string | undefined, name: string): bigint {
   return BigInt(value);
 }
 
-function uniswapRuntimeConfig(config: McpServerConfig) {
-  return { apiBaseUrl: config.uniswapApiBaseUrl, apiKey: config.uniswapApiKey };
-}
-
 function readUrl(value: string | undefined, name: string): string {
   if (!value?.trim()) throw new Error(`Missing ${name}`);
   return new URL(value).toString().replace(/\/$/u, "");
@@ -469,4 +328,12 @@ function optionalUrl(value: string | undefined): string | undefined {
 function optionalSecret(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function redactedErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "KeeperHub request failed";
 }

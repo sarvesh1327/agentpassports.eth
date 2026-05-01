@@ -39,7 +39,7 @@ async function main() {
         signature,
         typedData
       },
-      null,
+      bigintJsonReplacer,
       2
     )
   );
@@ -114,6 +114,10 @@ function assertAddress(value: string): `0x${string}` {
 function assertBytes32(value: string, label: string): `0x${string}` {
   if (!/^0x[0-9a-fA-F]{64}$/u.test(value)) throw new Error(`Expected ${label} to be bytes32`);
   return value as `0x${string}`;
+}
+
+function bigintJsonReplacer(_key: string, value: unknown) {
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 main().catch((error) => {

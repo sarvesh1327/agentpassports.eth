@@ -6,33 +6,47 @@ async function readText(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("MCP README documents the KeeperHub Gate action-pack workflow", async () => {
+const removedMcpTools = [
+  "resolve_agent_passport",
+  "get_agent_policy",
+  "check_task_against_policy",
+  "keeperhub_validate_agent_task",
+  "keeperhub_build_workflow_payload",
+  "keeperhub_emit_run_attestation",
+  "keeperhub_create_gate_workflow",
+  "keeperhub_execute_approved_workflow",
+  "keeperhub_get_execution_status",
+  "keeperhub_get_execution_logs"
+];
+
+test("MCP README documents the thin KeeperHub-authoritative flow", async () => {
   const readme = await readText("packages/mcp-server/README.md");
 
-  assert.match(readme, /KeeperHub Gate/i);
-  assert.match(readme, /AgentPassports is the ENS trust firewall/i);
-  assert.match(readme, /keeperhub_validate_agent_task/);
-  assert.match(readme, /keeperhub_build_workflow_payload/);
-  assert.match(readme, /keeperhub_emit_run_attestation/);
-  assert.match(readme, /approved/i);
-  assert.match(readme, /blocked/i);
-  assert.match(readme, /run attestation/i);
+  assert.match(readme, /AgentPassports MCP Server/);
+  assert.match(readme, /thin/i);
+  assert.match(readme, /KeeperHub is authoritative/i);
+  assert.match(readme, /build_task_intent/);
+  assert.match(readme, /submit_task/);
+  assert.match(readme, /check_task_status/);
+  assert.match(readme, /returns.*execution id/i);
+  assert.match(readme, /final status/i);
   assert.match(readme, /external signing/i);
+  assert.match(readme, /skill-provided signing script/i);
   assert.match(readme, /does not read or store agent private keys/i);
+  assert.match(readme, /Passport\/Visa/i);
+  assert.match(readme, /policy validation/i);
+  assert.match(readme, /tx hash/i);
   assert.match(readme, /agentpassport_keeperhub_gate/);
   assert.match(readme, /agentpassport:\/\/keeperhub\/\{agentName\}/);
   assert.match(readme, /packages\/mcp-server\/keeperhub\/action-pack\.md/);
-  assert.match(readme, /packages\/mcp-server\/keeperhub\/workflow-template\.json/);
-  assert.match(readme, /packages\/mcp-server\/keeperhub\/run-attestation-schema\.json/);
-  assert.match(readme, /keeperhub_create_gate_workflow/);
-  assert.match(readme, /keeperhub_execute_approved_workflow/);
-  assert.match(readme, /keeperhub_get_execution_status/);
-  assert.match(readme, /keeperhub_get_execution_logs/);
   assert.match(readme, /KEEPERHUB_API_KEY/);
   assert.match(readme, /KEEPERHUB_WORKFLOW_ID/);
-  assert.match(readme, /arbitrary body persistence was not proven/i);
+
+  for (const removed of removedMcpTools) {
+    assert.doesNotMatch(readme, new RegExp(`\\b${removed}\\b`), `${removed} should not appear in thin MCP README`);
+  }
+  assert.doesNotMatch(readme, /Never sign before the agent has resolved ENS live/i);
   assert.doesNotMatch(readme, /kh_[A-Za-z0-9]/);
-  assert.doesNotMatch(readme, /keeperhub_submit_execution/);
 });
 
 test("root env example documents KeeperHub live variables without secrets", async () => {
@@ -44,7 +58,22 @@ test("root env example documents KeeperHub live variables without secrets", asyn
   assert.doesNotMatch(envExample, /kh_[A-Za-z0-9]/);
 });
 
-test("MCP README keeps Uniswap out of the main KeeperHub demo path", async () => {
+test("KeeperHub action-pack docs describe MCP build-submit-status order", async () => {
+  const actionPack = await readText("packages/mcp-server/keeperhub/action-pack.md");
+
+  assert.match(actionPack, /build_task_intent/);
+  assert.match(actionPack, /submit_task/);
+  assert.match(actionPack, /check_task_status/);
+  assert.match(actionPack, /KeeperHub.*Passport\/Visa/i);
+  assert.match(actionPack, /execution id/i);
+  assert.match(actionPack, /tx hash/i);
+  for (const removed of removedMcpTools) {
+    assert.doesNotMatch(actionPack, new RegExp(`\\b${removed}\\b`), `${removed} should not appear in action-pack docs`);
+  }
+  assert.doesNotMatch(actionPack, /kh_[A-Za-z0-9]/);
+});
+
+test("MCP docs keep Uniswap out of the main KeeperHub demo path", async () => {
   const readme = await readText("packages/mcp-server/README.md");
 
   assert.match(readme, /Uniswap/i);

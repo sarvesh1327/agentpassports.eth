@@ -22,17 +22,17 @@ test("MCP workspace package is registered with a start script", async () => {
   assert.ok(packageJson.dependencies["@modelcontextprotocol/sdk"], "MCP SDK dependency should be explicit");
 });
 
-test("MCP server exposes the required AgentPassports tools with descriptive safety text", async () => {
+test("MCP server exposes only thin build, submit, and status tools", async () => {
   const { AGENTPASSPORT_MCP_TOOLS } = await import("../packages/mcp-server/src/tools.ts");
   const toolNames = AGENTPASSPORT_MCP_TOOLS.map((tool) => tool.name);
 
-  assert.deepEqual(toolNames, [
+  assert.deepEqual(toolNames, ["build_task_intent", "submit_task", "check_task_status"]);
+
+  for (const removedTool of [
     "resolve_agent_passport",
     "list_owner_agents",
     "get_agent_policy",
     "check_task_against_policy",
-    "build_task_intent",
-    "submit_task",
     "keeperhub_validate_agent_task",
     "keeperhub_build_workflow_payload",
     "keeperhub_emit_run_attestation",
@@ -46,56 +46,145 @@ test("MCP server exposes the required AgentPassports tools with descriptive safe
     "uniswap_quote",
     "uniswap_execute_swap",
     "uniswap_record_swap_proof"
-  ]);
-
-  for (const tool of AGENTPASSPORT_MCP_TOOLS) {
-    assert.ok(tool.description.length >= 120, `${tool.name} should explain when and why to use it`);
-    assert.match(tool.description, /ENS/i, `${tool.name} should mention ENS`);
+  ]) {
+    assert.equal(toolNames.includes(removedTool), false, `${removedTool} must not be exposed by MCP`);
   }
 
-  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "build_task_intent").description, /does not sign/i);
-  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "check_task_against_policy").description, /policy digest/i);
-  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "submit_task").description, /relayer/i);
+  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "build_task_intent").description, /does not resolve ENS/i);
+  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "submit_task").description, /KeeperHub/i);
+  assert.match(AGENTPASSPORT_MCP_TOOLS.find((tool) => tool.name === "check_task_status").description, /KeeperHub/i);
 });
 
-test("MCP tools use zod schemas with the required public arguments", async () => {
+test("thin MCP tools use explicit public arguments and no keypair input", async () => {
   const { AGENTPASSPORT_MCP_TOOLS } = await import("../packages/mcp-server/src/tools.ts");
   const byName = Object.fromEntries(AGENTPASSPORT_MCP_TOOLS.map((tool) => [tool.name, tool]));
 
-  assert.deepEqual(Object.keys(byName.resolve_agent_passport.inputShape), ["agentName"]);
-  assert.deepEqual(Object.keys(byName.list_owner_agents.inputShape), ["ownerName"]);
-  assert.deepEqual(Object.keys(byName.get_agent_policy.inputShape), ["agentName"]);
-  assert.deepEqual(Object.keys(byName.check_task_against_policy.inputShape), ["agentName", "task"]);
-  assert.deepEqual(Object.keys(byName.build_task_intent.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds"]);
-  assert.deepEqual(Object.keys(byName.submit_task.inputShape), ["agentName", "intent", "policySnapshot", "callData", "signature"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_validate_agent_task.inputShape), ["agentName", "task", "trustThreshold"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_build_workflow_payload.inputShape), ["agentName", "task", "metadataURI", "ttlSeconds", "trustThreshold"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_emit_run_attestation.inputShape), ["agentName", "decision", "taskDescription", "policyDigest", "txHash", "keeperhubRunId", "reasons", "blockers"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_list_workflows.inputShape), []);
-  assert.deepEqual(Object.keys(byName.keeperhub_create_gate_workflow.inputShape), ["name", "description"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_execute_approved_workflow.inputShape), ["agentName", "task", "metadataURI", "workflowId", "ttlSeconds", "trustThreshold"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_get_execution_status.inputShape), ["executionId"]);
-  assert.deepEqual(Object.keys(byName.keeperhub_get_execution_logs.inputShape), ["executionId"]);
-  assert.deepEqual(Object.keys(byName.uniswap_check_approval.inputShape), ["agentName", "amount", "chainId", "token"]);
-  assert.deepEqual(Object.keys(byName.uniswap_validate_swap_against_ens_policy.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
-  assert.deepEqual(Object.keys(byName.uniswap_quote.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type"]);
-  assert.deepEqual(Object.keys(byName.uniswap_execute_swap.inputShape), ["agentName", "amount", "chainId", "slippageBps", "tokenIn", "tokenOut", "type", "permit2Signature", "permitData", "quote"]);
-  assert.deepEqual(Object.keys(byName.uniswap_record_swap_proof.inputShape), ["agentName", "amount", "chainId", "policyDigest", "quoteId", "requestId", "routing", "tokenIn", "tokenOut", "txHashOrOrderId"]);
+  assert.deepEqual(Object.keys(byName.build_task_intent.inputShape), [
+    "agentName",
+    "task",
+    "metadataURI",
+    "policySnapshot",
+    "nonce",
+    "expiresAt",
+    "ttlSeconds"
+  ]);
+  assert.deepEqual(Object.keys(byName.submit_task.inputShape), [
+    "agentName",
+    "intent",
+    "policySnapshot",
+    "callData",
+    "signature",
+    "workflowId",
+    "metadataURI",
+    "taskDescription",
+    "waitForResult",
+    "pollAttempts",
+    "pollIntervalMs"
+  ]);
+  assert.deepEqual(Object.keys(byName.check_task_status.inputShape), [
+    "executionId",
+    "includeLogs"
+  ]);
+
+  const serializedShapes = JSON.stringify(AGENTPASSPORT_MCP_TOOLS.map((tool) => Object.keys(tool.inputShape)));
+  assert.doesNotMatch(serializedShapes, /privateKey|keypair|signer/i);
 });
 
-test("MCP safety helpers reject missing or non-exact ENS active status before signing", async () => {
-  const { assertExactActiveStatus, assertPolicyDigestMatches } = await import("../packages/mcp-server/src/safety.ts");
+test("build_task_intent builds without resolving ENS or checking policy", async () => {
+  const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
+  const readContractCalls = [];
+  const fakeClient = {
+    async readContract(args) {
+      readContractCalls.push(args.functionName);
+      assert.equal(args.functionName, "nextNonce", "build_task_intent may only read executor nonce");
+      return 7n;
+    },
+    async getBlock() {
+      return { timestamp: 1_700_000_000n };
+    }
+  };
+  const handlers = createAgentPassportHandlers(testMcpConfig(), fakeClient);
 
-  assert.doesNotThrow(() => assertExactActiveStatus("active"));
-  assert.throws(() => assertExactActiveStatus("Active"), /exactly active/);
-  assert.throws(() => assertExactActiveStatus("active "), /exactly active/);
-  assert.throws(() => assertExactActiveStatus(""), /exactly active/);
+  const result = await handlers.build_task_intent({
+    agentName: "claw.sarvesh.eth",
+    metadataURI: "keeperhub://unit-test",
+    policySnapshot: testPolicySnapshot(),
+    task: { description: "record a unit-test task" },
+    ttlSeconds: 600
+  });
 
-  assert.doesNotThrow(() => assertPolicyDigestMatches("0x" + "11".repeat(32), "0x" + "11".repeat(32)));
-  assert.throws(
-    () => assertPolicyDigestMatches("0x" + "11".repeat(32), "0x" + "22".repeat(32)),
-    /does not match live ENS policy digest/
-  );
+  assert.deepEqual(readContractCalls, ["nextNonce"]);
+  assert.equal(result.intent.nonce, "7");
+  assert.equal(result.intent.target, testMcpConfig().taskLogAddress);
+  assert.equal(result.policySnapshot.selector, "0x36736d1e");
+  assert.equal(result.signingPayload.typedData.primaryType, "TaskIntent");
+});
+
+test("submit_task starts KeeperHub execution without waiting by default or doing local policy checks", async () => {
+  const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init = {}) => {
+    requests.push({ body: init.body ? JSON.parse(init.body) : undefined, method: init.method, url: String(url) });
+    if (String(url).endsWith("/api/workflow/wf_123/execute")) {
+      return jsonResponse({ executionId: "exec_1" });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+
+  try {
+    const handlers = createAgentPassportHandlers(testMcpConfig());
+    const result = await handlers.submit_task({
+      agentName: "claw.sarvesh.eth",
+      callData: "0x1234",
+      intent: testIntent(),
+      policySnapshot: { ...testPolicySnapshot(), enabled: false },
+      signature: "0x" + "11".repeat(65),
+      workflowId: "wf_123"
+    });
+
+    assert.equal(requests[0].method, "POST");
+    assert.deepEqual(Object.keys(requests[0].body), ["input"]);
+    assert.equal(requests[0].body.input.agentName, "claw.sarvesh.eth");
+    assert.equal(requests[0].body.input.policySnapshot.enabled, false, "MCP must not block disallowed-looking snapshots locally");
+    assert.match(requests[0].body.input.functionArgs, /^\[/, "KeeperHub write-contract args must be a JSON array string");
+    assert.equal(requests.length, 1, "submit_task should not poll KeeperHub by default");
+    assert.equal(result.keeperhub.executionId, "exec_1");
+    assert.equal(result.keeperhub.status, undefined);
+    assert.equal(result.keeperhub.logs, undefined);
+    assert.deepEqual(result.keeperhub.txHashes, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("check_task_status fetches KeeperHub status and logs for a submitted execution", async () => {
+  const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init = {}) => {
+    requests.push({ body: init.body ? JSON.parse(init.body) : undefined, method: init.method, url: String(url) });
+    if (String(url).endsWith("/api/workflows/executions/exec_1/status")) {
+      return jsonResponse({ execution: { status: "success" } });
+    }
+    if (String(url).endsWith("/api/workflows/executions/exec_1/logs")) {
+      return jsonResponse({ logs: [{ txHash: "0x" + "ab".repeat(32) }] });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+
+  try {
+    const handlers = createAgentPassportHandlers(testMcpConfig());
+    const result = await handlers.check_task_status({ executionId: "exec_1" });
+
+    assert.deepEqual(requests.map((request) => request.method), ["GET", "GET"]);
+    assert.equal(result.keeperhub.executionId, "exec_1");
+    assert.equal(result.keeperhub.status.execution.status, "success");
+    assert.deepEqual(result.keeperhub.txHashes, ["0x" + "ab".repeat(32)]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("MCP package exposes stdio and localhost HTTP entrypoints", async () => {
@@ -240,8 +329,56 @@ test("MCP package documents setup, environment, and tool safety flow", async () 
   assert.match(readme, /AgentPassports MCP Server/);
   assert.match(readme, /mcp:start/);
   assert.doesNotMatch(readme, /AGENT_PRIVATE_KEY/);
-  assert.match(readme, /resolve_agent_passport/);
+  assert.match(readme, /build_task_intent/);
+  assert.match(readme, /submit_task/);
   assert.match(readme, /skill-provided signing script/i);
-  assert.match(readme, /Never sign/i);
-  assert.match(readme, /agent\.status.*exactly.*active/i);
+  assert.match(readme, /KeeperHub/i);
+  assert.doesNotMatch(readme, /check_task_against_policy/);
 });
+
+function testMcpConfig() {
+  return {
+    chainId: 11155111n,
+    ensRegistryAddress: "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e",
+    executorAddress: "0x03461e805aC80E8182a46580DF8B9BDa6B707Cf5",
+    keeperhubApiBaseUrl: "https://keeperhub.test",
+    keeperhubApiKey: "kh_test",
+    keeperhubWorkflowId: "wf_default",
+    relayerUrl: "https://relayer.invalid/unused",
+    rpcUrl: "https://rpc.invalid",
+    taskLogAddress: "0x2EAb7Caba99b35832C6bf9Ef5Bae10A0735CbF5b"
+  };
+}
+
+function testPolicySnapshot() {
+  return {
+    enabled: true,
+    expiresAt: "9999999999",
+    maxGasReimbursementWei: "0",
+    maxValueWei: "0",
+    selector: "0x36736d1e",
+    target: "0x2EAb7Caba99b35832C6bf9Ef5Bae10A0735CbF5b"
+  };
+}
+
+function testIntent() {
+  return {
+    agentNode: "0x" + "12".repeat(32),
+    callDataHash: "0x" + "34".repeat(32),
+    expiresAt: "1700000600",
+    nonce: "7",
+    policyDigest: "0x" + "56".repeat(32),
+    target: "0x2EAb7Caba99b35832C6bf9Ef5Bae10A0735CbF5b",
+    value: "0"
+  };
+}
+
+function jsonResponse(body, ok = true, status = ok ? 200 : 500) {
+  return {
+    ok,
+    status,
+    async json() {
+      return body;
+    }
+  };
+}

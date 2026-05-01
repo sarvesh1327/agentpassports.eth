@@ -21,9 +21,19 @@
     "agentName": {
       "type": "string"
     },
+    "agentNode": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
     "decision": {
       "type": "string",
       "enum": ["approved", "blocked"]
+    },
+    "failedNodeId": {
+      "type": "string"
+    },
+    "blockedCode": {
+      "type": "string"
     },
     "taskHash": {
       "type": "string",
@@ -34,6 +44,9 @@
       "pattern": "^0x[0-9a-fA-F]{64}$"
     },
     "keeperhubRunId": {
+      "type": "string"
+    },
+    "keeperhubExecutionId": {
       "type": "string"
     },
     "txHash": {

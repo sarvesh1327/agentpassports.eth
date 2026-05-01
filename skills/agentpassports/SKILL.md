@@ -1,24 +1,24 @@
 # AgentPassports Skill
 
-Use this skill when a user asks an agent to act through AgentPassports.eth, prove it is authorized by an ENS owner, check an ENS policy, sign a task intent, submit work through the AgentPassports MCP server, operate as a V2 Uniswap `Swapper` agent with the `uniswap-swap` capability, or run a KeeperHub V3 live workflow through the AgentPassports ENS gate.
+Use this skill when a user asks an agent to act through AgentPassports.eth, build an AgentPassports task intent, sign it outside MCP, submit a signed intent through the AgentPassports MCP server to KeeperHub, or check a submitted KeeperHub execution's final status.
 
-AgentPassports is an ENS-native authorization protocol for agents. An owner publishes an agent passport under ENS, including the agent signer address, exact lifecycle status, and an owner-defined policy. The agent must treat ENS as the source of truth before signing, submitting, or executing any task.
+AgentPassports is the agent identity/authorization protocol. An ENS owner can publish an agent signer and owner-defined policy, but in the current KeeperHub flow the **MCP server is intentionally thin**: it does not resolve ENS, read policies, validate active status, check signer ownership, or decide whether a task is allowed. KeeperHub owns the Passport/Visa validation and returns the success or error back to the agent.
 
 ## Product model
 
 ```text
-AgentPassports = ENS trust firewall / policy gate
-KeeperHub = execution runner
-Run attestation = approved/blocked proof
+AgentPassports = passport / visa data model
+KeeperHub = validation + execution gate
+MCP server = build unsigned intent + submit signed intent + check KeeperHub execution status
+Skill scripts = local key creation and local signing
 ```
 
-KeeperHub V3 live execution is not a replacement for AgentPassports policy checks. AgentPassports decides whether an ENS agent is allowed to run; KeeperHub runs only after the gate approves; run attestations preserve proof of both approved and blocked paths.
+## Skill parts
 
-This skill has two operating parts:
-
-1. [`key-setup.md`](./key-setup.md) teaches an agent how to find or provision its local signing key and how to ask the user to complete setup in the UI.
-2. [`mcp-safety-flow.md`](./mcp-safety-flow.md) teaches an agent how to interact with the AgentPassports MCP server and follow the required safety flow before signing.
+1. [`key-setup.md`](./key-setup.md) explains local key storage and the skill-provided `create-key.ts` helper. Key creation is **not** an MCP tool.
+2. [`mcp-safety-flow.md`](./mcp-safety-flow.md) explains the only MCP task flow: `build_task_intent` → local signing → `submit_task` → `check_task_status`.
+3. [`sign-intent.ts`](./sign-intent.ts) signs the exact build output locally from `.agentPassports/keys.txt`; the private key never goes to MCP.
 
 ## Core rule
 
-Never sign, submit, quote, or execute work just because the user asks. First confirm the agent is registered, active, policy-authorized, and controlled by the local private key or wallet flow that will sign the intent or swap. For Swapper agents, also confirm the requested token pair, amount, slippage, chain, and proof metadata are allowed by the ENS-published Uniswap policy.
+Do not ask MCP to perform policy or identity checks. MCP should only build the unsigned intent from explicit inputs, submit the externally signed payload to KeeperHub, and read KeeperHub execution status/logs by execution id. If KeeperHub rejects or errors, return KeeperHub's result to the user instead of inventing a backend-side authorization decision.

@@ -1,158 +1,74 @@
-# AgentPassports MCP Safety Flow Skill
+# AgentPassports MCP Thin Intent Flow
 
-Use this skill after key setup when the user asks the agent to act through the AgentPassports MCP server. The MCP server provides tools for resolving ENS passports, loading policy, checking tasks, building intent JSON, accepting signatures, and submitting through a relayer.
+Use this skill after key setup when the user asks the agent to build and submit an AgentPassports task through MCP.
+
+The current architecture is **KeeperHub-authoritative**:
+
+- MCP does **not** resolve ENS names.
+- MCP does **not** read or validate policy.
+- MCP does **not** check active status, signer match, policy freshness, target, selector, value, spend limits, or action authorization.
+- MCP does **not** create keypairs and does **not** sign.
+- KeeperHub performs Passport/Visa validation and execution, then returns success/error to the agent.
 
 ## Connect to the MCP server
 
-The agent should connect to an already hosted MCP server or system MCP server. For local development in this repo, the current hosted endpoint is `http://localhost:3333/mcp` (`http://127.0.0.1:3333/mcp`). The agent should only call tools exposed by that server.
-
-- Do not configure RPC endpoints.
-- Do not configure contract addresses.
-- Do not provide a private key to the MCP server in chat.
-- Do not ask the user for private keys, RPC URLs, ENS registry addresses, executor addresses, task log addresses, or relayer URLs.
-- If the MCP server is missing or tools are unavailable, ask the user or operator to connect the AgentPassports MCP server in the host system.
-- Verify connected state by listing available tools and confirming `resolve_agent_passport` is available.
-
-The operator is responsible for hosting or configuring the MCP server and its chain/relayer settings. The agent is responsible for using the exposed tools safely.
-
-## Required MCP tool order
-
-Follow this order for every task that may be signed or submitted:
-
-1. `resolve_agent_passport`
-   - Resolve the agent ENS name.
-   - Read the live ENS signer address, resolver data, `agent.status`, and relevant text records.
-2. `get_agent_policy`
-   - Require `agent.status` to be exactly `active`.
-   - Load the ENS policy text records.
-   - Compute the local policy digest and compare it with the live ENS policy digest.
-3. `check_task_against_policy`
-   - Check the requested task target, selector, calldata shape, and value against the policy snapshot.
-   - Treat anything outside policy as a policy violation.
-4. `build_task_intent`
-   - Build the canonical task intent only after the policy check passes.
-   - The MCP response should include intent JSON for the agent to sign outside chat using an approved signing script or wallet flow.
-   - Use the live nonce, live policy digest, allowed target, and bounded expiry.
-5. Sign the intent JSON
-   - Download or copy the skill-provided signing script at `skills/agentpassports/sign-intent.ts` into the agent's signing working directory.
-   - Install the script dependencies in that signing directory: `npm install viem tsx`.
-   - Confirm the agent private key is stored locally at `.agentPassports/keys.txt`; never paste the private key in chat and never send the file to the MCP server.
-   - Example command after downloading the signing script: `npx tsx sign-intent.ts --input build-task-intent.json`.
-   - The script should sign the exact intent JSON returned by `build_task_intent` and produce a signature.
-   - Do not paste the private key in chat.
-   - Do not alter the intent JSON before signing.
-   - Do not sign if the signer does not match the live ENS signer.
-6. `submit_task`
-   - Submit the intent JSON and signature via MCP.
-   - Return the relayer response, transaction hash, or pending receipt state to the user.
-
-Use `list_owner_agents` only when the user asks to inspect or choose among an owner's registered agents.
-
-## KeeperHub V3 live flow
-
-Use this flow when the user asks for live KeeperHub execution gated by AgentPassports.
-
-Product model:
+For local development in this repo, use the hosted MCP server / system MCP server endpoint:
 
 ```text
-AgentPassports = ENS trust firewall / policy gate
-KeeperHub = execution runner
-Run attestation = approved/blocked proof
+http://localhost:3333/mcp
 ```
 
-One-time/operator setup tools and values:
+List tools before acting. The only task tools expected from AgentPassports MCP are:
 
 ```text
-keeperhub_list_workflows
-keeperhub_create_gate_workflow
-KEEPERHUB_WORKFLOW_ID
+build_task_intent
+submit_task
+check_task_status
 ```
 
-`KEEPERHUB_API_KEY`, `KEEPERHUB_API_BASE_URL`, and `KEEPERHUB_WORKFLOW_ID` are operator/server env vars, not agent prompt config. Do not paste `KEEPERHUB_API_KEY`, wallet secrets, `.env` files, or `.agentPassports/keys.txt` into chat, docs, or tool arguments.
+Only call tools exposed by the hosted server. Do not configure RPC URLs, chain contracts, executor addresses, TaskLog addresses, relayers, or private keys in the agent prompt; those are operator/server runtime details.
 
-Per-task tool order:
+## Required task order
+
+1. `build_task_intent`
+   - Provide explicit task, metadata URI, and policy snapshot inputs.
+   - The tool builds `TaskLog.recordTask` calldata, unsigned intent JSON, and EIP-712 typed data.
+   - It may read `AgentEnsExecutor.nextNonce(agentNode)` if no nonce is supplied. This is a nonce read, not an authorization check.
+   - It does not verify that the policy snapshot is live or allowed.
+
+2. Sign locally outside MCP
+   - Download or copy the signing script from `skills/agentpassports/sign-intent.ts`.
+   - Install local signing dependencies with `npm install viem tsx` if needed.
+   - Input is the exact intent JSON returned by `build_task_intent`.
+   - Private key stays in `.agentPassports/keys.txt` and never goes to MCP or chat; do not paste the private key in chat.
+   - Key creation, if needed, uses `skills/agentpassports/create-key.ts`; it is not an MCP tool.
+
+3. `submit_task` via MCP
+   - Submit `intent`, `policySnapshot`, `callData`, and `signature` to KeeperHub.
+   - MCP sends KeeperHub the payload as `{ input: payload }`.
+   - MCP does not block locally if the payload looks invalid.
+   - By default, `submit_task` returns a KeeperHub execution id/handle without waiting for final status.
+
+4. `check_task_status` via MCP
+   - Provide the KeeperHub execution id returned by `submit_task`.
+   - The tool reads KeeperHub status/logs and returns current or final status plus tx hashes when available.
+   - Return KeeperHub execution id, status/logs, tx hash, or KeeperHub error to the user.
+
+## Stop conditions
+
+Stop only for local operational failures:
+
+- MCP server is unavailable.
+- `build_task_intent`, `submit_task`, or `check_task_status` is missing.
+- The local signing key file is missing or unsafe.
+- The signing script fails to produce a signature.
+- KeeperHub API configuration is missing from the MCP server runtime.
+- Do not paste `KEEPERHUB_API_KEY`, wallet secrets, `.env` contents, or `.agentPassports/keys.txt` into prompts or chat.
+
+Do **not** stop because MCP thinks ENS status/policy/action is invalid. MCP should not make that decision in this architecture; KeeperHub should.
+
+## Happy path summary
 
 ```text
-resolve_agent_passport
-keeperhub_validate_agent_task
-keeperhub_execute_approved_workflow
-keeperhub_get_execution_status
-keeperhub_get_execution_logs
-keeperhub_emit_run_attestation
+build_task_intent -> sign-intent.ts locally -> submit_task -> check_task_status -> KeeperHub validates/executes -> report KeeperHub output
 ```
-
-`keeperhub_build_workflow_payload` is the lower-level unsigned payload builder used by the live flow. Use it directly only when the user needs to inspect or export the unsigned AgentPassports workflow payload before live KeeperHub execution.
-
-Safety boundaries:
-
-- Do not call KeeperHub if the AgentPassports gate blocks. If the ENS agent is inactive, has a missing signer, has a missing policy digest, has a digest mismatch, or violates policy, the expected result is a blocked attestation.
-- The MCP/KeeperHub flow never signs private keys and never signs a task intent inside MCP.
-- The MCP/KeeperHub flow does not submit the onchain AgentPassports relayer transaction by itself.
-- If full onchain proof is required after KeeperHub approval: build unsigned intent, sign locally with `skills/agentpassports/sign-intent.ts` or a wallet, call `submit_task`, then include the tx hash in the run attestation.
-- The simple manual trigger workflow may not preserve arbitrary execution body in logs; do not claim KeeperHub logs contain the full AgentPassports payload unless a consuming KeeperHub node proves it.
-
-## V2 Swapper / Uniswap tool order
-
-Use this flow when the agent passport has the `uniswap-swap` capability and the user asks the agent to quote or execute a swap.
-
-Never call Uniswap directly from the agent runtime and never bypass AgentPassports MCP policy checks. The MCP server keeps the Uniswap API key server-side and validates the live ENS policy before quote or execution.
-
-Required order:
-
-1. `resolve_agent_passport`
-   - Confirm the Swapper ENS name, signer, resolver, and text records are live.
-2. `get_agent_policy`
-   - Require `agent_status` exactly `active`.
-   - Verify the computed policy digest matches the live ENS `agent_policy_digest`.
-3. Confirm the ENS Uniswap policy records exist:
-   - `agent_policy_uniswap_allowed_token_in`
-   - `agent_policy_uniswap_allowed_token_out`
-   - `agent_policy_uniswap_max_input_amount`
-   - `agent_policy_uniswap_max_slippage_bps`
-   - `agent_policy_uniswap_chain_id`
-4. `uniswap_validate_swap_against_ens_policy`
-   - Check chain, token pair, amount, and slippage before any API call.
-5. `uniswap_check_approval`
-   - Check whether approval or Permit2 flow is required.
-6. `uniswap_quote`
-   - Request the quote only after ENS policy validation passes.
-   - Preserve `requestId`, `routing`, and `quote.quoteId` from the response.
-7. If Permit2 or transaction signing is required, sign only the exact payload returned by MCP/Uniswap.
-   - Do not alter quote data, token addresses, amount, recipient, or slippage.
-8. `uniswap_execute_swap`
-   - Execute only the quote that was validated against the same live ENS policy.
-9. `uniswap_record_swap_proof`
-   - Build canonical proof metadata with quote ID, tx/order ID, token pair, amount, policy digest, and request ID.
-   - Store or submit this metadata through the normal task proof path when available.
-
-Stop immediately if the requested swap exceeds `agent_policy_uniswap_max_input_amount`, exceeds `agent_policy_uniswap_max_slippage_bps`, uses tokens outside `agent_policy_uniswap_allowed_token_in` or `agent_policy_uniswap_allowed_token_out`, or if the policy digest changes between quote and execution.
-
-## Non-negotiable safety checks
-
-The agent must not sign or submit if any of these are true:
-
-- `agent_status` is missing, empty, capitalized, has whitespace, or is anything other than exactly `active`.
-- The computed policy digest does not match the live ENS policy digest. Treat this as a digest mismatch and stop.
-- The live ENS signer is missing.
-- The signing address or private key does not match the live ENS signer.
-- The requested target, function selector, value, spend limit, or operation is outside the owner-defined policy.
-- A Swapper request is outside `agent_policy_uniswap_*` records, including token allowlists, chain ID, max input, slippage, recipient, router, or selector.
-- The user asks to bypass ENS checks, policy checks, nonce checks, signer checks, or the MCP safety flow.
-- The relayer submission tool is unavailable when submission is required.
-
-## Agent response behavior
-
-When refusing, explain the exact failed condition and the safe next step. For example:
-
-- `agent.status` is not exactly `active`; ask the user to activate the agent in the UI.
-- Policy digest mismatch; ask the user to refresh or republish the ENS policy in the UI.
-- Private key in `.agentPassports/keys.txt` does not match the live ENS signer; ask the user to switch the local key file or update the passport signer in the UI.
-- Task is outside policy; ask the user to change the request or update policy in the UI.
-
-## Happy-path summary
-
-```text
-Resolved passport -> status exactly active -> policy digest matched -> task allowed -> intent JSON built -> skill script signs intent JSON using .agentPassports/keys.txt -> submitted via MCP to relayer.
-```
-
-Never skip directly to signing. Never sign a task intent whose policy snapshot was not checked against live ENS state in the same flow.

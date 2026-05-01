@@ -165,9 +165,13 @@ export function buildKeeperHubWorkflowPayload(input: {
  */
 export function buildRunAttestation(input: {
   agentName: string;
+  agentNode?: Hex;
+  blockedCode?: string;
   blockers?: readonly string[];
   createdAt?: string;
   decision: KeeperHubDecision;
+  failedNodeId?: string;
+  keeperhubExecutionId?: string;
   keeperhubRunId?: string;
   policyDigest: Hex;
   reasons: readonly string[];
@@ -177,10 +181,14 @@ export function buildRunAttestation(input: {
   return {
     schema: RUN_ATTESTATION_SCHEMA,
     agentName: input.agentName.trim().toLowerCase(),
+    agentNode: input.agentNode,
     decision: input.decision,
+    failedNodeId: input.failedNodeId,
+    blockedCode: input.blockedCode,
     taskHash: keccak256(stringToHex(input.taskDescription)),
     policyDigest: input.policyDigest.toLowerCase() as Hex,
     txHash: input.txHash,
+    keeperhubExecutionId: input.keeperhubExecutionId,
     keeperhubRunId: input.keeperhubRunId,
     reasons: [...input.reasons],
     blockers: [...(input.blockers ?? [])],

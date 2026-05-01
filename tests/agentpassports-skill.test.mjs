@@ -15,17 +15,40 @@ function assertMentionsAll(text, requiredPhrases, label) {
   }
 }
 
-test("AgentPassports skill index describes the protocol and links the two operating skills", async () => {
+function assertOmitsAll(text, forbiddenPhrases, label) {
+  for (const phrase of forbiddenPhrases) {
+    assert.doesNotMatch(text, new RegExp(phrase, "i"), `${label} should omit ${phrase}`);
+  }
+}
+
+test("AgentPassports skill index documents the thin MCP / KeeperHub-authoritative model", async () => {
   const skill = await readText("skills/agentpassports/SKILL.md");
 
-  assert.match(skill, /AgentPassports/i);
-  assert.match(skill, /ENS/i);
-  assert.match(skill, /owner-defined policy/i);
-  assert.match(skill, /key-setup\.md/i);
-  assert.match(skill, /mcp-safety-flow\.md/i);
+  assertMentionsAll(
+    skill,
+    [
+      "AgentPassports",
+      "owner-defined policy",
+      "KeeperHub",
+      "MCP server is intentionally thin",
+      "build unsigned intent",
+      "submit signed intent",
+      "key-setup\\.md",
+      "mcp-safety-flow\\.md",
+      "create-key\\.ts.*not.*MCP tool",
+      "sign-intent\\.ts"
+    ],
+    "skill index"
+  );
+
+  assertOmitsAll(
+    skill,
+    ["resolve_agent_passport", "get_agent_policy", "check_task_against_policy", "keeperhub_validate_agent_task", "uniswap_"],
+    "skill index"
+  );
 });
 
-test("key setup skill teaches agent-owned key file setup and UI registration", async () => {
+test("key setup skill teaches script-owned keypair creation and no MCP keypair tool", async () => {
   const skill = await readText("skills/agentpassports/key-setup.md");
 
   assertMentionsAll(
@@ -36,6 +59,8 @@ test("key setup skill teaches agent-owned key file setup and UI registration", a
       "Ethereum private key",
       "ECDSA|secp256k1",
       "create a new key pair",
+      "create-key\\.ts",
+      "not.*MCP tool|MCP server.*does not.*create",
       "public address",
       "ask the user",
       "complete setup",
@@ -50,7 +75,7 @@ test("key setup skill teaches agent-owned key file setup and UI registration", a
   assert.doesNotMatch(skill, /RPC_URL|ENS_REGISTRY|EXECUTOR_ADDRESS|TASK_LOG_ADDRESS/i, "skill should not ask agents to configure server env vars");
 });
 
-test("MCP safety flow skill explains hosted/system MCP connection without agent-side chain config", async () => {
+test("MCP flow skill teaches build_task_intent, submit_task, then check_task_status", async () => {
   const skill = await readText("skills/agentpassports/mcp-safety-flow.md");
 
   assertMentionsAll(
@@ -58,35 +83,46 @@ test("MCP safety flow skill explains hosted/system MCP connection without agent-
     [
       "hosted MCP server|system MCP server",
       "localhost:3333/mcp",
-      "only call tools",
-      "do not configure.*RPC",
-      "do not configure.*contract",
       "list.*tools",
-      "resolve_agent_passport",
-      "operator"
+      "build_task_intent",
+      "submit_task",
+      "check_task_status",
+      "execution id",
+      "KeeperHub-authoritative",
+      "does.*not.*resolve ENS",
+      "does.*not.*read.*policy",
+      "does.*not.*check.*active status",
+      "does.*not.*create keypairs",
+      "KeeperHub performs Passport/Visa validation",
+      "return KeeperHub"
     ],
-    "MCP connection instructions"
+    "MCP thin flow skill"
   );
 
+  assertOmitsAll(
+    skill,
+    ["get_agent_policy", "check_task_against_policy", "keeperhub_validate_agent_task", "keeperhub_build_workflow_payload", "uniswap_"],
+    "MCP thin flow skill"
+  );
   assert.doesNotMatch(skill, /mcpServers/i, "skill should not include local MCP client JSON config");
   assert.doesNotMatch(skill, /RPC_URL|ENS_REGISTRY|EXECUTOR_ADDRESS|TASK_LOG_ADDRESS|AGENT_PRIVATE_KEY/i, "skill should not ask agents to configure server env vars");
 });
 
-test("MCP safety flow skill teaches intent JSON signing script flow and submission via MCP", async () => {
+test("MCP flow skill teaches local signing script and submission via MCP", async () => {
   const skill = await readText("skills/agentpassports/mcp-safety-flow.md");
 
   assertMentionsAll(
     skill,
     [
-      "build_task_intent",
       "intent JSON",
       "skills/agentpassports/sign-intent\\.ts",
-      "download.*signing script",
+      "download.*signing script|copy.*signing script",
       "npm install.*viem.*tsx",
       "\\.agentPassports/keys\\.txt",
       "sign.*intent",
       "signature",
       "submit_task",
+      "check_task_status",
       "via MCP",
       "do not paste.*private key.*chat"
     ],
@@ -104,6 +140,8 @@ test("skill-owned signing script signs provided intent JSON with .agentPassports
   assert.match(source, /privateKeyToAccount/);
   assert.match(source, /signTypedData/);
   assert.match(source, /hashTypedData/);
+  assert.match(source, /bigintJsonReplacer/);
+  assert.match(source, /JSON\.stringify\([\s\S]*bigintJsonReplacer/);
   assert.match(source, /intent JSON/i);
   assert.match(source, /signature/);
   assert.match(source, /download/i);
@@ -130,87 +168,37 @@ test("skill-owned create-key helper generates an Ethereum secp256k1 key file saf
   assert.doesNotMatch(source, /0x[0-9a-fA-F]{64}/, "create-key script must not contain a hardcoded private key");
 });
 
-test("fresh agent walkthrough explains the complete first-run flow", async () => {
+test("fresh agent walkthrough explains the complete first-run thin MCP flow", async () => {
   const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
 
   assertMentionsAll(
     walkthrough,
     [
-      "create-key\.ts",
-      "\.agentPassports/keys\.txt",
+      "create-key\\.ts",
+      "\\.agentPassports/keys\\.txt",
       "public address",
       "AgentPassports UI",
       "localhost:3333/mcp",
-      "resolve_agent_passport",
-      "get_agent_policy",
-      "check_task_against_policy",
       "build_task_intent",
-      "build-task-intent\.json",
+      "build-task-intent\\.json",
       "npm install.*viem.*tsx",
-      "sign-intent\.ts",
+      "sign-intent\\.ts",
       "submit_task",
-      "agent\.status.*active",
-      "policy digest"
+      "check_task_status",
+      "KeeperHub performs Passport/Visa validation",
+      "return KeeperHub"
     ],
+    "fresh agent walkthrough"
+  );
+
+  assertOmitsAll(
+    walkthrough,
+    ["resolve_agent_passport", "get_agent_policy", "check_task_against_policy", "keeperhub_validate_agent_task", "uniswap_"],
     "fresh agent walkthrough"
   );
 });
 
-test("MCP safety flow skill teaches exact AgentPassports MCP tool order and refusal conditions", async () => {
-  const skill = await readText("skills/agentpassports/mcp-safety-flow.md");
-
-  assertMentionsAll(
-    skill,
-    [
-      "resolve_agent_passport",
-      "get_agent_policy",
-      "check_task_against_policy",
-      "build_task_intent",
-      "submit_task",
-      "agent\\.status",
-      "exactly.*active",
-      "policy digest",
-      "ENS signer",
-      "must not sign",
-      "relayer"
-    ],
-    "MCP safety flow skill"
-  );
-
-  assert.match(skill, /private key.*does not match|signer.*does not match/i, "MCP skill should reject mismatched signer keys");
-  assert.match(skill, /outside.*policy|policy violation/i, "MCP skill should reject tasks outside policy");
-  assert.match(skill, /digest mismatch/i, "MCP skill should reject policy digest mismatches");
-});
-
-
-test("AgentPassports skill docs teach KeeperHub V3 live product model and tool order", async () => {
-  const skill = await readText("skills/agentpassports/SKILL.md");
-  const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
-  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
-  const source = `${skill}\n${flow}\n${walkthrough}`;
-
-  assertMentionsAll(
-    source,
-    [
-      "AgentPassports.*ENS trust firewall|ENS trust firewall.*AgentPassports",
-      "KeeperHub.*execution runner|execution runner.*KeeperHub",
-      "Run attestation.*approved.*blocked|approved.*blocked.*Run attestation",
-      "keeperhub_list_workflows",
-      "keeperhub_create_gate_workflow",
-      "KEEPERHUB_WORKFLOW_ID",
-      "resolve_agent_passport",
-      "keeperhub_validate_agent_task",
-      "keeperhub_execute_approved_workflow",
-      "keeperhub_get_execution_status",
-      "keeperhub_get_execution_logs",
-      "keeperhub_emit_run_attestation",
-      "keeperhub_build_workflow_payload"
-    ],
-    "KeeperHub V3 skill docs"
-  );
-});
-
-test("AgentPassports skill docs define KeeperHub V3 safety boundaries", async () => {
+test("AgentPassports skill docs define the new local stop conditions", async () => {
   const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
   const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
   const source = `${flow}\n${walkthrough}`;
@@ -218,49 +206,20 @@ test("AgentPassports skill docs define KeeperHub V3 safety boundaries", async ()
   assertMentionsAll(
     source,
     [
-      "must not call KeeperHub|do not call KeeperHub",
-      "gate.*blocks|blocked.*gate",
-      "never signs private keys|never sign.*private key|does not sign.*private key",
-      "does not submit.*onchain AgentPassports relayer transaction|does not submit.*relayer transaction",
-      "build unsigned intent",
-      "sign locally",
-      "submit_task",
-      "tx hash.*attestation|attestation.*tx hash",
-      "do not paste.*KEEPERHUB_API_KEY|KEEPERHUB_API_KEY.*do not paste",
+      "MCP server is unavailable",
+      "build_task_intent.*missing|missing.*build_task_intent",
+      "submit_task.*missing|missing.*submit_task",
+      "check_task_status.*missing|missing.*check_task_status",
+      "local signing key file is missing",
+      "signing script fails",
+      "KeeperHub API configuration is missing",
+      "Do.*not.*stop because MCP thinks ENS status/policy/action is invalid",
+      "Do not paste.*KEEPERHUB_API_KEY|KEEPERHUB_API_KEY.*do not paste",
       "wallet secrets",
-      "\.agentPassports/keys\.txt",
-      "operator/server env vars",
-      "KEEPERHUB_API_BASE_URL",
-      "inactive|missing signer|missing policy digest",
-      "blocked attestation",
-      "manual trigger.*not preserve arbitrary execution body|arbitrary execution body.*not.*preserve"
+      "\\.agentPassports/keys\\.txt"
     ],
-    "KeeperHub V3 safety boundaries"
+    "thin flow stop conditions"
   );
 
   assert.doesNotMatch(source, /kh_[A-Za-z0-9]/, "skill docs must not contain KeeperHub API keys");
-});
-
-test("MCP safety flow skill teaches V2 Uniswap Swapper tool order", async () => {
-  const skill = await readText("skills/agentpassports/SKILL.md");
-  const flow = await readText("skills/agentpassports/mcp-safety-flow.md");
-  const walkthrough = await readText("skills/agentpassports/examples/fresh-agent-walkthrough.md");
-  const source = `${skill}\n${flow}\n${walkthrough}`;
-
-  for (const label of [
-    "uniswap-swap",
-    "Swapper",
-    "uniswap_validate_swap_against_ens_policy",
-    "uniswap_check_approval",
-    "uniswap_quote",
-    "uniswap_execute_swap",
-    "uniswap_record_swap_proof",
-    "agent_policy_uniswap_allowed_token_in",
-    "agent_policy_uniswap_max_slippage_bps"
-  ]) {
-    assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented in the skill`);
-  }
-
-  assert.match(flow, /Never call Uniswap/i);
-  assert.match(flow, /policy digest/i);
 });
