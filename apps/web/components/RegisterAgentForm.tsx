@@ -17,6 +17,7 @@ import {
 import {
   AGENT_ENS_EXECUTOR_ABI,
   ENS_REGISTRY_ABI,
+  LEGACY_AGENT_TEXT_RECORD_KEYS,
   NAME_WRAPPER_ABI,
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
@@ -77,6 +78,7 @@ type GeneratedPolicyMetadataResponse = {
 const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
 const BASE_AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
 const UNISWAP_SWAP_SELECTOR = "0x12aa3caf" as const;
+const LEGACY_AGENT_TEXT_RECORD_KEY_SET = new Set<string>(LEGACY_AGENT_TEXT_RECORD_KEYS);
 const AGENT_KIND_OPTIONS: readonly { label: string; value: AgentKind }[] = [
   { label: "Personal assistant", value: "personal-assistant" },
   { label: "Swapper", value: "swapper" },
@@ -164,6 +166,10 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const normalizedOwnerName = ownerName.trim().toLowerCase();
   const normalizedAgentLabel = agentLabel.trim().toLowerCase();
   const normalizedAgentAddress = normalizeAddressInput(agentAddress);
+  const visibleTextRecords = useMemo(
+    () => preview.textRecords.filter((record) => !(record.value === "" && LEGACY_AGENT_TEXT_RECORD_KEY_SET.has(record.key))),
+    [preview.textRecords]
+  );
   const ownerReverseName = useEnsName({
     address: connectedWallet,
     chainId: Number(props.chainId),
@@ -268,7 +274,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     address: resolverWriteAddress ?? undefined,
     abi: PUBLIC_RESOLVER_ABI,
     functionName: "text",
-    args: [preview.agentNode, "agent.policy.uri"],
+    args: [preview.agentNode, "agent_policy_uri"],
     query: { enabled: Boolean(resolverWriteAddress && normalizedOwnerName && normalizedAgentLabel) }
   });
   const oldPolicyUriValue = typeof oldPolicyUri.data === "string" ? oldPolicyUri.data : "";
@@ -392,6 +398,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
     return {
       agentLabel: normalizedAgentLabel,
+      agentName: preview.agentName,
       agentNode: preview.agentNode,
       connectedWallet,
       ensRegistryAddress: props.ensRegistryAddress,
@@ -435,6 +442,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
     return buildRegistrationBatch({
       agentLabel: normalizedAgentLabel,
+      agentName: preview.agentName,
       agentNode: preview.agentNode,
       connectedWallet,
       ensRegistryAddress: props.ensRegistryAddress,
@@ -899,8 +907,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
             <PreviewRow label="Owner node" title={preview.ownerNode} value={normalizedOwnerName || "Unknown"} />
             <PreviewRow label="Agent node" title={preview.agentNode} value={preview.agentName ? `${preview.agentName} (new)` : "Unknown"} />
             <PreviewRow label="Subname action" value={preview.agentName ? `create ${preview.agentName}` : "Waiting for agent label"} />
-            <PreviewRow label="Resolver writes" value={`addr + ${preview.textRecords.length} text records`} />
-            <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${normalizedAgentLabel || "label"}`} />
+            <PreviewRow label="Resolver writes" value={`addr + ${visibleTextRecords.length} text records`} />
+            <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${preview.agentName || "agent ENS"}`} />
             <PreviewRow label="Budget transaction" value="depositGasBudget" />
           </dl>
 
@@ -932,9 +940,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           <div className="register-side-card__header">
             <h2 id="register-records-title"><UiIcon name="document" size={18} /> ENS records that will be written</h2>
           </div>
-          {preview.textRecords.length > 0 ? (
+          {visibleTextRecords.length > 0 ? (
             <div className="record-table" role="table" aria-label="ENS text records">
-              {preview.textRecords.map((record) => (
+              {visibleTextRecords.map((record) => (
                 <div className="record-table__row" role="row" key={record.key}>
                   <span role="cell">{record.key}</span>
                   <strong role="cell">{record.value}</strong>
@@ -942,7 +950,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               ))}
               <div className="record-table__row" role="row">
                 <span role="cell">Total records</span>
-                <strong role="cell">{preview.textRecords.length} text + 1 addr</strong>
+                <strong role="cell">{visibleTextRecords.length} text + 1 addr</strong>
               </div>
             </div>
           ) : (

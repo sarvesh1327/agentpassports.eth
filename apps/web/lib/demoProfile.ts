@@ -174,15 +174,15 @@ function buildAgentTextRecords(input: {
   policyUri: string;
 }): readonly TextRecordPreview[] {
   return [
-    { key: "agent.v", value: "1" },
-    { key: "agent.owner", value: input.ownerName },
-    { key: "agent.kind", value: "personal-assistant" },
-    { key: "agent.capabilities", value: input.capabilities.join(",") },
-    { key: "agent.policy.uri", value: input.policyUri },
-    { key: "agent.policy.hash", value: input.policyHash ?? "Pending policy target" },
-    { key: "agent.executor", value: input.executorAddress ?? "Pending executor" },
-    { key: "agent.status", value: input.agentAddress ? "active" : "draft" },
-    { key: "agent.description", value: `${input.ownerName} onchain assistant` }
+    { key: "agent_v", value: "1" },
+    { key: "agent_owner", value: input.ownerName },
+    { key: "agent_kind", value: "personal-assistant" },
+    { key: "agent_capabilities", value: input.capabilities.join(",") },
+    { key: "agent_policy_uri", value: input.policyUri },
+    { key: "agent_policy_hash", value: input.policyHash ?? "Pending policy target" },
+    { key: "agent_executor", value: input.executorAddress ?? "Pending executor" },
+    { key: "agent_status", value: input.agentAddress ? "active" : "draft" },
+    { key: "agent_description", value: `${input.ownerName} onchain assistant` }
   ];
 }
 

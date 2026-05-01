@@ -46,7 +46,7 @@ export function parseCapabilities(capabilityText: string | undefined, fallback: 
  */
 export function readPassportStatus(statusText: string | undefined, _liveAgentAddress: Hex | null): AgentPassportStatus {
   // AgentEnsExecutor compares the raw ENS text bytes exactly, so the UI must not
-  // infer active status from an address when agent.status is missing or malformed.
+  // infer active status from an address when agent_status is missing or malformed.
   if (statusText === "active" || statusText === "disabled") {
     return statusText;
   }

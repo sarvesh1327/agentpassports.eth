@@ -68,12 +68,12 @@ export function buildKeeperHubGateDecision(input: {
   const fallbackPolicyDigest = readPolicyDigestFromPassport(input.passport);
   const policyDigest = input.policy?.policyDigest ?? fallbackPolicyDigest;
   const policySnapshot = input.policy?.policySnapshot ?? {};
-  const ensStatus = input.passport.textRecords["agent.status"] ?? input.policy?.status ?? "";
+  const ensStatus = input.passport.textRecords["agent_status"] ?? input.policy?.status ?? "";
 
   if (ensStatus === "active" && (!input.policy || input.policy.status === "active")) {
     reasons.push("ENS status is active");
   } else {
-    blockers.push("agent.status must be exactly active");
+    blockers.push("agent_status must be exactly active");
   }
 
   if (input.passport.agentAddress) {
@@ -189,7 +189,7 @@ export function buildRunAttestation(input: {
 }
 
 function readPolicyDigestFromPassport(passport: KeeperHubPassportFacts): Hex {
-  const digest = passport.textRecords["agent.policy.digest"]?.trim().toLowerCase();
+  const digest = passport.textRecords["agent_policy_digest"]?.trim().toLowerCase();
   return /^0x[0-9a-f]{64}$/u.test(digest ?? "") ? digest as Hex : ZERO_BYTES32;
 }
 

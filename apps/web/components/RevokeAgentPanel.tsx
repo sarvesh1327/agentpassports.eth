@@ -16,6 +16,7 @@ import {
   AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
+  LEGACY_AGENT_TEXT_RECORD_KEYS,
   PUBLIC_RESOLVER_ABI,
   ZERO_ADDRESS,
   nonZeroAddress
@@ -182,19 +183,19 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
     try {
       return {
         error: null,
-        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policyDigest: textRecordMap["agent_policy_digest"] as Hex | undefined,
         policySnapshot: policySnapshotFromTextRecords(agentNode, textRecordMap)
       };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : "Waiting for ENS policy snapshot",
-        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policyDigest: textRecordMap["agent_policy_digest"] as Hex | undefined,
         policySnapshot: null
       };
     }
   }, [agentNode, textRecordMap]);
-  const agentStatusText = textRecords.find((record) => record.key === "agent.status")?.value ?? null;
-  const livePolicyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value ?? "";
+  const agentStatusText = textRecords.find((record) => record.key === "agent_status")?.value ?? null;
+  const livePolicyUri = textRecords.find((record) => record.key === "agent_policy_uri")?.value ?? "";
   const livePolicySnapshot = livePolicyState.policySnapshot;
   const livePolicyDigest = livePolicyState.policyDigest ?? null;
   const livePolicyEnabled =
@@ -397,17 +398,24 @@ export function RevokeAgentPanel(props: RevokeAgentPanelProps) {
           encodeFunctionData({
             abi: PUBLIC_RESOLVER_ABI,
             functionName: "setText",
-            args: [writeAgentNode, "agent.status", status]
+            args: [writeAgentNode, "agent_status", status]
+          }),
+          ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) =>
+            encodeFunctionData({
+              abi: PUBLIC_RESOLVER_ABI,
+              functionName: "setText",
+              args: [writeAgentNode, key, ""]
+            })
+          ),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [writeAgentNode, "agent_policy_uri", generatedPolicy.policyUri]
           }),
           encodeFunctionData({
             abi: PUBLIC_RESOLVER_ABI,
             functionName: "setText",
-            args: [writeAgentNode, "agent.policy.uri", generatedPolicy.policyUri]
-          }),
-          encodeFunctionData({
-            abi: PUBLIC_RESOLVER_ABI,
-            functionName: "setText",
-            args: [writeAgentNode, "agent.policy.hash", generatedPolicy.policyHash]
+            args: [writeAgentNode, "agent_policy_hash", generatedPolicy.policyHash]
           })
         ]
       ]

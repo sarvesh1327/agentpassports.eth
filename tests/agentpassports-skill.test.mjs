@@ -255,8 +255,8 @@ test("MCP safety flow skill teaches V2 Uniswap Swapper tool order", async () => 
     "uniswap_quote",
     "uniswap_execute_swap",
     "uniswap_record_swap_proof",
-    "agent.policy.uniswap.allowedTokenIn",
-    "agent.policy.uniswap.maxSlippageBps"
+    "agent_policy_uniswap_allowed_token_in",
+    "agent_policy_uniswap_max_slippage_bps"
   ]) {
     assert.match(source, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented in the skill`);
   }

@@ -226,8 +226,8 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /setOwnerName\(ownerEnsAutofill\)/);
   assert.match(helperSource, /safeNamehash/);
   assert.match(helperSource, /computeSubnode/);
-  assert.match(source, /agent\.policy\.hash/);
-  assert.match(source, /agent\.policy\.digest/);
+  assert.match(source, /agent_policy_hash/);
+  assert.match(source, /agent_policy_digest/);
   assert.match(formSource, /preview\.policyDigest \?\? "Pending"/);
   assert.doesNotMatch(batchSource, /setPolicy/);
   assert.match(batchSource, /depositGasBudget/);
@@ -316,8 +316,8 @@ test("agent passport page exposes route-level ENS profile sections", async () =>
     "Gas Budget",
     "Next nonce",
     "Task history",
-    "agent.policy.hash",
-    "agent.executor"
+    "agent_policy_hash",
+    "agent_executor"
   ];
 
   for (const label of requiredText) {
@@ -494,7 +494,7 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(displaySource, /export function resolveVisibleAgentAddress/);
   assert.match(displaySource, /export function parseCapabilities/);
   assert.match(displaySource, /export function readPassportStatus/);
-  assert.match(contractsSource, /agent\.policy\.uniswap\.chainId/);
+  assert.match(contractsSource, /agent_policy_uniswap_chain_id/);
   assert.match(viewSource, /Uniswap policy/);
   assert.match(viewSource, /Allowed token in/);
   assert.match(viewSource, /Allowed token out/);
@@ -595,18 +595,18 @@ test("revoke page disables policy, updates ENS records, and retries the last pay
   assert.match(panelSource, /policySnapshotFromTextRecords/);
   assert.match(panelSource, /livePolicySnapshot/);
   assert.match(panelSource, /ownerNode/);
-  assert.match(panelSource, /agent\.policy\.digest/);
-  assert.match(source, /agent\.policy\.target/);
-  assert.match(source, /agent\.policy\.selector/);
-  assert.match(source, /agent\.policy\.maxValueWei/);
-  assert.match(source, /agent\.policy\.maxGasReimbursementWei/);
-  assert.match(source, /agent\.policy\.expiresAt/);
+  assert.match(panelSource, /agent_policy_digest/);
+  assert.match(source, /agent_policy_target/);
+  assert.match(source, /agent_policy_selector/);
+  assert.match(source, /agent_policy_max_value_wei/);
+  assert.match(source, /agent_policy_max_gas_reimbursement_wei/);
+  assert.match(source, /agent_policy_expires_at/);
   assert.match(panelSource, /fetch\("\/api\/policy-metadata"/);
   assert.match(panelSource, /unpinOldPolicyMetadata/);
   assert.match(panelSource, /method: "DELETE"/);
   assert.match(panelSource, /oldPolicyUri/);
-  assert.match(panelSource, /agent\.policy\.uri/);
-  assert.match(panelSource, /agent\.policy\.hash/);
+  assert.match(panelSource, /agent_policy_uri/);
+  assert.match(panelSource, /agent_policy_hash/);
   assert.match(panelSource, /buildEnsStatusWriteState/);
   assert.match(panelSource, /requireEnsStatusWrite/);
   assert.doesNotMatch(panelSource, /Promise\.all\(\[/);

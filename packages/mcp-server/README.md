@@ -52,7 +52,7 @@ The MCP server does not read or store agent private keys. Signing happens outsid
 ## Tools
 
 - `resolve_agent_passport`: resolve live ENS node, resolver, signer address, gas budget, nonce, and AgentPassports text records.
-- `list_owner_agents`: read `agentpassports.agents` from an owner ENS name and resolve every listed agent passport.
+- `list_owner_agents`: read `agentpasspports_agents` from an owner ENS name and resolve every listed agent passport.
 - `get_agent_policy`: load policy fields from ENS text records, require `agent.status` is exactly `active`, and verify the computed digest matches `agent.policy.digest`.
 - `check_task_against_policy`: preflight task value, target, selector, and policy digest before any signing.
 - `build_task_intent`: build `TaskLog.recordTask` calldata and unsigned intent JSON from live ENS policy and nonce state.

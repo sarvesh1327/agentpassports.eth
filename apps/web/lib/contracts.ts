@@ -3,6 +3,35 @@ import { ZERO_ADDRESS, type Hex } from "@agentpassport/config";
 export { ZERO_ADDRESS } from "@agentpassport/config";
 
 export const AGENT_TEXT_RECORD_KEYS = [
+  "agent_v",
+  "agent_owner",
+  "agent_kind",
+  "agent_capabilities",
+  "agent_policy_uri",
+  "agent_policy_schema",
+  "agent_policy_digest",
+  "agent_policy_target",
+  "agent_policy_selector",
+  "agent_policy_max_value_wei",
+  "agent_policy_max_gas_reimbursement_wei",
+  "agent_policy_expires_at",
+  "agent_policy_hash",
+  "agent_policy_uniswap_chain_id",
+  "agent_policy_uniswap_allowed_token_in",
+  "agent_policy_uniswap_allowed_token_out",
+  "agent_policy_uniswap_max_input_amount",
+  "agent_policy_uniswap_max_slippage_bps",
+  "agent_policy_uniswap_deadline_seconds",
+  "agent_policy_uniswap_enabled",
+  "agent_policy_uniswap_recipient",
+  "agent_policy_uniswap_router",
+  "agent_policy_uniswap_selector",
+  "agent_executor",
+  "agent_status",
+  "agent_description"
+] as const;
+
+export const LEGACY_AGENT_TEXT_RECORD_KEYS = [
   "agent.v",
   "agent.owner",
   "agent.kind",

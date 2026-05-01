@@ -165,13 +165,13 @@ export function RunTaskDemo(props: RunTaskDemoProps) {
     try {
       return {
         error: null,
-        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policyDigest: textRecordMap["agent_policy_digest"] as Hex | undefined,
         policySnapshot: policySnapshotFromTextRecords(agentNode, textRecordMap)
       };
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : "Waiting for ENS policy snapshot",
-        policyDigest: textRecordMap["agent.policy.digest"] as Hex | undefined,
+        policyDigest: textRecordMap["agent_policy_digest"] as Hex | undefined,
         policySnapshot: null
       };
     }

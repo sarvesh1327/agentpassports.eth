@@ -10,10 +10,10 @@ A user binds an autonomous agent to an ENS subname such as `assistant.alice.eth`
 2. User creates/configures an agent subname, for example `assistant.alice.eth`.
 3. ENS records are written for the agent:
    - `addr(assistant.alice.eth) = 0xAgent`
-   - `text(agent.owner) = alice.eth`
-   - `text(agent.capabilities) = task-log,sponsored-execution`
-   - `text(agent.executor) = 0xAgentEnsExecutor`
-   - `text(agent.status) = active`
+   - `text(agent_owner) = alice.eth`
+   - `text(agent_capabilities) = task-log,sponsored-execution`
+   - `text(agent_executor) = 0xAgentEnsExecutor`
+   - `text(agent_status) = active`
 4. User creates an onchain policy and deposits a gas budget.
 5. Agent signs an EIP-712 intent to record a task onchain.
 6. Relayer submits the transaction.

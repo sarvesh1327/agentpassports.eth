@@ -116,8 +116,8 @@ test("AgentEnsExecutor keeps V1 policy source of truth in ENS instead of executo
   assert.match(source, /struct PolicySnapshot/);
   assert.match(source, /bytes32 policyDigest/);
   assert.match(source, /_readEnsPolicyDigest\(resolver, intent\.agentNode\)/);
-  assert.match(source, /ITextResolverV1\(resolver\)\.text\(agentNode, "agent\.policy\.digest"\)/);
-  assert.match(source, /ITextResolverV1\(resolver\)\.text\(intent\.agentNode, "agent\.status"\)/);
+  assert.match(source, /ITextResolverV1\(resolver\)\.text\(agentNode, "agent_policy_digest"\)/);
+  assert.match(source, /ITextResolverV1\(resolver\)\.text\(intent\.agentNode, "agent_status"\)/);
   assert.match(source, /function hashPolicySnapshot/);
   assert.match(source, /mapping\(bytes32 => uint256\) public gasBudgetWei/);
   assert.match(source, /mapping\(bytes32 => uint256\) public nextNonce/);

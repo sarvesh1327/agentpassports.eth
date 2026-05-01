@@ -8,6 +8,7 @@ import {
   type SwapPolicy
 } from "@agentpassport/config";
 import { normalizeAddressInput } from "./addressInput.ts";
+import { LEGACY_AGENT_TEXT_RECORD_KEYS } from "./contracts.ts";
 import { buildAgentName, safeNamehash, safeSubnode } from "./ensPreview.ts";
 import { hashTaskLogPolicySnapshot } from "./policySnapshot.ts";
 
@@ -431,21 +432,22 @@ function buildAgentTextRecords(input: {
 
   const capabilities = buildCapabilities(input.agentKind);
   const records = [
-    { key: "agent.v", value: "2" },
-    { key: "agent.owner", value: input.normalizedOwnerName },
-    { key: "agent.kind", value: input.agentKind },
-    { key: "agent.capabilities", value: capabilities.join(",") },
-    { key: "agent.policy.schema", value: "agentpassport.policy.v1" },
-    { key: "agent.policy.digest", value: input.policyDigest },
-    { key: "agent.policy.target", value: input.taskLogAddress },
-    { key: "agent.policy.selector", value: taskLogRecordTaskSelector() },
-    { key: "agent.policy.maxValueWei", value: safeBigInt(input.maxValueWei).toString() },
-    { key: "agent.policy.maxGasReimbursementWei", value: safeBigInt(input.maxGasReimbursementWei).toString() },
-    { key: "agent.policy.expiresAt", value: safeBigInt(input.policyExpiresAt).toString() },
-    { key: "agent.policy.hash", value: input.policyHash },
-    { key: "agent.executor", value: input.executorAddress },
-    { key: "agent.status", value: "active" },
-    { key: "agent.description", value: `${input.normalizedOwnerName} ${input.agentKind === "swapper" ? "Uniswap swapper" : "onchain assistant"}` }
+    ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) => ({ key, value: "" })),
+    { key: "agent_v", value: "2" },
+    { key: "agent_owner", value: input.normalizedOwnerName },
+    { key: "agent_kind", value: input.agentKind },
+    { key: "agent_capabilities", value: capabilities.join(",") },
+    { key: "agent_policy_schema", value: "agentpassport.policy.v1" },
+    { key: "agent_policy_digest", value: input.policyDigest },
+    { key: "agent_policy_target", value: input.taskLogAddress },
+    { key: "agent_policy_selector", value: taskLogRecordTaskSelector() },
+    { key: "agent_policy_max_value_wei", value: safeBigInt(input.maxValueWei).toString() },
+    { key: "agent_policy_max_gas_reimbursement_wei", value: safeBigInt(input.maxGasReimbursementWei).toString() },
+    { key: "agent_policy_expires_at", value: safeBigInt(input.policyExpiresAt).toString() },
+    { key: "agent_policy_hash", value: input.policyHash },
+    { key: "agent_executor", value: input.executorAddress },
+    { key: "agent_status", value: "active" },
+    { key: "agent_description", value: `${input.normalizedOwnerName} ${input.agentKind === "swapper" ? "Uniswap swapper" : "onchain assistant"}` }
   ];
 
   // Swapper agents publish human-readable Uniswap constraints as ENS text records.
@@ -455,7 +457,7 @@ function buildAgentTextRecords(input: {
   }
 
   if (input.policyUri.trim()) {
-    records.splice(4, 0, { key: "agent.policy.uri", value: input.policyUri.trim() });
+    records.splice(4, 0, { key: "agent_policy_uri", value: input.policyUri.trim() });
   }
 
   return records;
@@ -472,16 +474,16 @@ function buildCapabilities(agentKind: AgentKind): string[] {
 function buildSwapPolicyTextRecords(input: SwapPolicyInput): { key: string; value: string }[] {
   const policy = buildSwapPolicyMetadata(readSwapPolicyInput(input));
   return [
-    { key: "agent.policy.uniswap.chainId", value: policy.allowedChainId },
-    { key: "agent.policy.uniswap.allowedTokenIn", value: policy.allowedTokensIn.join(",") },
-    { key: "agent.policy.uniswap.allowedTokenOut", value: policy.allowedTokensOut.join(",") },
-    { key: "agent.policy.uniswap.maxInputAmount", value: policy.maxAmountInWei },
-    { key: "agent.policy.uniswap.maxSlippageBps", value: policy.maxSlippageBps },
-    { key: "agent.policy.uniswap.deadlineSeconds", value: policy.deadlineSeconds },
-    { key: "agent.policy.uniswap.enabled", value: String(policy.enabled) },
-    { key: "agent.policy.uniswap.recipient", value: policy.recipient },
-    { key: "agent.policy.uniswap.router", value: policy.router },
-    { key: "agent.policy.uniswap.selector", value: policy.selector }
+    { key: "agent_policy_uniswap_chain_id", value: policy.allowedChainId },
+    { key: "agent_policy_uniswap_allowed_token_in", value: policy.allowedTokensIn.join(",") },
+    { key: "agent_policy_uniswap_allowed_token_out", value: policy.allowedTokensOut.join(",") },
+    { key: "agent_policy_uniswap_max_input_amount", value: policy.maxAmountInWei },
+    { key: "agent_policy_uniswap_max_slippage_bps", value: policy.maxSlippageBps },
+    { key: "agent_policy_uniswap_deadline_seconds", value: policy.deadlineSeconds },
+    { key: "agent_policy_uniswap_enabled", value: String(policy.enabled) },
+    { key: "agent_policy_uniswap_recipient", value: policy.recipient },
+    { key: "agent_policy_uniswap_router", value: policy.router },
+    { key: "agent_policy_uniswap_selector", value: policy.selector }
   ];
 }
 

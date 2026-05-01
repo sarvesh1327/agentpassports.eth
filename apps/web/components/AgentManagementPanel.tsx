@@ -7,6 +7,7 @@ import { encodeFunctionData } from "viem";
 import { usePublicClient, useReadContract, useSendTransaction } from "wagmi";
 import {
   ENS_REGISTRY_ABI,
+  LEGACY_AGENT_TEXT_RECORD_KEYS,
   NAME_WRAPPER_ABI,
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
@@ -103,6 +104,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     () =>
       buildAgentDeletePlan({
         agentLabel: props.initialProfile.agentLabel,
+        agentName: props.initialProfile.agentName,
         agentNode: props.initialProfile.agentNode,
         ensRegistryAddress: props.initialProfile.ensRegistryAddress,
         executorAddress: props.initialProfile.executorAddress,
@@ -161,8 +163,21 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     await sendManagementCall({
       data: encodeFunctionData({
         abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [props.initialProfile.agentNode, "agent.status", nextStatus]
+        functionName: "multicall",
+        args: [[
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [props.initialProfile.agentNode, "agent_status", nextStatus]
+          }),
+          ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) =>
+            encodeFunctionData({
+              abi: PUBLIC_RESOLVER_ABI,
+              functionName: "setText",
+              args: [props.initialProfile.agentNode, key, ""]
+            })
+          )
+        ]]
       }),
       label: nextStatus === "active" ? "Enable policy" : "Disable policy",
       to: props.resolverAddress
@@ -180,13 +195,20 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
           encodeFunctionData({
             abi: PUBLIC_RESOLVER_ABI,
             functionName: "setText",
-            args: [props.initialProfile.agentNode, "agent.policy.uri", generatedPolicy.policyUri]
+            args: [props.initialProfile.agentNode, "agent_policy_uri", generatedPolicy.policyUri]
           }),
           encodeFunctionData({
             abi: PUBLIC_RESOLVER_ABI,
             functionName: "setText",
-            args: [props.initialProfile.agentNode, "agent.policy.hash", generatedPolicy.policyHash]
-          })
+            args: [props.initialProfile.agentNode, "agent_policy_hash", generatedPolicy.policyHash]
+          }),
+          ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) =>
+            encodeFunctionData({
+              abi: PUBLIC_RESOLVER_ABI,
+              functionName: "setText",
+              args: [props.initialProfile.agentNode, key, ""]
+            })
+          )
         ]]
       }),
       label: "Edit policy metadata",

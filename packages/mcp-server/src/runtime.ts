@@ -48,33 +48,35 @@ import {
 import { buildKeeperHubGateDecision, buildKeeperHubWorkflowPayload, buildRunAttestation } from "./keeperhub.ts";
 
 const AGENT_TEXT_KEYS = [
-  "agent.v",
-  "agent.owner",
-  "agent.kind",
-  "agent.capabilities",
-  "agent.executor",
-  "agent.status",
-  "agent.policy.schema",
-  "agent.policy.uri",
-  "agent.policy.digest",
-  "agent.policy.target",
-  "agent.policy.selector",
-  "agent.policy.maxValueWei",
-  "agent.policy.maxGasReimbursementWei",
-  "agent.policy.expiresAt",
-  "agent.policy.uniswap.chainId",
-  "agent.policy.uniswap.allowedTokenIn",
-  "agent.policy.uniswap.allowedTokenOut",
-  "agent.policy.uniswap.maxInputAmount",
-  "agent.policy.uniswap.maxSlippageBps",
-  "agent.policy.uniswap.deadlineSeconds",
-  "agent.policy.uniswap.enabled",
-  "agent.policy.uniswap.recipient",
-  "agent.policy.uniswap.router",
-  "agent.policy.uniswap.selector"
+  "agent_v",
+  "agent_owner",
+  "agent_kind",
+  "agent_capabilities",
+  "agent_executor",
+  "agent_status",
+  "agent_policy_schema",
+  "agent_policy_uri",
+  "agent_policy_digest",
+  "agent_policy_target",
+  "agent_policy_selector",
+  "agent_policy_max_value_wei",
+  "agent_policy_max_gas_reimbursement_wei",
+  "agent_policy_expires_at",
+  "agent_policy_uniswap_chain_id",
+  "agent_policy_uniswap_allowed_token_in",
+  "agent_policy_uniswap_allowed_token_out",
+  "agent_policy_uniswap_max_input_amount",
+  "agent_policy_uniswap_max_slippage_bps",
+  "agent_policy_uniswap_deadline_seconds",
+  "agent_policy_uniswap_enabled",
+  "agent_policy_uniswap_recipient",
+  "agent_policy_uniswap_router",
+  "agent_policy_uniswap_selector"
 ] as const;
 
-const OWNER_INDEX_KEYS = ["agentpassports.v", "agentpassports.agents"] as const;
+const OWNER_INDEX_VERSION_KEY = "agnetpassports_no" as const;
+const OWNER_INDEX_AGENTS_KEY = "agentpasspports_agents" as const;
+const OWNER_INDEX_KEYS = [OWNER_INDEX_VERSION_KEY, OWNER_INDEX_AGENTS_KEY] as const;
 
 const EXECUTOR_READ_ABI = [
   {
@@ -178,16 +180,16 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
 
   async function getPolicy(agentName: string) {
     const passport = await resolvePassport(agentName);
-    assertExactActiveStatus(passport.textRecords["agent.status"] ?? "");
+    assertExactActiveStatus(passport.textRecords["agent_status"] ?? "");
     const policySnapshot = policySnapshotFromTextRecords(passport.agentNode, passport.textRecords);
     const computedDigest = hashPolicySnapshot(passport.agentNode, policySnapshot);
-    assertPolicyDigestMatches(computedDigest, passport.textRecords["agent.policy.digest"] as Hex);
-    return { agentName: passport.agentName, agentNode: passport.agentNode, policyDigest: computedDigest, policySnapshot: serializePolicySnapshot(policySnapshot), policyUri: passport.textRecords["agent.policy.uri"] ?? "", status: passport.textRecords["agent.status"] ?? "" };
+    assertPolicyDigestMatches(computedDigest, passport.textRecords["agent_policy_digest"] as Hex);
+    return { agentName: passport.agentName, agentNode: passport.agentNode, policyDigest: computedDigest, policySnapshot: serializePolicySnapshot(policySnapshot), policyUri: passport.textRecords["agent_policy_uri"] ?? "", status: passport.textRecords["agent_status"] ?? "" };
   }
 
   async function getSwapPolicy(agentName: string) {
     const passport = await resolvePassport(agentName);
-    assertExactActiveStatus(passport.textRecords["agent.status"] ?? "");
+    assertExactActiveStatus(passport.textRecords["agent_status"] ?? "");
     if (!passport.agentAddress) throw new Error("Agent ENS addr() is required for Uniswap API calls");
     return { agentAddress: passport.agentAddress, agentName: passport.agentName, agentNode: passport.agentNode, swapPolicy: swapPolicyFromTextRecords(passport.textRecords) };
   }
@@ -279,9 +281,9 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       const ownerNode = namehashEnsName(ownerName);
       const resolverAddress = await getResolverAddress({ client, ensRegistryAddress: config.ensRegistryAddress, node: ownerNode });
       const records = await getAgentTextRecords({ agentNode: ownerNode, client, keys: OWNER_INDEX_KEYS, resolverAddress });
-      const labels = parseOwnerAgentLabels(records["agentpassports.agents"] ?? "");
-      const agents = await Promise.all(labels.map((label) => resolvePassport(`${label}.${ownerName}`)));
-      return { agents, ownerName, ownerNode, resolverAddress, version: records["agentpassports.v"] ?? "" };
+      const agentNames = parseOwnerAgentLabels(records[OWNER_INDEX_AGENTS_KEY] ?? "");
+      const agents = await Promise.all(agentNames.map((agentName) => resolvePassport(agentName.includes(".") ? agentName : `${agentName}.${ownerName}`)));
+      return { agents, ownerName, ownerNode, resolverAddress, version: records[OWNER_INDEX_VERSION_KEY] ?? "" };
     },
     get_agent_policy: (args: ToolArgs<"get_agent_policy">) => getPolicy(args.agentName),
     check_task_against_policy: checkTaskAgainstPolicy,

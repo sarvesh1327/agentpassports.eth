@@ -8,7 +8,7 @@ const ACTIVE_PASSPORT = {
   gasBudgetWei: "10000000000000000",
   resolverAddress: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   textRecords: {
-    "agent.status": "active"
+    "agent_status": "active"
   }
 };
 
@@ -110,14 +110,14 @@ test("KeeperHub gate decision blocks deterministic ENS and policy failures", asy
   const { buildKeeperHubGateDecision } = await import("../packages/mcp-server/src/keeperhub.ts");
 
   const inactive = buildKeeperHubGateDecision({
-    passport: { ...ACTIVE_PASSPORT, textRecords: { "agent.status": "disabled" } },
+    passport: { ...ACTIVE_PASSPORT, textRecords: { "agent_status": "disabled" } },
     policy: { ...POLICY, status: "disabled" },
     taskCheck: TASK_CHECK_ALLOWED,
     trustThreshold: 70
   });
   assert.equal(inactive.allowed, false);
   assert.equal(inactive.decision, "blocked");
-  assert.match(inactive.blockers.join("\n"), /agent.status must be exactly active/);
+  assert.match(inactive.blockers.join("\n"), /agent_status must be exactly active/);
 
   const missingSigner = buildKeeperHubGateDecision({
     passport: { ...ACTIVE_PASSPORT, agentAddress: null },
@@ -144,15 +144,15 @@ test("KeeperHub gate decision converts controlled policy errors into blocked dec
   const { buildKeeperHubGateDecision } = await import("../packages/mcp-server/src/keeperhub.ts");
 
   const decision = buildKeeperHubGateDecision({
-    passport: { ...ACTIVE_PASSPORT, textRecords: { "agent.status": "disabled", "agent.policy.digest": POLICY.policyDigest } },
-    policyError: new Error("agent.status must be exactly active"),
+    passport: { ...ACTIVE_PASSPORT, textRecords: { "agent_status": "disabled", "agent_policy_digest": POLICY.policyDigest } },
+    policyError: new Error("agent_status must be exactly active"),
     trustThreshold: 70
   });
 
   assert.equal(decision.allowed, false);
   assert.equal(decision.decision, "blocked");
   assert.equal(decision.policyDigest, POLICY.policyDigest);
-  assert.match(decision.blockers.join("\n"), /agent.status must be exactly active/);
+  assert.match(decision.blockers.join("\n"), /agent_status must be exactly active/);
   assert.match(decision.blockers.join("\n"), /policy preflight failed/);
 });
 test("KeeperHub workflow payload wraps unsigned intent data without private key material", async () => {

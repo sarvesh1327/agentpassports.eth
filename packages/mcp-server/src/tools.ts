@@ -88,7 +88,7 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
   {
     name: "list_owner_agents",
     description:
-      "Read the owner ENS index records agentpassports.v and agentpassports.agents, derive each label.ownerName agent ENS name, and resolve their current passports. Use this to discover all agents managed under one owner ENS name.",
+      "Read the owner ENS index records agnetpassports_no and agentpasspports_agents, then resolve every listed full agent ENS name. Use this to discover all agents managed under one owner ENS name.",
     inputShape: { ownerName: ensName }
   },
   {

@@ -62,7 +62,7 @@ export function registerAgentPassportResources(server: McpServer, handlers: Agen
     "owner_agents",
     new ResourceTemplate("agentpassport://owner/{ownerName}/agents", { list: undefined }),
     {
-      description: "Owner ENS multi-agent index derived from agentpassports.agents and resolved against live ENS.",
+      description: "Owner ENS multi-agent index derived from agentpasspports_agents and resolved against live ENS.",
       mimeType: "application/json",
       title: "Owner AgentPassports"
     },

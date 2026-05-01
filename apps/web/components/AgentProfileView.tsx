@@ -11,6 +11,7 @@ import {
   AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
+  LEGACY_AGENT_TEXT_RECORD_KEYS,
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
 } from "../lib/contracts";
@@ -94,17 +95,17 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   });
   const liveGasBudget = (gasBudgetRead.data as bigint | undefined) ?? safeBigInt(initialProfile.gasBudgetWei);
   const liveNextNonce = (nextNonceRead.data as bigint | undefined)?.toString() ?? initialProfile.nextNonce ?? "Unknown";
-  const capabilityText = textRecords.find((record) => record.key === "agent.capabilities")?.value;
+  const capabilityText = textRecords.find((record) => record.key === "agent_capabilities")?.value;
   const capabilities = parseCapabilities(capabilityText, initialProfile.capabilities);
-  const statusText = textRecords.find((record) => record.key === "agent.status")?.value;
-  const policyUri = textRecords.find((record) => record.key === "agent.policy.uri")?.value || initialProfile.policyUri;
-  const policyHash = textRecords.find((record) => record.key === "agent.policy.hash")?.value || initialProfile.policyHash;
-  const policyDigest = textRecords.find((record) => record.key === "agent.policy.digest")?.value || null;
-  const policyTarget = textRecords.find((record) => record.key === "agent.policy.target")?.value || null;
-  const policySelector = textRecords.find((record) => record.key === "agent.policy.selector")?.value || "";
-  const maxValueWei = textRecords.find((record) => record.key === "agent.policy.maxValueWei")?.value || "";
-  const maxGasReimbursementWei = textRecords.find((record) => record.key === "agent.policy.maxGasReimbursementWei")?.value || "";
-  const policyExpiresAt = textRecords.find((record) => record.key === "agent.policy.expiresAt")?.value || "";
+  const statusText = textRecords.find((record) => record.key === "agent_status")?.value;
+  const policyUri = textRecords.find((record) => record.key === "agent_policy_uri")?.value || initialProfile.policyUri;
+  const policyHash = textRecords.find((record) => record.key === "agent_policy_hash")?.value || initialProfile.policyHash;
+  const policyDigest = textRecords.find((record) => record.key === "agent_policy_digest")?.value || null;
+  const policyTarget = textRecords.find((record) => record.key === "agent_policy_target")?.value || null;
+  const policySelector = textRecords.find((record) => record.key === "agent_policy_selector")?.value || "";
+  const maxValueWei = textRecords.find((record) => record.key === "agent_policy_max_value_wei")?.value || "";
+  const maxGasReimbursementWei = textRecords.find((record) => record.key === "agent_policy_max_gas_reimbursement_wei")?.value || "";
+  const policyExpiresAt = textRecords.find((record) => record.key === "agent_policy_expires_at")?.value || "";
   const uniswapPolicy = readUniswapPolicyDisplay(textRecords);
   const latestSwapTask = capabilities.includes("uniswap-swap") ? taskHistory[0] ?? null : null;
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
@@ -156,8 +157,21 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     await sendAgentManagementCall({
       data: encodeFunctionData({
         abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [initialProfile.agentNode, "agent.status", nextStatus]
+        functionName: "multicall",
+        args: [[
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [initialProfile.agentNode, "agent_status", nextStatus]
+          }),
+          ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) =>
+            encodeFunctionData({
+              abi: PUBLIC_RESOLVER_ABI,
+              functionName: "setText",
+              args: [initialProfile.agentNode, key, ""]
+            })
+          )
+        ]]
       }),
       label: nextStatus === "active" ? "Enable agent" : "Disable agent",
       to: resolverAddress
@@ -382,9 +396,9 @@ function LiveEnsPassportPanel(props: {
     { label: "addr", title: props.agentAddress ?? undefined, value: props.agentAddress ? shortenHex(props.agentAddress) : "Unknown" },
     { label: "resolver", title: props.resolverAddress ?? undefined, value: props.resolverAddress ? shortenHex(props.resolverAddress) : "Unknown" },
     { label: "owner", title: props.ownerNode, value: props.ownerName },
-    { label: "agent.status", value: props.status },
-    { label: "agent.policy.uri", title: props.policyUri, value: props.policyUri || "Unknown" },
-    { label: "agent.policy.digest", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash as Hex) : "Unknown" }
+    { label: "agent_status", value: props.status },
+    { label: "agent_policy_uri", title: props.policyUri, value: props.policyUri || "Unknown" },
+    { label: "agent_policy_digest", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash as Hex) : "Unknown" }
   ];
 
   return (
@@ -395,7 +409,7 @@ function LiveEnsPassportPanel(props: {
           <div key={row.label}>
             <dt>{row.label}</dt>
             <dd title={row.title}>
-              {row.label === "agent.status" ? <span className="pill pill--success">{row.value}</span> : row.value}
+              {row.label === "agent_status" ? <span className="pill pill--success">{row.value}</span> : row.value}
             </dd>
           </div>
         ))}
@@ -620,16 +634,16 @@ function readUniswapPolicyDisplay(records: readonly { key: string; value: string
   };
 
   return {
-    allowedChainId: read("agent.policy.uniswap.chainId"),
-    allowedTokenIn: read("agent.policy.uniswap.allowedTokenIn"),
-    allowedTokenOut: read("agent.policy.uniswap.allowedTokenOut"),
-    deadlineSeconds: read("agent.policy.uniswap.deadlineSeconds"),
-    enabled: read("agent.policy.uniswap.enabled"),
-    maxInputAmount: read("agent.policy.uniswap.maxInputAmount"),
-    maxSlippageBps: read("agent.policy.uniswap.maxSlippageBps"),
-    recipient: read("agent.policy.uniswap.recipient"),
-    router: read("agent.policy.uniswap.router"),
-    selector: read("agent.policy.uniswap.selector")
+    allowedChainId: read("agent_policy_uniswap_chain_id"),
+    allowedTokenIn: read("agent_policy_uniswap_allowed_token_in"),
+    allowedTokenOut: read("agent_policy_uniswap_allowed_token_out"),
+    deadlineSeconds: read("agent_policy_uniswap_deadline_seconds"),
+    enabled: read("agent_policy_uniswap_enabled"),
+    maxInputAmount: read("agent_policy_uniswap_max_input_amount"),
+    maxSlippageBps: read("agent_policy_uniswap_max_slippage_bps"),
+    recipient: read("agent_policy_uniswap_recipient"),
+    router: read("agent_policy_uniswap_router"),
+    selector: read("agent_policy_uniswap_selector")
   };
 }
 

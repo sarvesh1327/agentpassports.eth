@@ -104,7 +104,7 @@ contract AgentEnsExecutorTest is TestBase {
             _intent(policy, callData, 0, block.timestamp + 1 hours);
         bytes memory signature = _sign(agentKey, intent);
 
-        resolver.setText(agentNode, "agent.policy.digest", _hex32(bytes32(uint256(0x1234))));
+        resolver.setText(agentNode, "agent_policy_digest", _hex32(bytes32(uint256(0x1234))));
 
         vm.expectRevert(AgentEnsExecutor.PolicyDigestMismatch.selector);
         executor.execute(intent, policy, callData, signature);
@@ -115,7 +115,7 @@ contract AgentEnsExecutorTest is TestBase {
         AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveTaskLogPolicy(0, 0.01 ether);
         vm.prank(owner);
         executor.depositGasBudget{ value: 1 ether }(agentNode);
-        resolver.setText(agentNode, "agent.status", "disabled");
+        resolver.setText(agentNode, "agent_status", "disabled");
 
         bytes memory callData = _taskCallData("ipfs://demo");
         AgentEnsExecutor.TaskIntent memory intent =
@@ -351,9 +351,9 @@ contract AgentEnsExecutorTest is TestBase {
 
     /// @notice Writes the policy digest and active status exactly as V1 ENS records will.
     function _publishPolicy(AgentEnsExecutor.PolicySnapshot memory policy) private {
-        resolver.setText(agentNode, "agent.status", "active");
+        resolver.setText(agentNode, "agent_status", "active");
         resolver.setText(
-            agentNode, "agent.policy.digest", _hex32(executor.hashPolicySnapshot(agentNode, policy))
+            agentNode, "agent_policy_digest", _hex32(executor.hashPolicySnapshot(agentNode, policy))
         );
     }
 

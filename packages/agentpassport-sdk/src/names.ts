@@ -25,13 +25,13 @@ export function parentEnsName(agentName: string): string {
 }
 
 /**
- * Parses the owner's comma-separated `agentpassports.agents` ENS text record into
- * deterministic labels. Empty labels are ignored so owners can keep readable
+ * Parses the owner's comma-separated `agentpasspports_agents` ENS text record into
+ * deterministic full agent ENS names. Empty entries are ignored so owners can keep readable
  * spacing without breaking MCP list tools.
  */
 export function parseOwnerAgentLabels(value: string): string[] {
   return value
     .split(",")
-    .map((label) => label.trim().toLowerCase())
+    .map((name) => name.trim().toLowerCase())
     .filter(Boolean);
 }

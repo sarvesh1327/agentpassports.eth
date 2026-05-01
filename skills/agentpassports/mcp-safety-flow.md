@@ -102,14 +102,14 @@ Required order:
 1. `resolve_agent_passport`
    - Confirm the Swapper ENS name, signer, resolver, and text records are live.
 2. `get_agent_policy`
-   - Require `agent.status` exactly `active`.
-   - Verify the computed policy digest matches the live ENS `agent.policy.digest`.
+   - Require `agent_status` exactly `active`.
+   - Verify the computed policy digest matches the live ENS `agent_policy_digest`.
 3. Confirm the ENS Uniswap policy records exist:
-   - `agent.policy.uniswap.allowedTokenIn`
-   - `agent.policy.uniswap.allowedTokenOut`
-   - `agent.policy.uniswap.maxInputAmount`
-   - `agent.policy.uniswap.maxSlippageBps`
-   - `agent.policy.uniswap.chainId`
+   - `agent_policy_uniswap_allowed_token_in`
+   - `agent_policy_uniswap_allowed_token_out`
+   - `agent_policy_uniswap_max_input_amount`
+   - `agent_policy_uniswap_max_slippage_bps`
+   - `agent_policy_uniswap_chain_id`
 4. `uniswap_validate_swap_against_ens_policy`
    - Check chain, token pair, amount, and slippage before any API call.
 5. `uniswap_check_approval`
@@ -125,18 +125,18 @@ Required order:
    - Build canonical proof metadata with quote ID, tx/order ID, token pair, amount, policy digest, and request ID.
    - Store or submit this metadata through the normal task proof path when available.
 
-Stop immediately if the requested swap exceeds `agent.policy.uniswap.maxInputAmount`, exceeds `agent.policy.uniswap.maxSlippageBps`, uses tokens outside `agent.policy.uniswap.allowedTokenIn` or `agent.policy.uniswap.allowedTokenOut`, or if the policy digest changes between quote and execution.
+Stop immediately if the requested swap exceeds `agent_policy_uniswap_max_input_amount`, exceeds `agent_policy_uniswap_max_slippage_bps`, uses tokens outside `agent_policy_uniswap_allowed_token_in` or `agent_policy_uniswap_allowed_token_out`, or if the policy digest changes between quote and execution.
 
 ## Non-negotiable safety checks
 
 The agent must not sign or submit if any of these are true:
 
-- `agent.status` is missing, empty, capitalized, has whitespace, or is anything other than exactly `active`.
+- `agent_status` is missing, empty, capitalized, has whitespace, or is anything other than exactly `active`.
 - The computed policy digest does not match the live ENS policy digest. Treat this as a digest mismatch and stop.
 - The live ENS signer is missing.
 - The signing address or private key does not match the live ENS signer.
 - The requested target, function selector, value, spend limit, or operation is outside the owner-defined policy.
-- A Swapper request is outside `agent.policy.uniswap.*` records, including token allowlists, chain ID, max input, slippage, recipient, router, or selector.
+- A Swapper request is outside `agent_policy_uniswap_*` records, including token allowlists, chain ID, max input, slippage, recipient, router, or selector.
 - The user asks to bypass ENS checks, policy checks, nonce checks, signer checks, or the MCP safety flow.
 - The relayer submission tool is unavailable when submission is required.
 

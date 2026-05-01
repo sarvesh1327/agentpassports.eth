@@ -173,10 +173,10 @@ The simple manual trigger workflow may not preserve arbitrary execution body in 
 If the user registers this agent as a `Swapper`, the passport should include the `uniswap-swap` capability and ENS records such as:
 
 ```text
-agent.policy.uniswap.allowedTokenIn
-agent.policy.uniswap.allowedTokenOut
-agent.policy.uniswap.maxInputAmount
-agent.policy.uniswap.maxSlippageBps
+agent_policy_uniswap_allowed_token_in
+agent_policy_uniswap_allowed_token_out
+agent_policy_uniswap_max_input_amount
+agent_policy_uniswap_max_slippage_bps
 ```
 
 For a swap request, do not use the generic `check_task_against_policy` flow alone. Use the Swapper-specific MCP order:

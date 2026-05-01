@@ -6,6 +6,8 @@ import {
   OWNER_INDEX_AGENTS_KEY,
   OWNER_INDEX_VERSION,
   OWNER_INDEX_VERSION_KEY,
+  LEGACY_OWNER_INDEX_AGENTS_KEY,
+  LEGACY_OWNER_INDEX_VERSION_KEY,
   addOwnerAgentLabel,
   serializeOwnerAgentIndex
 } from "./ownerIndex.ts";
@@ -24,6 +26,7 @@ export type RegistrationBatch = {
 
 export type RegistrationBatchInput = {
   agentLabel: string;
+  agentName: string;
   agentNode: Hex;
   connectedWallet: Hex;
   ensRegistryAddress?: Hex | null;
@@ -139,13 +142,13 @@ function buildResolverMulticall(input: RegistrationBatchInput): RegistrationBatc
  */
 function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCall | null {
   // The owner dashboard is ENS-index backed, so registration must not succeed without
-  // writing agentpassports.v and agentpassports.agents on the owner resolver.
+  // writing the owner index keys on the owner resolver.
   const ownerResolverAddress = requireAddress(
     input.ownerResolverAddress,
     "Owner resolver address is required for owner dashboard index updates"
   );
 
-  const nextLabels = addOwnerAgentLabel(input.ownerAgentLabels ?? [], input.agentLabel);
+  const nextLabels = addOwnerAgentLabel(input.ownerAgentLabels ?? [], input.agentName);
   const resolverCalls = [
     encodeFunctionData({
       abi: PUBLIC_RESOLVER_ABI,
@@ -156,6 +159,16 @@ function buildOwnerIndexCall(input: RegistrationBatchInput): RegistrationBatchCa
       abi: PUBLIC_RESOLVER_ABI,
       functionName: "setText",
       args: [input.ownerNode, OWNER_INDEX_AGENTS_KEY, serializeOwnerAgentIndex(nextLabels)]
+    }),
+    encodeFunctionData({
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "setText",
+      args: [input.ownerNode, LEGACY_OWNER_INDEX_VERSION_KEY, ""]
+    }),
+    encodeFunctionData({
+      abi: PUBLIC_RESOLVER_ABI,
+      functionName: "setText",
+      args: [input.ownerNode, LEGACY_OWNER_INDEX_AGENTS_KEY, ""]
     })
   ];
 

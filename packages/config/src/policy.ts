@@ -86,23 +86,23 @@ export function hashPolicySnapshot(agentNode: Hex, policy: PolicySnapshot): Hex 
  * Reads the V1 executable policy snapshot from ENS text records and checks its digest.
  */
 export function policySnapshotFromTextRecords(agentNode: Hex, records: Record<string, string>): PolicySnapshot {
-  const status = records["agent.status"] ?? "";
+  const status = records["agent_status"] ?? "";
   if (status !== "active") {
-    throw new Error('agent.status must be exactly "active"');
+    throw new Error('agent_status must be exactly "active"');
   }
 
   const policySnapshot = normalizePolicySnapshot({
     enabled: true,
-    expiresAt: readUnsignedText(records, "agent.policy.expiresAt"),
-    maxGasReimbursementWei: readUnsignedText(records, "agent.policy.maxGasReimbursementWei"),
-    maxValueWei: readUnsignedText(records, "agent.policy.maxValueWei"),
-    selector: readRequiredText(records, "agent.policy.selector") as Hex,
-    target: readRequiredText(records, "agent.policy.target") as Hex
+    expiresAt: readUnsignedText(records, "agent_policy_expires_at"),
+    maxGasReimbursementWei: readUnsignedText(records, "agent_policy_max_gas_reimbursement_wei"),
+    maxValueWei: readUnsignedText(records, "agent_policy_max_value_wei"),
+    selector: readRequiredText(records, "agent_policy_selector") as Hex,
+    target: readRequiredText(records, "agent_policy_target") as Hex
   });
-  const expectedDigest = normalizeBytes32(readRequiredText(records, "agent.policy.digest") as Hex);
+  const expectedDigest = normalizeBytes32(readRequiredText(records, "agent_policy_digest") as Hex);
   const actualDigest = hashPolicySnapshot(agentNode, policySnapshot);
   if (actualDigest !== expectedDigest) {
-    throw new Error("agent.policy.digest does not match agent policy text records");
+    throw new Error("agent_policy_digest does not match agent policy text records");
   }
 
   return policySnapshot;
@@ -176,16 +176,16 @@ export function swapPolicyToExecutableSnapshot(input: {
  */
 export function swapPolicyFromTextRecords(records: Record<string, string>): SwapPolicy {
   return normalizeSwapPolicy({
-    allowedChainId: readUnsignedText(records, "agent.policy.uniswap.chainId"),
-    allowedTokensIn: readAddressListText(records, "agent.policy.uniswap.allowedTokenIn"),
-    allowedTokensOut: readAddressListText(records, "agent.policy.uniswap.allowedTokenOut"),
-    deadlineSeconds: readUnsignedText(records, "agent.policy.uniswap.deadlineSeconds"),
-    enabled: (records["agent.policy.uniswap.enabled"] ?? "true").trim().toLowerCase() !== "false",
-    maxAmountInWei: readUnsignedText(records, "agent.policy.uniswap.maxInputAmount"),
-    maxSlippageBps: readUnsignedText(records, "agent.policy.uniswap.maxSlippageBps"),
-    recipient: readRequiredText(records, "agent.policy.uniswap.recipient") as Hex,
-    router: readRequiredText(records, "agent.policy.uniswap.router") as Hex,
-    selector: readRequiredText(records, "agent.policy.uniswap.selector") as Hex
+    allowedChainId: readUnsignedText(records, "agent_policy_uniswap_chain_id"),
+    allowedTokensIn: readAddressListText(records, "agent_policy_uniswap_allowed_token_in"),
+    allowedTokensOut: readAddressListText(records, "agent_policy_uniswap_allowed_token_out"),
+    deadlineSeconds: readUnsignedText(records, "agent_policy_uniswap_deadline_seconds"),
+    enabled: (records["agent_policy_uniswap_enabled"] ?? "true").trim().toLowerCase() !== "false",
+    maxAmountInWei: readUnsignedText(records, "agent_policy_uniswap_max_input_amount"),
+    maxSlippageBps: readUnsignedText(records, "agent_policy_uniswap_max_slippage_bps"),
+    recipient: readRequiredText(records, "agent_policy_uniswap_recipient") as Hex,
+    router: readRequiredText(records, "agent_policy_uniswap_router") as Hex,
+    selector: readRequiredText(records, "agent_policy_uniswap_selector") as Hex
   });
 }
 

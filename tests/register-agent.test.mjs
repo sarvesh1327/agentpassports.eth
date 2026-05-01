@@ -52,12 +52,20 @@ test("register preview derives ENS nodes, policy hash, and text records from for
   assert.equal(preview.gasBudgetWei, "10000000000000000");
   assert.equal(preview.policyHash?.length, 66);
   assert.deepEqual(
-    preview.textRecords.find((record) => record.key === "agent.status"),
-    { key: "agent.status", value: "active" }
+    preview.textRecords.find((record) => record.key === "agent_status"),
+    { key: "agent_status", value: "active" }
   );
   assert.deepEqual(
-    preview.textRecords.find((record) => record.key === "agent.executor"),
-    { key: "agent.executor", value: EXECUTOR_ADDRESS }
+    preview.textRecords.find((record) => record.key === "agent.status"),
+    { key: "agent.status", value: "" }
+  );
+  assert.deepEqual(
+    preview.textRecords.find((record) => record.key === "agent.policy.digest"),
+    { key: "agent.policy.digest", value: "" }
+  );
+  assert.deepEqual(
+    preview.textRecords.find((record) => record.key === "agent_executor"),
+    { key: "agent_executor", value: EXECUTOR_ADDRESS }
   );
 });
 
@@ -91,18 +99,18 @@ test("register preview publishes Swapper kind, capability, and Uniswap policy te
   });
   const records = Object.fromEntries(preview.textRecords.map((record) => [record.key, record.value]));
 
-  assert.equal(records["agent.kind"], "swapper");
-  assert.equal(records["agent.capabilities"], "task-log,sponsored-execution,uniswap-swap");
-  assert.equal(records["agent.policy.uniswap.chainId"], "1");
-  assert.equal(records["agent.policy.uniswap.allowedTokenIn"], "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
-  assert.equal(records["agent.policy.uniswap.allowedTokenOut"], "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-  assert.equal(records["agent.policy.uniswap.maxInputAmount"], "10000000");
-  assert.equal(records["agent.policy.uniswap.maxSlippageBps"], "50");
-  assert.equal(records["agent.policy.uniswap.deadlineSeconds"], "60");
-  assert.equal(records["agent.policy.uniswap.enabled"], "true");
-  assert.equal(records["agent.policy.uniswap.recipient"], "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-  assert.equal(records["agent.policy.uniswap.router"], "0x1111111111111111111111111111111111111111");
-  assert.equal(records["agent.policy.uniswap.selector"], "0x12aa3caf");
+  assert.equal(records["agent_kind"], "swapper");
+  assert.equal(records["agent_capabilities"], "task-log,sponsored-execution,uniswap-swap");
+  assert.equal(records["agent_policy_uniswap_chain_id"], "1");
+  assert.equal(records["agent_policy_uniswap_allowed_token_in"], "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+  assert.equal(records["agent_policy_uniswap_allowed_token_out"], "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+  assert.equal(records["agent_policy_uniswap_max_input_amount"], "10000000");
+  assert.equal(records["agent_policy_uniswap_max_slippage_bps"], "50");
+  assert.equal(records["agent_policy_uniswap_deadline_seconds"], "60");
+  assert.equal(records["agent_policy_uniswap_enabled"], "true");
+  assert.equal(records["agent_policy_uniswap_recipient"], "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  assert.equal(records["agent_policy_uniswap_router"], "0x1111111111111111111111111111111111111111");
+  assert.equal(records["agent_policy_uniswap_selector"], "0x12aa3caf");
 });
 
 test("register preview includes only generated policy URIs in ENS records", async () => {
@@ -133,10 +141,10 @@ test("register preview includes only generated policy URIs in ENS records", asyn
     taskLogAddress: TASK_LOG_ADDRESS
   });
 
-  assert.equal(withoutGeneratedUri.textRecords.some((record) => record.key === "agent.policy.uri"), false);
+  assert.equal(withoutGeneratedUri.textRecords.some((record) => record.key === "agent_policy_uri"), false);
   assert.deepEqual(
-    withGeneratedUri.textRecords.find((record) => record.key === "agent.policy.uri"),
-    { key: "agent.policy.uri", value: "ipfs://bafyagentpolicy" }
+    withGeneratedUri.textRecords.find((record) => record.key === "agent_policy_uri"),
+    { key: "agent_policy_uri", value: "ipfs://bafyagentpolicy" }
   );
 });
 
@@ -221,11 +229,11 @@ test("register preview emits only concrete ENS text records for complete input",
   assert.equal(preview.textRecords.length > 0, true);
   assert.equal(preview.textRecords.some((record) => record.value.startsWith("Pending")), false);
   assert.deepEqual(
-    preview.textRecords.find((record) => record.key === "agent.policy.uri"),
-    { key: "agent.policy.uri", value: "ipfs://agentpassports-policy" }
+    preview.textRecords.find((record) => record.key === "agent_policy_uri"),
+    { key: "agent_policy_uri", value: "ipfs://agentpassports-policy" }
   );
   assert.match(
-    preview.textRecords.find((record) => record.key === "agent.policy.digest")?.value ?? "",
+    preview.textRecords.find((record) => record.key === "agent_policy_digest")?.value ?? "",
     /^0x[0-9a-f]{64}$/u
   );
 });
@@ -261,7 +269,7 @@ test("register draft allows blank metadata URI when every required field is read
     taskLogAddress: TASK_LOG_ADDRESS
   });
 
-  assert.equal(preview.textRecords.some((record) => record.key === "agent.policy.uri"), false);
+  assert.equal(preview.textRecords.some((record) => record.key === "agent_policy_uri"), false);
   assert.equal(status.canSubmit, true);
   assert.equal(status.blocker, null);
 });

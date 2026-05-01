@@ -30,13 +30,13 @@ const TASK_INTENT_TYPES = [
 ] as const;
 
 export const POLICY_SNAPSHOT_TEXT_KEYS = [
-  "agent.status",
-  "agent.policy.digest",
-  "agent.policy.target",
-  "agent.policy.selector",
-  "agent.policy.maxValueWei",
-  "agent.policy.maxGasReimbursementWei",
-  "agent.policy.expiresAt"
+  "agent_status",
+  "agent_policy_digest",
+  "agent_policy_target",
+  "agent_policy_selector",
+  "agent_policy_max_value_wei",
+  "agent_policy_max_gas_reimbursement_wei",
+  "agent_policy_expires_at"
 ] as const;
 
 /**

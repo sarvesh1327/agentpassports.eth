@@ -10,6 +10,7 @@ import {
   AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
   ENS_REGISTRY_ABI,
+  LEGACY_AGENT_TEXT_RECORD_KEYS,
   PUBLIC_RESOLVER_ABI,
   nonZeroAddress
 } from "../lib/contracts";
@@ -47,7 +48,7 @@ type AgentDashboardSnapshot = {
 };
 
 /**
- * Renders the live owner ENS dashboard backed by agentpassports.v and agentpassports.agents.
+ * Renders the live owner ENS dashboard backed by agnetpassports_no and agentpasspports_agents.
  */
 export function OwnerDashboardView(props: OwnerDashboardViewProps) {
   const ownerResolver = useReadContract({
@@ -150,7 +151,7 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
       ) : (
         <section className="empty-state">
           <strong>No agents indexed</strong>
-          <span>Add an ENS subname from the registration flow to populate agentpassports.agents.</span>
+          <span>Add an ENS subname from the registration flow to populate {OWNER_INDEX_AGENTS_KEY}.</span>
         </section>
       )}
 
@@ -234,10 +235,10 @@ function OwnerDashboardAgentCard(props: {
   });
   const textRecords = mapTextRecords(textRecordReads.data as TextReadResult[] | undefined);
   const resolvedAgentAddress = nonZeroAddress(agentAddress.data as Hex | undefined);
-  const status = readPassportStatus(textRecords.get("agent.status") ?? "", resolvedAgentAddress);
-  const capabilities = parseCapabilities(textRecords.get("agent.capabilities") ?? "", []);
-  const policyUri = textRecords.get("agent.policy.uri") ?? "";
-  const policyHash = textRecords.get("agent.policy.hash") ?? "";
+  const status = readPassportStatus(textRecords.get("agent_status") ?? "", resolvedAgentAddress);
+  const capabilities = parseCapabilities(textRecords.get("agent_capabilities") ?? "", []);
+  const policyUri = textRecords.get("agent_policy_uri") ?? "";
+  const policyHash = textRecords.get("agent_policy_hash") ?? "";
   const gasBudgetWei = typeof gasBudget.data === "bigint" ? gasBudget.data : 0n;
 
   useEffect(() => {
@@ -279,8 +280,21 @@ function OwnerDashboardAgentCard(props: {
     const hash = await sendTransactionAsync({
       data: encodeFunctionData({
         abi: PUBLIC_RESOLVER_ABI,
-        functionName: "setText",
-        args: [agentNode, "agent.status", nextStatus]
+        functionName: "multicall",
+        args: [[
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [agentNode, "agent_status", nextStatus]
+          }),
+          ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) =>
+            encodeFunctionData({
+              abi: PUBLIC_RESOLVER_ABI,
+              functionName: "setText",
+              args: [agentNode, key, ""]
+            })
+          )
+        ]]
       }),
       to: resolverAddress
     });

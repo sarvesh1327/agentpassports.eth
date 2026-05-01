@@ -283,13 +283,13 @@ async function readEnsPolicy(
       address: resolverAddress,
       abi: TEXT_RESOLVER_ABI,
       functionName: "text",
-      args: [agentNode, "agent.status"]
+      args: [agentNode, "agent_status"]
     }),
     publicClient.readContract({
       address: resolverAddress,
       abi: TEXT_RESOLVER_ABI,
       functionName: "text",
-      args: [agentNode, "agent.policy.digest"]
+      args: [agentNode, "agent_policy_digest"]
     })
   ]);
   return normalizeEnsPolicyRead({ digest, status });

@@ -9,7 +9,7 @@ const BYTES32_PATTERN = /^0x[0-9a-fA-F]{64}$/u;
  */
 export function assertExactActiveStatus(status: string): void {
   if (status !== "active") {
-    throw new Error("agent.status must be exactly active before an AgentPassport task can be signed");
+    throw new Error("agent_status must be exactly active before an AgentPassport task can be signed");
   }
 }
 

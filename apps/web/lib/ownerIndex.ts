@@ -1,6 +1,8 @@
-export const OWNER_INDEX_VERSION_KEY = "agentpassports.v";
-export const OWNER_INDEX_AGENTS_KEY = "agentpassports.agents";
+export const OWNER_INDEX_VERSION_KEY = "agnetpassports_no";
+export const OWNER_INDEX_AGENTS_KEY = "agentpasspports_agents";
 export const OWNER_INDEX_VERSION = "1";
+export const LEGACY_OWNER_INDEX_VERSION_KEY = "agentpassports.v";
+export const LEGACY_OWNER_INDEX_AGENTS_KEY = "agentpassports.agents";
 
 export type OwnerAgentName = {
   label: string;
@@ -8,29 +10,29 @@ export type OwnerAgentName = {
 };
 
 /**
- * Parses the owner-level ENS text index into unique, normalized agent labels.
+ * Parses the owner-level ENS text index into unique, normalized agent ENS names.
  */
 export function parseOwnerAgentIndex(value?: string | null): string[] {
-  const labels = new Set<string>();
+  const names = new Set<string>();
   for (const item of (value ?? "").split(",")) {
-    const label = normalizeOwnerAgentLabel(item);
-    if (label) {
-      labels.add(label);
+    const name = normalizeOwnerAgentLabel(item);
+    if (name) {
+      names.add(name);
     }
   }
 
-  return [...labels];
+  return [...names];
 }
 
 /**
- * Serializes labels into the compact text-record representation stored at agentpassports.agents.
+ * Serializes full agent ENS names into the compact owner-index text-record representation.
  */
-export function serializeOwnerAgentIndex(labels: readonly string[]): string {
-  return parseOwnerAgentIndex(labels.join(",")).join(",");
+export function serializeOwnerAgentIndex(names: readonly string[]): string {
+  return parseOwnerAgentIndex(names.join(",")).join(",");
 }
 
 /**
- * Adds one label to an existing owner index without duplicating labels.
+ * Adds one full agent ENS name to an existing owner index without duplicates.
  */
 export function addOwnerAgentLabel(existingIndex: string | readonly string[], label: string): string[] {
   const existing = parseOwnerAgentLabels(existingIndex);
@@ -38,7 +40,7 @@ export function addOwnerAgentLabel(existingIndex: string | readonly string[], la
 }
 
 /**
- * Removes one label from an existing owner index.
+ * Removes one full agent ENS name from an existing owner index.
  */
 export function removeOwnerAgentLabel(existingIndex: string | readonly string[], label: string): string[] {
   const removed = normalizeOwnerAgentLabel(label);
@@ -47,13 +49,14 @@ export function removeOwnerAgentLabel(existingIndex: string | readonly string[],
 }
 
 /**
- * Derives full agent ENS names from an owner ENS name and owner index labels.
+ * Reads full agent ENS names from the owner ENS index. Legacy bare labels are still
+ * expanded against the owner ENS name so old local/dev records do not break the UI.
  */
 export function buildOwnerAgentNames(ownerName: string, labels: readonly string[]): OwnerAgentName[] {
   const normalizedOwner = ownerName.trim().toLowerCase();
   return parseOwnerAgentIndex(labels.join(",")).map((label) => ({
-    label,
-    name: normalizedOwner ? `${label}.${normalizedOwner}` : label
+    label: label.includes(".") ? label.split(".")[0] ?? label : label,
+    name: label.includes(".") || !normalizedOwner ? label : `${label}.${normalizedOwner}`
   }));
 }
 

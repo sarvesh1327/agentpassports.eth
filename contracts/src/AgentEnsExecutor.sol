@@ -257,7 +257,7 @@ contract AgentEnsExecutor {
         PolicySnapshot calldata policy,
         address resolver
     ) internal view {
-        string memory status = ITextResolverV1(resolver).text(intent.agentNode, "agent.status");
+        string memory status = ITextResolverV1(resolver).text(intent.agentNode, "agent_status");
         if (keccak256(bytes(status)) != ACTIVE_STATUS_HASH) revert PolicyDisabled();
 
         bytes32 computedPolicyDigest = hashPolicySnapshot(intent.agentNode, policy);
@@ -350,7 +350,7 @@ contract AgentEnsExecutor {
         returns (bytes32)
     {
         (bool ok, bytes32 digest) =
-            _parseBytes32(ITextResolverV1(resolver).text(agentNode, "agent.policy.digest"));
+            _parseBytes32(ITextResolverV1(resolver).text(agentNode, "agent_policy_digest"));
         if (!ok) revert PolicyDigestMismatch();
         return digest;
     }

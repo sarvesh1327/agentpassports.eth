@@ -25,13 +25,13 @@ const POLICY_SNAPSHOT = {
 const { hashPolicySnapshot } = await import("../packages/config/src/index.ts");
 const POLICY_DIGEST = hashPolicySnapshot(AGENT_NODE, POLICY_SNAPSHOT);
 const POLICY_TEXT_RECORDS = new Map([
-  ["agent.status", "active"],
-  ["agent.policy.digest", POLICY_DIGEST],
-  ["agent.policy.target", TASK_LOG_ADDRESS],
-  ["agent.policy.selector", "0x36736d1e"],
-  ["agent.policy.maxValueWei", "0"],
-  ["agent.policy.maxGasReimbursementWei", "1000000000000000"],
-  ["agent.policy.expiresAt", "1790000100"],
+  ["agent_status", "active"],
+  ["agent_policy_digest", POLICY_DIGEST],
+  ["agent_policy_target", TASK_LOG_ADDRESS],
+  ["agent_policy_selector", "0x36736d1e"],
+  ["agent_policy_max_value_wei", "0"],
+  ["agent_policy_max_gas_reimbursement_wei", "1000000000000000"],
+  ["agent_policy_expires_at", "1790000100"],
 ]);
 
 test("agent runner config parses required environment values", async () => {

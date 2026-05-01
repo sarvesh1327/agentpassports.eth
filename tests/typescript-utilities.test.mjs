@@ -201,8 +201,8 @@ test("ENS and hex validation rejects malformed inputs before they reach clients"
 
 test("ENS network utilities read and write agent resolver records", async () => {
   const textRecords = new Map([
-    ["agent.owner", "alice.eth"],
-    ["agent.status", "active"],
+    ["agent_owner", "alice.eth"],
+    ["agent_status", "active"],
   ]);
   const writes = [];
   const readClient = {
@@ -248,13 +248,13 @@ test("ENS network utilities read and write agent resolver records", async () => 
     await utilities.getAgentTextRecords({
       agentNode: AGENT_NODE,
       client: readClient,
-      keys: ["agent.owner", "agent.status", "agent.missing"],
+      keys: ["agent_owner", "agent_status", "agent.missing"],
       resolverAddress: RESOLVER_ADDRESS,
     }),
     {
       "agent.missing": "",
-      "agent.owner": "alice.eth",
-      "agent.status": "active",
+      "agent_owner": "alice.eth",
+      "agent_status": "active",
     },
   );
   assert.deepEqual(
@@ -262,7 +262,7 @@ test("ENS network utilities read and write agent resolver records", async () => 
       client: readClient,
       ensRegistryAddress: ENS_REGISTRY_ADDRESS,
       name: "assistant.alice.eth",
-      textKeys: ["agent.owner", "agent.status"],
+      textKeys: ["agent_owner", "agent_status"],
     }),
     {
       address: AGENT_ADDRESS,
@@ -270,8 +270,8 @@ test("ENS network utilities read and write agent resolver records", async () => 
       node: AGENT_NODE,
       resolverAddress: RESOLVER_ADDRESS,
       textRecords: {
-        "agent.owner": "alice.eth",
-        "agent.status": "active",
+        "agent_owner": "alice.eth",
+        "agent_status": "active",
       },
     },
   );
@@ -290,8 +290,8 @@ test("ENS network utilities read and write agent resolver records", async () => 
       agentNode: AGENT_NODE,
       client: writeClient,
       records: [
-        { key: "agent.owner", value: "alice.eth" },
-        { key: "agent.status", value: "active" },
+        { key: "agent_owner", value: "alice.eth" },
+        { key: "agent_status", value: "active" },
       ],
       resolverAddress: RESOLVER_ADDRESS,
     }),
@@ -301,8 +301,8 @@ test("ENS network utilities read and write agent resolver records", async () => 
     writes.map((call) => [call.functionName, call.args]),
     [
       ["setAddr", [AGENT_NODE, AGENT_ADDRESS]],
-      ["setText", [AGENT_NODE, "agent.owner", "alice.eth"]],
-      ["setText", [AGENT_NODE, "agent.status", "active"]],
+      ["setText", [AGENT_NODE, "agent_owner", "alice.eth"]],
+      ["setText", [AGENT_NODE, "agent_status", "active"]],
     ],
   );
 });

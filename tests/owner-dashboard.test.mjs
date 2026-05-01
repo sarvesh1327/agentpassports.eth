@@ -32,11 +32,11 @@ test("owner index helpers parse, serialize, add, remove, and derive agent names"
   } = await import("../apps/web/lib/ownerIndex.ts");
 
   assert.deepEqual(parseOwnerAgentIndex(""), []);
-  assert.deepEqual(parseOwnerAgentIndex(" assistant, worker ,assistant,, Runner "), ["assistant", "worker", "runner"]);
-  assert.equal(serializeOwnerAgentIndex(["assistant", "worker", "assistant"]), "assistant,worker");
-  assert.deepEqual(addOwnerAgentLabel("assistant,worker", "Runner"), ["assistant", "worker", "runner"]);
-  assert.deepEqual(removeOwnerAgentLabel("assistant,worker,runner", " worker "), ["assistant", "runner"]);
-  assert.deepEqual(buildOwnerAgentNames("Alice.eth", ["assistant", "runner"]), [
+  assert.deepEqual(parseOwnerAgentIndex(" assistant.alice.eth, worker.alice.eth ,assistant.alice.eth,, Runner.Alice.eth "), ["assistant.alice.eth", "worker.alice.eth", "runner.alice.eth"]);
+  assert.equal(serializeOwnerAgentIndex(["assistant.alice.eth", "worker.alice.eth", "assistant.alice.eth"]), "assistant.alice.eth,worker.alice.eth");
+  assert.deepEqual(addOwnerAgentLabel("assistant.alice.eth,worker.alice.eth", "Runner.Alice.eth"), ["assistant.alice.eth", "worker.alice.eth", "runner.alice.eth"]);
+  assert.deepEqual(removeOwnerAgentLabel("assistant.alice.eth,worker.alice.eth,runner.alice.eth", " worker.alice.eth "), ["assistant.alice.eth", "runner.alice.eth"]);
+  assert.deepEqual(buildOwnerAgentNames("Alice.eth", ["assistant.alice.eth", "runner.alice.eth"]), [
     { label: "assistant", name: "assistant.alice.eth" },
     { label: "runner", name: "runner.alice.eth" }
   ]);
@@ -48,6 +48,7 @@ test("registration batch updates owner ENS index after agent registration", asyn
 
   const batch = buildRegistrationBatch({
     agentLabel: "assistant",
+    agentName: "assistant.alice.eth",
     agentNode: AGENT_NODE,
     connectedWallet: CONNECTED_WALLET,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
@@ -57,7 +58,7 @@ test("registration batch updates owner ENS index after agent registration", asyn
     maxGasReimbursementWei: "1000000000000000",
     maxValueWei: "0",
     normalizedAgentAddress: CONNECTED_WALLET,
-    ownerAgentLabels: ["worker"],
+    ownerAgentLabels: ["worker.alice.eth"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS,
     policyExpiresAt: "1790000000",
@@ -65,7 +66,7 @@ test("registration batch updates owner ENS index after agent registration", asyn
     resolverAddress: RESOLVER_ADDRESS,
     shouldCreateSubnameRecord: true,
     taskLogAddress: TASK_LOG_ADDRESS,
-    textRecords: [{ key: "agent.status", value: "active" }]
+    textRecords: [{ key: "agent_status", value: "active" }]
   });
 
   assert.equal(batch.summary.at(-1), "set owner index text records");
@@ -78,8 +79,10 @@ test("registration batch updates owner ENS index after agent registration", asyn
   assert.deepEqual(
     decodedTextCalls.map((call) => call.args),
     [
-      [OWNER_NODE, "agentpassports.v", "1"],
-      [OWNER_NODE, "agentpassports.agents", "worker,assistant"]
+      [OWNER_NODE, "agnetpassports_no", "1"],
+      [OWNER_NODE, "agentpasspports_agents", "worker.alice.eth,assistant.alice.eth"],
+      [OWNER_NODE, "agentpassports.v", ""],
+      [OWNER_NODE, "agentpassports.agents", ""]
     ]
   );
 });
@@ -90,6 +93,7 @@ test("registration batch requires the owner resolver because dashboard membershi
   assert.throws(
     () => buildRegistrationBatch({
       agentLabel: "assistant",
+      agentName: "assistant.alice.eth",
       agentNode: AGENT_NODE,
       connectedWallet: CONNECTED_WALLET,
       ensRegistryAddress: ENS_REGISTRY_ADDRESS,
@@ -107,7 +111,7 @@ test("registration batch requires the owner resolver because dashboard membershi
       resolverAddress: RESOLVER_ADDRESS,
       shouldCreateSubnameRecord: true,
       taskLogAddress: TASK_LOG_ADDRESS,
-      textRecords: [{ key: "agent.status", value: "active" }]
+      textRecords: [{ key: "agent_status", value: "active" }]
     }),
     /Owner resolver address is required/
   );
@@ -123,8 +127,8 @@ test("owner dashboard route renders owner index, multiple agent cards, and quick
   const source = `${pageSource}\n${dashboardSource}\n${helperSource}`;
 
   for (const label of [
-    "agentpassports.v",
-    "agentpassports.agents",
+      "agnetpassports_no",
+      "agentpasspports_agents",
     "Add agent",
     "Resolver",
     "Gas budget",
@@ -314,7 +318,7 @@ test("agent page exposes visible signer and policy management and refreshes afte
   for (const token of [
     "Policy metadata",
     "Policy URI",
-    "agent.policy.hash",
+    "agent_policy_hash",
     "Update signer address",
     "waitForTransactionReceipt",
     "refreshAgentReads",
@@ -378,10 +382,11 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
 
   const blocked = buildAgentDeletePlan({
     agentLabel: "assistant",
+    agentName: "assistant.alice.eth",
     agentNode: AGENT_NODE,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
     isOwnerWrapped: true,
-    ownerAgentLabels: ["assistant"],
+    ownerAgentLabels: ["assistant.alice.eth"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS
   });
@@ -391,12 +396,13 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
 
   const plan = buildAgentDeletePlan({
     agentLabel: "assistant",
+    agentName: "assistant.alice.eth",
     agentNode: AGENT_NODE,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
     executorAddress: EXECUTOR_ADDRESS,
     gasBudgetWei: 123n,
     isOwnerWrapped: false,
-    ownerAgentLabels: ["assistant", "worker"],
+    ownerAgentLabels: ["assistant.alice.eth", "worker.alice.eth"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS
   });
@@ -419,8 +425,10 @@ test("delete flow blocks wrapped deletes and encodes unwrapped subname deletion"
   assert.deepEqual(
     textCalls.map((call) => call.args),
     [
-      [OWNER_NODE, "agentpassports.v", "1"],
-      [OWNER_NODE, "agentpassports.agents", "worker"]
+      [OWNER_NODE, "agnetpassports_no", "1"],
+      [OWNER_NODE, "agentpasspports_agents", "worker.alice.eth"],
+      [OWNER_NODE, "agentpassports.v", ""],
+      [OWNER_NODE, "agentpassports.agents", ""]
     ]
   );
 });
@@ -430,12 +438,13 @@ test("delete flow skips gas withdrawal when there is no remaining agent budget",
 
   const plan = buildAgentDeletePlan({
     agentLabel: "assistant",
+    agentName: "assistant.alice.eth",
     agentNode: AGENT_NODE,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
     executorAddress: EXECUTOR_ADDRESS,
     gasBudgetWei: 0n,
     isOwnerWrapped: false,
-    ownerAgentLabels: ["assistant"],
+    ownerAgentLabels: ["assistant.alice.eth"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS
   });
@@ -449,11 +458,12 @@ test("delete flow blocks positive gas budget deletion without executor withdrawa
 
   const plan = buildAgentDeletePlan({
     agentLabel: "assistant",
+    agentName: "assistant.alice.eth",
     agentNode: AGENT_NODE,
     ensRegistryAddress: ENS_REGISTRY_ADDRESS,
     gasBudgetWei: 1n,
     isOwnerWrapped: false,
-    ownerAgentLabels: ["assistant"],
+    ownerAgentLabels: ["assistant.alice.eth"],
     ownerNode: OWNER_NODE,
     ownerResolverAddress: RESOLVER_ADDRESS
   });

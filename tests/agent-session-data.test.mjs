@@ -73,8 +73,8 @@ test("agent session maps live ENS text reads into every passport metadata key", 
 
   assert.equal(records.length, AGENT_TEXT_RECORD_KEYS.length);
   assert.deepEqual(records.slice(0, 3), [
-    { key: "agent.v", value: "1" },
-    { key: "agent.owner", value: "agentpassports.eth" },
-    { key: "agent.kind", value: "Unknown" }
+    { key: "agent_v", value: "1" },
+    { key: "agent_owner", value: "agentpassports.eth" },
+    { key: "agent_kind", value: "Unknown" }
   ]);
 });

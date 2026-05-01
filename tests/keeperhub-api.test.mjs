@@ -108,7 +108,7 @@ test("KeeperHub gated execution helper skips live execution when gate is blocked
     agentName: "assistant.agentpassports.eth",
     agentNode: "0x" + "11".repeat(32),
     allowed: false,
-    blockers: ["agent.status must be exactly active"],
+    blockers: ["agent_status must be exactly active"],
     decision: "blocked",
     gasBudgetWei: "0",
     liveSigner: null,
@@ -133,5 +133,5 @@ test("KeeperHub gated execution helper skips live execution when gate is blocked
   assert.equal(result.gateDecision.decision, "blocked");
   assert.equal(result.keeperhub.skipped, true);
   assert.equal(result.attestation.decision, "blocked");
-  assert.deepEqual(result.attestation.blockers, ["agent.status must be exactly active"]);
+  assert.deepEqual(result.attestation.blockers, ["agent_status must be exactly active"]);
 });

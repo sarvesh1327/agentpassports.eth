@@ -5,6 +5,8 @@ import {
   OWNER_INDEX_AGENTS_KEY,
   OWNER_INDEX_VERSION,
   OWNER_INDEX_VERSION_KEY,
+  LEGACY_OWNER_INDEX_AGENTS_KEY,
+  LEGACY_OWNER_INDEX_VERSION_KEY,
   removeOwnerAgentLabel,
   serializeOwnerAgentIndex
 } from "./ownerIndex.ts";
@@ -23,6 +25,7 @@ export type AgentDeletePlan = {
 
 export type AgentDeletePlanInput = {
   agentLabel: string;
+  agentName: string;
   agentNode: Hex;
   ensRegistryAddress?: Hex | null;
   executorAddress?: Hex | null;
@@ -62,7 +65,7 @@ export function buildAgentDeletePlan(input: AgentDeletePlanInput): AgentDeletePl
     return { calls: [], canDelete: false, reason: "Owner resolver is not configured for owner index updates." };
   }
 
-  const labelsAfterDelete = removeOwnerAgentLabel(input.ownerAgentLabels, input.agentLabel);
+  const labelsAfterDelete = removeOwnerAgentLabel(input.ownerAgentLabels, input.agentName);
   const gasBudgetWei = input.gasBudgetWei ?? 0n;
   const executorAddress = input.executorAddress;
   const shouldWithdrawGasBudget = gasBudgetWei > 0n;
@@ -111,6 +114,16 @@ export function buildAgentDeletePlan(input: AgentDeletePlanInput): AgentDeletePl
             abi: PUBLIC_RESOLVER_ABI,
             functionName: "setText",
             args: [input.ownerNode, OWNER_INDEX_AGENTS_KEY, serializeOwnerAgentIndex(labelsAfterDelete)]
+          }),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [input.ownerNode, LEGACY_OWNER_INDEX_VERSION_KEY, ""]
+          }),
+          encodeFunctionData({
+            abi: PUBLIC_RESOLVER_ABI,
+            functionName: "setText",
+            args: [input.ownerNode, LEGACY_OWNER_INDEX_AGENTS_KEY, ""]
           })
         ]
       ]

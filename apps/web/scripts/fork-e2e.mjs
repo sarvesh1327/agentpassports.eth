@@ -270,15 +270,15 @@ async function writeAgentRecords(input) {
       args: [
         [
           encodeFunctionData({ abi: resolverAbi, functionName: "setAddr", args: [input.agentNode, AGENT.address] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.v", "2"] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.owner", OWNER_NAME] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.status", "active"] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.digest", input.policyDigest] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.target", input.policy.target] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.selector", input.policy.selector] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.maxValueWei", input.policy.maxValueWei.toString()] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.maxGasReimbursementWei", input.policy.maxGasReimbursementWei.toString()] }),
-          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent.policy.expiresAt", input.policy.expiresAt.toString()] })
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_v", "2"] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_owner", OWNER_NAME] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_status", "active"] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_digest", input.policyDigest] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_target", input.policy.target] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_selector", input.policy.selector] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_max_value_wei", input.policy.maxValueWei.toString()] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_max_gas_reimbursement_wei", input.policy.maxGasReimbursementWei.toString()] }),
+          encodeFunctionData({ abi: resolverAbi, functionName: "setText", args: [input.agentNode, "agent_policy_expires_at", input.policy.expiresAt.toString()] })
         ]
       ]
     })
@@ -291,7 +291,7 @@ async function writeAgentStatus(input) {
       address: PUBLIC_RESOLVER,
       abi: resolverAbi,
       functionName: "setText",
-      args: [input.agentNode, "agent.status", input.status]
+      args: [input.agentNode, "agent_status", input.status]
     })
   );
 }
@@ -311,7 +311,7 @@ async function readRevokeRejection(input) {
       address: PUBLIC_RESOLVER,
       abi: resolverAbi,
       functionName: "text",
-      args: [input.agentNode, "agent.status"]
+      args: [input.agentNode, "agent_status"]
     });
     if (liveStatus === "disabled" && contractError.shortMessage.includes("reverted")) {
       return "agent.status=disabled rejected execute()";
