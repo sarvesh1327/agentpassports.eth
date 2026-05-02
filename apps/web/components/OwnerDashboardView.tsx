@@ -98,16 +98,38 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
   }, []);
 
   return (
-    <div className="owner-dashboard">
-      <section className="owner-dashboard__hero" aria-labelledby="owner-index-title">
+    <div className="owner-dashboard owner-dashboard--permission-manager">
+      <section className="owner-dashboard__hero owner-dashboard__hero-card" aria-labelledby="owner-index-title">
         <div className="owner-dashboard__title">
           <span className="owner-dashboard__icon" aria-hidden="true"><EnsIndexIcon size={28} /></span>
-          <div>
-            <p>Dashboard</p>
-            <h1 id="owner-index-title">{props.ownerName} agents</h1>
+          <div className="owner-dashboard__copy">
+            <p className="owner-dashboard__eyebrow">OWNER DASHBOARD</p>
+            <h1 id="owner-index-title">Manage Passports for {props.ownerName}</h1>
+            <span>Review registered agent Passports, active Visas, recent KeeperHub Stamps, and revoke access onchain from one owner view.</span>
           </div>
         </div>
-        <a className="owner-dashboard__add action-button action-button--primary" href={registerHref}><UiIcon name="plus" size={18} /> Add agent</a>
+        <div className="owner-dashboard__hero-actions">
+          <a className="owner-dashboard__add action-button action-button--primary" href={registerHref}><UiIcon name="plus" size={18} /> Register Agent</a>
+          <a className="action-button action-button--secondary" href="/"><UiIcon name="arrow-left" size={16} /> Back to landing</a>
+        </div>
+      </section>
+
+      <section className="owner-dashboard__stamp-strip" aria-label="Passport Visa Stamp dashboard flow">
+        <div>
+          <span>Passport index</span>
+          <strong>{ownerAgents.length} registered</strong>
+          <small>ENS owner directory</small>
+        </div>
+        <div>
+          <span>Visa status</span>
+          <strong>{activeAgentCount} active</strong>
+          <small>{disabledAgentCount} revoked or disabled</small>
+        </div>
+        <div>
+          <span>Latest KeeperHub Stamps</span>
+          <strong>{dashboardSnapshots.filter((snapshot) => snapshot.latestTaskTimestamp).length} with history</strong>
+          <small>Allowed, blocked, or no-tx evidence</small>
+        </div>
       </section>
 
       <section className="owner-summary-strip owner-dashboard__preview" aria-label="Owner ENS summary">
@@ -117,16 +139,20 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
           title={ownerResolverAddress ?? undefined}
           value={ownerResolverAddress ? shortenHex(ownerResolverAddress) : "Unknown"}
         />
-        <SummaryCell label="Agents" value={ownerAgents.length.toString()} detail="Total" />
-        <SummaryCell label="Total Gas Budget" value={formatWei(totalGasBudgetWei)} detail="Live aggregate" />
-        <SummaryCell label="Active" value={activeAgentCount.toString()} detail={version ? `v${version}` : "ENS index"} tone="success" />
-        <SummaryCell label="Disabled" value={disabledAgentCount.toString()} detail="Live status" tone="danger" />
+        <SummaryCell label="Passports" value={ownerAgents.length.toString()} detail="Registered" />
+        <SummaryCell label="Gas budget" value={formatWei(totalGasBudgetWei)} detail="Live aggregate" />
+        <SummaryCell label="Active Visas" value={activeAgentCount.toString()} detail={version ? `index v${version}` : "ENS index"} tone="success" />
+        <SummaryCell label="Revoked Visas" value={disabledAgentCount.toString()} detail="Live status" tone="danger" />
       </section>
 
       {ownerAgents.length > 0 ? (
         <section className="owner-agents-panel" aria-labelledby="owner-agents-title" data-view={viewMode}>
           <div className="owner-agents-panel__header">
-            <h2 id="owner-agents-title">Agents ({ownerAgents.length})</h2>
+            <div>
+              <p className="owner-dashboard__eyebrow">REGISTERED PASSPORTS</p>
+              <h2 id="owner-agents-title">Registered Passports ({ownerAgents.length})</h2>
+              <span>Each row is an ENS Passport with signer identity, Visa scope, budget, and Stamp history.</span>
+            </div>
             <div aria-label="View mode" className="owner-agents-panel__toggles">
               <button type="button" aria-label="Grid view" aria-pressed={viewMode === "grid"} onClick={() => setViewMode("grid")}><UiIcon name="grid" size={17} /></button>
               <button type="button" aria-label="List view" aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}><UiIcon name="list" size={17} /></button>
@@ -149,21 +175,22 @@ export function OwnerDashboardView(props: OwnerDashboardViewProps) {
           ))}
         </section>
       ) : (
-        <section className="empty-state">
-          <strong>No agents indexed</strong>
-          <span>Add an ENS subname from the registration flow to populate {OWNER_INDEX_AGENTS_KEY}.</span>
+        <section className="empty-state owner-dashboard__empty-state">
+          <strong>No Passports registered</strong>
+          <span>Register an Agent to create the first Passport and Visa, then populate {OWNER_INDEX_AGENTS_KEY}.</span>
+          <a className="action-button action-button--primary" href={registerHref}><UiIcon name="plus" size={16} /> Register Agent</a>
         </section>
       )}
 
-      <section className="owner-index-card" aria-label="ENS index">
-        <div className="owner-index-card__status"><UiIcon name="check" size={18} /> ENS index</div>
+      <section className="owner-index-card" aria-label="ENS Passport index">
+        <div className="owner-index-card__status"><UiIcon name="check" size={18} /> ENS Passport index</div>
         <dl className="owner-index-card__grid">
           <div>
             <dt>{OWNER_INDEX_AGENTS_KEY}</dt>
-            <dd>{rawAgentIndex || "No agents indexed"}</dd>
+            <dd>{rawAgentIndex || "No Passports registered"}</dd>
           </div>
           <div>
-            <dt>Policy Source</dt>
+            <dt>Passport Source</dt>
             <dd><span className="pill pill--success">ENS</span></dd>
           </div>
         </dl>
@@ -311,29 +338,31 @@ function OwnerDashboardAgentCard(props: {
   }
 
   return (
-    <section className="owner-agent-row">
+    <section className="owner-agent-row" aria-label={`Passport ${props.agentName}`}>
       <div className="owner-agent-row__identity">
         <div className={`owner-agent-row__avatar owner-agent-row__avatar--${agentIconTone(props.agentLabel, status)}`} aria-hidden="true">
           <AgentAvatarIcon label={props.agentLabel} size={34} />
         </div>
         <div>
           <div className="owner-agent-row__heading">
+            <span className="owner-agent-row__eyebrow">Passport</span>
             <h3>{props.agentName}</h3>
             <span className={`status-pill status-pill--${status === "active" ? "success" : status === "disabled" ? "warning" : "neutral"}`}>
-              {status === "active" ? "Active" : status === "disabled" ? "Disabled" : "Unknown"}
+              {status === "active" ? "Active Visa" : status === "disabled" ? "Visa revoked" : "Visa unknown"}
             </span>
           </div>
+          <p className="owner-agent-row__summary">ENS Passport, scoped Visa metadata, and KeeperHub Stamp history for this agent.</p>
           <dl className="owner-agent-row__facts">
             <div>
               <dt>Signer</dt>
               <dd title={resolvedAgentAddress ?? undefined}>{resolvedAgentAddress ? shortenHex(resolvedAgentAddress) : "Unknown"}</dd>
             </div>
             <div>
-              <dt>Policy Digest</dt>
+              <dt>Visa Digest</dt>
               <dd title={policyHash}>{policyHash ? shortenHex(policyHash as Hex) : "Unknown"}</dd>
             </div>
             <div>
-              <dt>Capabilities</dt>
+              <dt>Visa Scope</dt>
               <dd className="owner-agent-row__pills">
                 {(capabilities.length ? capabilities : ["task-log"]).map((capability) => (
                   <span className="pill pill--info" key={capability}>{capability}</span>
@@ -347,18 +376,18 @@ function OwnerDashboardAgentCard(props: {
       <div className="owner-agent-row__meta">
         <span>Gas budget</span>
         <strong>{formatWei(gasBudgetWei)}</strong>
-        <span>Latest Task</span>
-        <span className="sr-only">Latest task history</span>
-        <strong>{tasks[0]?.timestamp ?? "No tasks yet"}</strong>
-        <small>{status === "active" ? "Policy enabled by ENS" : "Policy disabled or unknown"}</small>
+        <span>Latest Stamp</span>
+        <span className="sr-only">Latest KeeperHub Stamps</span>
+        <strong>{tasks[0]?.timestamp ?? "No Stamps yet"}</strong>
+        <small>{status === "active" ? "Visa active in ENS" : "Visa revoked or unknown"}</small>
       </div>
 
       <div className="owner-agent-row__actions">
-        <a className="action-button action-button--secondary" href={`/agent/${encodeURIComponent(props.agentName)}`}><UiIcon name="eye" size={16} /> View</a>
+        <a className="action-button action-button--secondary" href={`/agent/${encodeURIComponent(props.agentName)}`}><UiIcon name="eye" size={16} /> View Passport</a>
         <button type="button" onClick={() => void setStatus(status === "disabled" ? "active" : "disabled")}>
-          <UiIcon name={status === "disabled" ? "check" : "shield"} size={16} /> {status === "disabled" ? "Enable" : "Revoke"}
+          <UiIcon name={status === "disabled" ? "check" : "shield"} size={16} /> {status === "disabled" ? "Enable Visa" : "Revoke Visa"}
         </button>
-        <a className="owner-agent-row__delete" href={`/agent/${encodeURIComponent(props.agentName)}#agent-management-delete-title`}><UiIcon name="trash" size={16} /> Delete</a>
+        <a className="owner-agent-row__delete" href={`/agent/${encodeURIComponent(props.agentName)}#agent-management-delete-title`}><UiIcon name="trash" size={16} /> Delete Passport</a>
       </div>
     </section>
   );

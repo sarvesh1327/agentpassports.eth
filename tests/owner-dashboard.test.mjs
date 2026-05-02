@@ -117,7 +117,7 @@ test("registration batch requires the owner resolver because dashboard membershi
   );
 });
 
-test("owner dashboard route renders owner index, multiple agent cards, and quick actions", async () => {
+test("owner dashboard route uses Passport, Visa, and Stamp terminology for the management surface", async () => {
   await assertFile("apps/web/app/owner/[name]/page.tsx");
   await assertFile("apps/web/components/OwnerDashboardView.tsx");
 
@@ -127,19 +127,30 @@ test("owner dashboard route renders owner index, multiple agent cards, and quick
   const source = `${pageSource}\n${dashboardSource}\n${helperSource}`;
 
   for (const label of [
-      "agnetpassports_no",
-      "agentpasspports_agents",
-    "Add agent",
-    "Resolver",
+    "agnetpassports_no",
+    "agentpasspports_agents",
+    "OWNER DASHBOARD",
+    "Manage Passports",
+    "Register Agent",
+    "registered agent Passports",
+    "active Visas",
+    "KeeperHub Stamps",
     "Gas budget",
-    "Latest task history",
-    "View",
-    "Revoke",
-    "Enable",
-    "Delete"
+    "Registered Passports",
+    "Latest Stamp",
+    "Latest KeeperHub Stamps",
+    "View Passport",
+    "Revoke Visa",
+    "Enable Visa",
+    "Delete Passport",
+    "ENS Passport index"
   ]) {
     assert.match(source, new RegExp(label.replace(/[()]/g, "\\$&")), `${label} should be rendered`);
   }
+  assert.doesNotMatch(dashboardSource, />Add agent</);
+  assert.doesNotMatch(dashboardSource, /Total Visa Budget/);
+  assert.doesNotMatch(dashboardSource, />Visa budget</);
+  assert.doesNotMatch(dashboardSource, />Latest Task</);
   assert.match(pageSource, /decodeURIComponent/);
   assert.match(dashboardSource, /buildOwnerAgentNames/);
   assert.match(dashboardSource, /loadTaskHistory/);
@@ -189,6 +200,19 @@ test("primary UI flow points owners through the landing dashboard/register gates
   assert.doesNotMatch(source, /OwnerDashboardEntry/);
 });
 
+test("dashboard active nav is selected with a dark underline instead of a pale filled box", async () => {
+  const styles = await readText("apps/web/app/globals.css");
+
+  assert.match(
+    styles,
+    /\.site-header__nav a\[aria-current="page"\],\s*\.site-header__nav button\[aria-current="page"\]\s*{[^}]*background:\s*transparent;[^}]*border-color:\s*transparent transparent #72e2ff;/s
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.site-header__nav a\[aria-current="page"\],\s*\.site-header__nav a:hover\s*{[^}]*background:\s*#eff6ff;/s
+  );
+});
+
 test("register route is dashboard scoped instead of a standalone legacy flow", async () => {
   const registerSource = await readText("apps/web/app/register/page.tsx");
 
@@ -207,12 +231,15 @@ test("dashboard and register pages use the management mockup layout vocabulary",
   const styles = await readText("apps/web/app/globals.css");
 
   for (const token of [
+    "owner-dashboard--permission-manager",
+    "owner-dashboard__hero-card",
+    "owner-dashboard__stamp-strip",
     "owner-summary-strip",
     "owner-agent-row",
     "owner-agent-row__actions",
-    "ENS index",
-    "Total Gas Budget",
-    "Add agent"
+    "ENS Passport index",
+    "Gas budget",
+    "Register Agent"
   ]) {
     assert.match(dashboardSource, new RegExp(token), `${token} should be in dashboard UI`);
   }
@@ -363,7 +390,7 @@ test("new owner and agent UI controls are wired to concrete interactions", async
   assert.match(dashboardSource, /setViewMode\("list"\)/);
   assert.match(dashboardSource, /aria-pressed=\{viewMode === "grid"\}/);
   assert.match(dashboardSource, /aria-pressed=\{viewMode === "list"\}/);
-  assert.match(dashboardSource, /status === "disabled" \? "Enable" : "Revoke"/);
+  assert.match(dashboardSource, /status === "disabled" \? "Enable Visa" : "Revoke Visa"/);
   assert.match(dashboardSource, /#agent-management-delete-title/);
 
   for (const token of [

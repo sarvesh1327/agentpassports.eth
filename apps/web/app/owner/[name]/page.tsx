@@ -15,7 +15,7 @@ export default async function OwnerPage({ params }: OwnerPageProps) {
   const config = buildDemoAgentProfile();
 
   return (
-    <main className="page-shell">
+    <main className="page-shell page-shell--dashboard">
       <OwnerDashboardView
         chainId={config.chainId.toString()}
         ensRegistryAddress={config.ensRegistryAddress}
