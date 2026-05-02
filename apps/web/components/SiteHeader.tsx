@@ -27,7 +27,9 @@ export function SiteHeader() {
     ? "register"
     : pathname.startsWith("/owner") || pathname.startsWith("/agent")
       ? "dashboard"
-      : null;
+      : pathname.startsWith("/mcp")
+        ? "mcp"
+        : null;
 
   useEffect(() => {
     setWalletUiMounted(true);
@@ -59,7 +61,7 @@ export function SiteHeader() {
             href={registerHref}
             label="Register Agent"
           />
-          <Link href="/mcp">MCP</Link>
+          <Link aria-current={activeSection === "mcp" ? "page" : undefined} href="/mcp">MCP</Link>
           <Link href="https://github.com/sarvesh1327/agentpassports.eth">Docs <UiIcon name="external" size={14} /></Link>
         </nav>
       ) : (
@@ -84,7 +86,7 @@ export function SiteHeader() {
                   label="Register Agent"
                   onConnect={openConnectModal}
                 />
-                <Link href="/mcp">MCP</Link>
+                <Link aria-current={activeSection === "mcp" ? "page" : undefined} href="/mcp">MCP</Link>
                 <Link href="https://github.com/sarvesh1327/agentpassports.eth">Docs <UiIcon name="external" size={14} /></Link>
               </nav>
             );

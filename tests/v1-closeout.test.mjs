@@ -70,7 +70,8 @@ test("web app exposes thin MCP instructions and repurposes /run away from browse
   assert.match(mcpPage, /check_task_status/);
   assert.match(mcpPage, /sign-intent\.ts/);
   assert.match(mcpPage, /KeeperHub.*Passport\/Visa/i);
-  assert.match(mcpPage, /Policy authority: KeeperHub/);
+  assert.match(mcpPage, /Passport\/Visa authority: KeeperHub/);
+  assert.match(mcpPage, /KeeperHub Stamps/);
   for (const removed of removedMcpNames) {
     assert.doesNotMatch(mcpPage, new RegExp(`\\b${removed}\\b`));
   }

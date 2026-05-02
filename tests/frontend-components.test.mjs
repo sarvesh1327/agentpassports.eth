@@ -618,7 +618,9 @@ test("run page is repurposed as the MCP task execution guide", async () => {
     "submit_task",
     "check_task_status",
     "sign-intent.ts",
-    "Policy authority: KeeperHub"
+    "Passport/Visa authority: KeeperHub",
+    "KeeperHub Stamps",
+    "Visa Scope"
   ]) {
     assert.match(mcpSource, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `${label} should be documented`);
   }

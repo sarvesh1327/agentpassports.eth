@@ -123,10 +123,20 @@ test("register page label and value rows can shrink and wrap without overlap", a
 
 test("MCP page uses polished setup cards and no demo wording", async () => {
   const mcp = await readText("apps/web/app/mcp/page.tsx");
+  const css = await readText("apps/web/app/globals.css");
 
   assert.doesNotMatch(mcp, /demo/i);
+  assert.match(mcp, /page-shell--mcp/);
+  assert.match(mcp, /mcp-page--permission-manager/);
+  assert.match(mcp, /mcp-hero--permission-manager/);
+  assert.match(mcp, /mcp-protocol-strip/);
   assert.match(mcp, /mcp-setup-grid/);
   assert.match(mcp, /code-pill/);
   assert.match(mcp, /status-pill/);
   assert.match(mcp, /glass-panel/);
+  assert.match(mcp, /Passport\/Visa authority: KeeperHub/);
+  assert.match(css, /\.page-shell--mcp\s*{/);
+  assert.match(css, /\.mcp-hero--permission-manager\s*{/);
+  assert.match(css, /\.mcp-protocol-strip\s*{/);
+  assert.match(css, /\.agent-detail--permission-manager \.agent-uniswap-card\s*{[^}]*height:\s*auto/s);
 });

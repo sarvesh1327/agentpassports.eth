@@ -3880,8 +3880,13 @@ body {
 }
 
 .agent-detail--permission-manager .agent-detail__grid {
-  align-items: flex-start;
+  align-items: start;
   grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+}
+
+.agent-detail--permission-manager .agent-uniswap-card {
+  align-self: start;
+  height: auto;
 }
 
 .agent-detail--permission-manager .agent-uniswap-card .agent-fact-table div,
@@ -3954,6 +3959,222 @@ body {
   }
 
   .page-shell--agent {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+/* MCP page refresh: match the dark AgentPassports landing/dashboard scheme. */
+.page-shell--mcp {
+  --landing-bg: #06070a;
+  --landing-panel: rgb(255 255 255 / 0.055);
+  --landing-panel-strong: rgb(255 255 255 / 0.085);
+  --landing-line: rgb(255 255 255 / 0.12);
+  --landing-line-soft: rgb(255 255 255 / 0.07);
+  --landing-ink: #f7f8ff;
+  --landing-muted: #a7b0c2;
+  --landing-soft: #768195;
+  --landing-accent: #7c6cff;
+  --landing-accent-2: #72e2ff;
+  --landing-success: #36d399;
+  background:
+    radial-gradient(circle at 12% 2%, rgb(74 91 255 / 0.34), transparent 34rem),
+    radial-gradient(circle at 88% 10%, rgb(114 226 255 / 0.18), transparent 28rem),
+    linear-gradient(180deg, #07080d 0%, #080b11 48%, #050609 100%);
+  color: var(--landing-ink);
+  display: grid;
+  gap: 24px;
+  max-width: none;
+  min-height: calc(100vh - 73px);
+  overflow: hidden;
+  padding: clamp(28px, 4vw, 56px) 24px 72px;
+  position: relative;
+}
+
+.page-shell--mcp::before {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.72), transparent 80%);
+  pointer-events: none;
+  position: absolute;
+}
+
+.page-shell--mcp > * {
+  margin-inline: auto;
+  max-width: 1180px;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.mcp-hero--permission-manager,
+.mcp-page--permission-manager .mcp-setup-grid article,
+.mcp-page--permission-manager .content-card {
+  background: var(--landing-panel);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 28px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 0.28);
+  color: var(--landing-ink);
+}
+
+.mcp-hero--permission-manager {
+  align-items: stretch;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.72fr);
+  padding: clamp(24px, 4vw, 34px);
+}
+
+.mcp-hero__copy {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mcp-hero__eyebrow {
+  color: #dcd8ff;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mcp-hero--permission-manager h1 {
+  color: #ffffff;
+  font-size: clamp(2.4rem, 5vw, 4.9rem);
+  letter-spacing: -0.075em;
+  line-height: 0.92;
+  margin: 0;
+  max-width: 10ch;
+}
+
+.mcp-hero--permission-manager p,
+.mcp-page--permission-manager .content-card p,
+.mcp-page--permission-manager .content-card li,
+.mcp-page--permission-manager .mcp-setup-grid p,
+.mcp-page--permission-manager .mcp-protocol-strip p,
+.mcp-page--permission-manager .mcp-endpoint-card p,
+.mcp-page--permission-manager .mcp-tool-list p,
+.mcp-page--permission-manager .mcp-resource-list p {
+  color: var(--landing-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.mcp-hero__authority {
+  border-left: 3px solid var(--landing-accent-2);
+  color: #dff9ff !important;
+  padding-left: 14px;
+}
+
+.mcp-endpoint-card {
+  align-content: start;
+  background:
+    linear-gradient(145deg, rgb(124 108 255 / 0.18), rgb(114 226 255 / 0.09)),
+    rgb(255 255 255 / 0.06);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 24px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 22px;
+}
+
+.mcp-endpoint-card > code {
+  color: #ffffff;
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.mcp-protocol-strip {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mcp-protocol-strip article,
+.mcp-tool-list article,
+.mcp-resource-list article {
+  background: var(--landing-panel-strong);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 22px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.mcp-protocol-strip span,
+.mcp-tool-list span,
+.mcp-resource-list span {
+  color: var(--landing-accent-2);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mcp-protocol-strip strong,
+.mcp-page--permission-manager h2 {
+  color: #ffffff;
+}
+
+.mcp-page--permission-manager .content-card,
+.mcp-page--permission-manager .mcp-setup-grid article {
+  padding: 24px;
+}
+
+.mcp-page--permission-manager .content-card {
+  display: grid;
+  gap: 14px;
+}
+
+.mcp-page--permission-manager .content-card ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.mcp-tool-list,
+.mcp-resource-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mcp-resource-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mcp-page--permission-manager .code-pill {
+  background: rgb(114 226 255 / 0.1);
+  border-color: rgb(114 226 255 / 0.24);
+  color: #dff9ff;
+  overflow-wrap: anywhere;
+}
+
+.mcp-page--permission-manager .status-pill {
+  border-color: var(--landing-line-soft);
+}
+
+@media (max-width: 900px) {
+  .mcp-hero--permission-manager,
+  .mcp-protocol-strip,
+  .mcp-tool-list,
+  .mcp-resource-list,
+  .mcp-setup-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-shell--mcp {
     padding-left: 18px;
     padding-right: 18px;
   }
