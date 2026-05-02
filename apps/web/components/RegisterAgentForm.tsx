@@ -77,7 +77,8 @@ type GeneratedPolicyMetadataResponse = {
 };
 
 const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
-const BASE_AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
+const BASE_VISA_SCOPES = ["task-log", "sponsored-execution"] as const;
+const RECORD_PREVIEW_LIMIT = 6;
 const LEGACY_AGENT_TEXT_RECORD_KEY_SET = new Set<string>(LEGACY_AGENT_TEXT_RECORD_KEYS);
 const AGENT_KIND_OPTIONS: readonly { label: string; value: AgentKind }[] = [
   { label: "Personal assistant", value: "personal-assistant" },
@@ -114,10 +115,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const [gasBudgetEth, setGasBudgetEth] = useState(formatWeiInputAsEth(props.defaultGasBudgetWei));
   const [maxReimbursementEth, setMaxReimbursementEth] = useState(formatWeiInputAsEth(props.defaultMaxGasReimbursementWei));
   const [status, setStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
-  const [statusMessage, setStatusMessage] = useState("Draft not prepared");
+  const [statusMessage, setStatusMessage] = useState("Passport draft not prepared");
   const [submittedTxHashes, setSubmittedTxHashes] = useState<string[]>([]);
   const [progressSteps, setProgressSteps] = useState<TransactionProgressStep[]>([]);
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [areRecordsExpanded, setAreRecordsExpanded] = useState(false);
   const gasBudgetWei = parseEthInputToWeiString(gasBudgetEth);
   const maxGasReimbursementWei = parseEthInputToWeiString(maxReimbursementEth);
   const swapPolicy = useMemo(
@@ -134,7 +136,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     }),
     [connectedWallet, swapChainId, swapDeadlineSeconds, swapMaxAmountInWei, swapMaxSlippageBps, swapRecipient, swapRouter, swapSelector, swapTokenIn, swapTokenOut]
   );
-  const agentCapabilities = useMemo(() => buildAgentCapabilities(agentKind), [agentKind]);
+  const visaScopes = useMemo(() => buildVisaScopes(agentKind), [agentKind]);
   const preview = useMemo(
     () =>
       buildRegisterPreview({
@@ -172,6 +174,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     () => preview.textRecords.filter((record) => !(record.value === "" && LEGACY_AGENT_TEXT_RECORD_KEY_SET.has(record.key))),
     [preview.textRecords]
   );
+  const hiddenRecordCount = Math.max(visibleTextRecords.length - RECORD_PREVIEW_LIMIT, 0);
+  const hasHiddenRecords = hiddenRecordCount > 0;
+  const displayedTextRecords = areRecordsExpanded
+    ? visibleTextRecords
+    : visibleTextRecords.slice(0, RECORD_PREVIEW_LIMIT);
   const ownerReverseName = useEnsName({
     address: connectedWallet,
     chainId: Number(props.chainId),
@@ -375,7 +382,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       throw new Error("Waiting for live resolver lookup");
     }
 
-    return requireAddress(registryResolverAddress, "Agent ENS resolver is not configured for record writes");
+    return requireAddress(registryResolverAddress, "Passport ENS resolver is not configured for record writes");
   }
 
   /**
@@ -393,7 +400,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     }
 
     if (!normalizedAgentAddress) {
-      throw new Error("Enter a valid agent address before submitting registration");
+      throw new Error("Enter a valid agent signer address before submitting registration");
     }
     if (safeBigInt(preview.gasBudgetWei) === 0n) {
       throw new Error("Enter a nonzero gas budget before submitting registration");
@@ -554,7 +561,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         agentAddress: agentSignerAddress,
         agentName: preview.agentName,
         agentNode: preview.agentNode,
-        capabilities: agentCapabilities,
+        capabilities: visaScopes,
         chainId: props.chainId.toString(),
         executorAddress,
         expiresAt: props.defaultPolicyExpiresAt,
@@ -572,7 +579,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     const body = (await response.json().catch(() => ({}))) as GeneratedPolicyMetadataResponse;
 
     if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
-      throw new Error("Policy metadata Pinata upload failed");
+      throw new Error("Visa metadata Pinata upload failed");
     }
 
     return {
@@ -654,7 +661,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
     setSubmittedTxHashes([]);
 
     try {
-      setStatusMessage("Generating policy metadata with Pinata");
+      setStatusMessage("Generating Visa metadata with Pinata");
       const generatedPolicy = await generatePolicyMetadata();
       const generatedPreview = buildRegisterPreview({
         agentAddress,
@@ -672,7 +679,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       });
 
       if (generatedPreview.policyHash !== generatedPolicy.policyHash) {
-        throw new Error("Generated policy hash does not match the registration preview");
+        throw new Error("Generated Visa hash does not match the Passport preview");
       }
 
       setStatusMessage("Awaiting wallet approval");
@@ -700,13 +707,13 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           submitted.mode === "batch"
             ? "Registration batch submitted"
             : "Registration submitted with wallet fallback",
-          directoryIndexed ? "Agent directory indexed" : "Agent directory will sync after ENS records are visible"
+          directoryIndexed ? "Passport directory indexed" : "Passport directory will sync after ENS records are visible"
         ].join(". ")
       );
     } catch (error) {
       setProgressSteps((steps) => markActiveOrLastStepError(steps));
       setStatus("error");
-      setStatusMessage(error instanceof Error ? error.message : "Registration failed");
+      setStatusMessage(error instanceof Error ? error.message : "Passport registration failed");
     }
   }
 
@@ -716,9 +723,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       isOpen={isProgressModalOpen}
       onClose={() => setIsProgressModalOpen(false)}
       steps={progressSteps}
-      title="Register agent transactions"
+      title="Register Agent Passport transactions"
     />
-    <form className="register-form register-workspace" onSubmit={handleSubmit}>
+    <form className="register-form register-workspace register-workspace--permission-manager" onSubmit={handleSubmit}>
       <div className="register-workspace__main">
         <section className="register-step" aria-labelledby="register-owner-title">
           <div className="register-step__heading">
@@ -747,7 +754,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         <section className="register-step register-step--identity" aria-labelledby="register-agent-title">
           <div className="register-step__heading">
             <span><UiIcon name="document" size={18} /></span>
-            <h2 id="register-agent-title">Agent identity</h2>
+            <h2 id="register-agent-title">Passport identity</h2>
           </div>
           <div className="register-field-stack">
             <label>
@@ -755,11 +762,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               <input name="agentLabel" onChange={(event) => setAgentLabel(event.target.value)} value={agentLabel} />
             </label>
             <label>
-              <span>Full agent ENS (preview)</span>
+              <span>Passport ENS (preview)</span>
               <input readOnly value={preview.agentName} />
             </label>
             <label>
-              <span>Agent address</span>
+              <span>Agent signer address</span>
               <input
                 name="agentAddress"
                 onChange={(event) => setAgentAddress(event.target.value)}
@@ -767,7 +774,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
                 value={agentAddress}
               />
             </label>
-            <div className="segmented-control" aria-label="Agent kind">
+            <div className="segmented-control" aria-label="Passport kind">
               {AGENT_KIND_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -779,9 +786,9 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
                 </button>
               ))}
             </div>
-            <div className="capability-row" aria-label="Capabilities">
-              {agentCapabilities.map((capability) => (
-                <span key={capability}><input readOnly type="checkbox" /> {capability}</span>
+            <div className="capability-row" aria-label="Visa Scope">
+              {visaScopes.map((scope) => (
+                <span key={scope}><input readOnly type="checkbox" /> {scope}</span>
               ))}
             </div>
           </div>
@@ -790,13 +797,13 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         <section className="register-step register-step--wide" aria-labelledby="register-policy-title">
           <div className="register-step__heading">
             <span><UiIcon name="document" size={18} /></span>
-            <h2 id="register-policy-title">Policy</h2>
-            <strong>Policy source <span className="pill pill--success">ENS</span></strong>
+            <h2 id="register-policy-title">Visa policy</h2>
+            <strong>KeeperHub-readable <span className="pill pill--success">ENS</span></strong>
           </div>
           <div className="field-grid">
             <label>
-              <span>{agentKind === "swapper" ? "Target (Uniswap router)" : "Target (TaskLog)"}</span>
-              <span className="sr-only">Policy target</span>
+              <span>{agentKind === "swapper" ? "Visa target (Uniswap router)" : "Visa target (TaskLog)"}</span>
+              <span className="sr-only">Visa target</span>
               <input readOnly value={agentKind === "swapper" ? swapPolicy?.router ?? "Complete Uniswap router" : props.taskLogAddress ?? "TaskLog not configured"} />
             </label>
             <label>
@@ -808,7 +815,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               <input readOnly value={props.defaultMaxValueWei} />
             </label>
             <label>
-              <span>Reimbursement cap (ETH)</span>
+              <span>Visa gas reimbursement cap (ETH)</span>
               <input
                 name="maxReimbursementEth"
                 onChange={(event) => setMaxReimbursementEth(event.target.value)}
@@ -817,11 +824,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               />
             </label>
             <label>
-              <span>Policy URI</span>
+              <span>Visa URI</span>
               <input readOnly value="Generated by Pinata on submit" />
             </label>
             <label>
-              <span>Policy digest (preview)</span>
+              <span>Visa digest</span>
               <input readOnly value={preview.policyDigest ?? "Pending"} />
             </label>
           </div>
@@ -831,8 +838,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           <section className="register-step register-step--wide" aria-labelledby="register-swap-policy-title">
             <div className="register-step__heading">
               <span><UiIcon name="queue" size={18} /></span>
-              <h2 id="register-swap-policy-title">Uniswap policy</h2>
-              <strong>Capability <span className="pill pill--info">uniswap-swap</span></strong>
+              <h2 id="register-swap-policy-title">Uniswap Visa constraints</h2>
+              <strong>Visa Scope <span className="pill pill--info">uniswap-swap</span></strong>
             </div>
             <div className="field-grid">
               <label>
@@ -880,7 +887,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               </label>
             </div>
             <small className="field-help">
-              These records are published to ENS and checked by MCP before every Uniswap API quote or swap. The owner wallet must separately approve AgentEnsExecutor for tokenIn; registration never grants token approval.
+              These records are published to ENS. KeeperHub reads them later when validating the Swapper Visa; the owner wallet must separately approve AgentEnsExecutor for tokenIn, because registration never grants token approval.
             </small>
           </section>
         ) : null}
@@ -909,7 +916,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           <a href={`/owner/${encodeURIComponent(normalizedOwnerName)}`}>Cancel</a>
           <button disabled type="button"><UiIcon name="document" size={17} /> Save draft</button>
           <button disabled={status === "submitting" || Boolean(submitBlocker)} type="submit">
-            <UiIcon name="shield" size={18} /> {status === "submitting" ? "Submitting..." : "Register agent"}
+            <UiIcon name="shield" size={18} /> {status === "submitting" ? "Submitting..." : "Register Agent"}
           </button>
         </div>
       </div>
@@ -917,21 +924,22 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       <aside className="register-workspace__side">
         <section className="register-side-card" aria-labelledby="register-preview-title">
           <div className="register-side-card__header">
-            <h2 id="register-preview-title"><UiIcon name="eye" size={18} /> Prepared registration</h2>
+            <h2 id="register-preview-title"><UiIcon name="eye" size={18} /> Prepared Passport</h2>
             <span className="pill pill--success">Preview</span>
           </div>
           <dl className="register-preview-list">
             <PreviewRow label="Owner node" title={preview.ownerNode} value={normalizedOwnerName || "Unknown"} />
-            <PreviewRow label="Agent node" title={preview.agentNode} value={preview.agentName ? `${preview.agentName} (new)` : "Unknown"} />
-            <PreviewRow label="Subname action" value={preview.agentName ? `create ${preview.agentName}` : "Waiting for agent label"} />
-            <PreviewRow label="Resolver writes" value={`addr + ${visibleTextRecords.length} text records`} />
-            <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${preview.agentName || "agent ENS"}`} />
-            <PreviewRow label="Budget transaction" value="depositGasBudget" />
+            <PreviewRow label="Passport node" title={preview.agentNode} value={preview.agentName ? `${preview.agentName} (new)` : "Unknown"} />
+            <PreviewRow label="Passport action" value={preview.agentName ? `create ${preview.agentName}` : "Waiting for agent label"} />
+            <PreviewRow label="ENS record writes" value={`addr + ${visibleTextRecords.length} text records`} />
+            <PreviewRow label="Owner index update" value={`${OWNER_INDEX_AGENTS_KEY} += ${preview.agentName || "Passport ENS"}`} />
+            <PreviewRow label="Gas budget transaction" value="depositGasBudget" />
           </dl>
 
           <div className="transaction-queue" aria-labelledby="register-transactions-title">
             <div className="register-side-card__header">
-              <h3 id="register-transactions-title"><UiIcon name="queue" size={18} /> Transaction queue</h3>
+              <h3 id="register-transactions-title"><UiIcon name="queue" size={18} /> Wallet transaction queue</h3>
+              <span className="sr-only">Prepared transactions</span>
               <span className="pill pill--info">{preparedBatchSummary.length || 0} steps</span>
             </div>
             {hasPreparedTransactions ? (
@@ -947,7 +955,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
             ) : (
               <div className="empty-state">
                 <strong>No transactions prepared</strong>
-                <span>{registrationDraftStatus.blocker ?? "Prepared transactions appear after the ENS records, resolver, and gas budget are ready."}</span>
+                <span>{registrationDraftStatus.blocker ?? "Wallet transactions appear after the Passport, Visa, resolver, and gas budget are ready."}</span>
               </div>
             )}
           </div>
@@ -955,11 +963,16 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
 
         <section className="register-side-card" aria-labelledby="register-records-title">
           <div className="register-side-card__header">
-            <h2 id="register-records-title"><UiIcon name="document" size={18} /> ENS records that will be written</h2>
+            <h2 id="register-records-title"><UiIcon name="document" size={18} /> Passport/Visa ENS records</h2>
+            <span className="pill pill--info">ENS preview</span>
           </div>
           {visibleTextRecords.length > 0 ? (
-            <div className="record-table" role="table" aria-label="ENS text records">
-              {visibleTextRecords.map((record) => (
+            <div
+              className={`record-table${hasHiddenRecords && !areRecordsExpanded ? " record-table--collapsed" : ""}`}
+              role="table"
+              aria-label="Passport/Visa ENS records"
+            >
+              {displayedTextRecords.map((record) => (
                 <div className="record-table__row" role="row" key={record.key}>
                   <span role="cell">{record.key}</span>
                   <strong role="cell">{record.value}</strong>
@@ -969,11 +982,28 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
                 <span role="cell">Total records</span>
                 <strong role="cell">{visibleTextRecords.length} text + 1 addr</strong>
               </div>
+              {hasHiddenRecords ? (
+                <div className="record-table__row record-table__footer" role="row">
+                  <span role="cell">
+                    {areRecordsExpanded ? "Full list shown" : `${hiddenRecordCount} hidden records`}
+                  </span>
+                  <strong role="cell">
+                    <button
+                      type="button"
+                      className="record-table__toggle"
+                      aria-expanded={areRecordsExpanded}
+                      onClick={() => setAreRecordsExpanded((current) => !current)}
+                    >
+                      {areRecordsExpanded ? "Show less" : `See more (${hiddenRecordCount} more)`}
+                    </button>
+                  </strong>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="empty-state">
-              <strong>No ENS records prepared</strong>
-              <span>ENS text records appear after owner ENS, agent label, and agent address are ready.</span>
+              <strong>No Passport/Visa records prepared</strong>
+              <span>Passport/Visa ENS records appear after owner ENS, agent label, and agent signer are ready.</span>
             </div>
           )}
         </section>
@@ -1005,12 +1035,12 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-function buildAgentCapabilities(agentKind: AgentKind): readonly string[] {
-  const capabilities: string[] = [...BASE_AGENT_CAPABILITIES];
+function buildVisaScopes(agentKind: AgentKind): readonly string[] {
+  const scopes: string[] = [...BASE_VISA_SCOPES];
   if (agentKind === "swapper") {
-    capabilities.push("uniswap-swap");
+    scopes.push("uniswap-swap");
   }
-  return capabilities;
+  return scopes;
 }
 
 function buildSwapPolicyDraft(input: {
@@ -1084,13 +1114,13 @@ function formatNullableHex(value?: Hex | null): string {
 function readableRegistrationCallLabel(label: string): string {
   switch (label) {
     case "setSubnodeRecord":
-      return "Create agent ENS subname";
+      return "Create Passport ENS subname";
     case "multicall":
-      return "Write agent ENS records";
+      return "Write Passport/Visa ENS records";
     case "depositGasBudget":
       return "Fund gas budget";
     case "setOwnerIndex":
-      return "Update owner dashboard index";
+      return "Update owner Passport index";
     default:
       return label;
   }
@@ -1099,15 +1129,15 @@ function readableRegistrationCallLabel(label: string): string {
 function describeRegistrationCall(label: string): string {
   switch (label) {
     case "setSubnodeRecord":
-      return "Creates the agent subname and points it at the public resolver.";
+      return "Creates the Passport subname and points it at the public resolver.";
     case "multicall":
-      return "Publishes addr(agent), policy metadata, capabilities, executor, and status in ENS.";
+      return "Publishes addr(agent), Visa metadata, Visa Scope, executor, and status in ENS.";
     case "depositGasBudget":
       return "Deposits the owner-funded execution budget into the executor contract.";
     case "setOwnerIndex":
-      return "Adds the new agent label to the owner ENS dashboard index.";
+      return "Adds the new Passport label to the owner ENS dashboard index.";
     default:
-      return "Wallet transaction required for registration.";
+      return "Wallet transaction required for Passport registration.";
   }
 }
 

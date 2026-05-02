@@ -13,7 +13,7 @@ export default async function AgentPage({ params }: AgentPageProps) {
   const profile = buildDemoAgentProfile({ agentName: decodeAgentName(name) });
 
   return (
-    <main className="page-shell">
+    <main className="page-shell page-shell--agent">
       <AgentProfileView initialProfile={serializeAgentProfile(profile)} />
     </main>
   );

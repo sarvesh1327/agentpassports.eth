@@ -217,12 +217,20 @@ test("register route is dashboard scoped instead of a standalone legacy flow", a
   const registerSource = await readText("apps/web/app/register/page.tsx");
 
   assert.doesNotMatch(registerSource, /redirect\("\/"\)/);
-  assert.match(registerSource, /Register new agent/);
-  assert.match(registerSource, /Create an ENS subname, publish policy metadata, and fund execution budget\./);
+  assert.match(registerSource, /page-shell page-shell--register/);
+  assert.match(registerSource, /register-hero--permission-manager/);
+  assert.match(registerSource, /register-hero__flow/);
+  assert.match(registerSource, /Register Agent Passport/);
+  assert.match(registerSource, /Create a Passport, issue an initial Visa/);
+  assert.match(registerSource, /KeeperHub-readable ENS records/);
+  assert.match(registerSource, /Passport/);
+  assert.match(registerSource, /Visa/);
+  assert.match(registerSource, /KeeperHub Stamp/);
   assert.match(registerSource, /Back to owner dashboard/);
   assert.match(registerSource, /\/owner\/\$\{encodeURIComponent\(defaultOwnerName\)\}/);
   assert.doesNotMatch(registerSource, /<h1 id="register-title">Register new agent for/);
-  assert.doesNotMatch(registerSource, /Create an agent passport/);
+  assert.doesNotMatch(registerSource, /Register new agent/);
+  assert.doesNotMatch(registerSource, /Create an ENS subname, publish policy metadata, and fund execution budget\./);
 });
 
 test("dashboard and register pages use the management mockup layout vocabulary", async () => {
@@ -245,19 +253,42 @@ test("dashboard and register pages use the management mockup layout vocabulary",
   }
 
   for (const token of [
+    "register-workspace--permission-manager",
     "register-workspace",
     "register-step",
-    "Prepared registration",
-    "Transaction queue",
+    "Passport identity",
+    "Agent signer address",
+    "Visa policy",
+    "Visa digest",
+    "Visa Scope",
+    "Uniswap Visa constraints",
+    "Prepared Passport",
+    "Wallet transaction queue",
     "Owner index update",
-    "ENS records that will be written",
-    "Register agent"
+    "Passport/Visa ENS records",
+    "KeeperHub-readable",
+    "Register Agent"
   ]) {
     assert.match(registerSource, new RegExp(token), `${token} should be in register UI`);
   }
 
+  for (const legacyToken of [
+    "Policy source",
+    "Policy digest \\(preview\\)",
+    "Prepared registration",
+    "ENS records that will be written",
+    "Transaction queue",
+    "Capabilities",
+    "Register agent"
+  ]) {
+    assert.doesNotMatch(registerSource, new RegExp(legacyToken), `${legacyToken} should not be visible register copy`);
+  }
+
   assert.match(styles, /\.owner-summary-strip/);
   assert.match(styles, /\.owner-agent-row/);
+  assert.match(styles, /\.page-shell--register/);
+  assert.match(styles, /\.register-hero--permission-manager/);
+  assert.match(styles, /\.register-workspace--permission-manager/);
   assert.match(styles, /\.register-workspace/);
   assert.match(styles, /\.register-step/);
   assert.match(styles, /\.page-shell\s*{[^}]*max-width: 1488px/s);
@@ -318,27 +349,27 @@ test("image-generated UI spec and SVG symbol set are source-controlled", async (
   assert.doesNotMatch(uiSource, /[⌁▣☷▦⌕✓↗]/u);
 });
 
-test("agent management page exposes policy, gas, signer, delete, and persistent history sections", async () => {
+test("agent management page exposes Visa, gas, signer, delete, and KeeperHub Stamp sections", async () => {
   const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
   const managementSource = await readText("apps/web/components/AgentManagementPanel.tsx");
-  const historySource = await readText("apps/web/components/TaskHistoryPanel.tsx");
-  const source = `${viewSource}\n${managementSource}\n${historySource}`;
+  const source = `${viewSource}\n${managementSource}`;
 
   for (const label of [
-    "Agent management",
-    "Disable policy",
-    "Enable policy",
-    "Edit policy metadata",
+    "Passport management",
+    "Disable Visa",
+    "Enable Visa",
+    "Edit Visa metadata",
     "Add gas",
     "Withdraw gas",
-    "Update signer address",
-    "Delete agent",
-    "Historical task history remains visible"
+    "Update agent signer",
+    "Delete Passport",
+    "KeeperHub Stamps"
   ]) {
     assert.match(source, new RegExp(label), `${label} section should be present`);
   }
   assert.match(viewSource, /AgentManagementPanel/);
-  assert.match(viewSource, /TaskHistoryPanel/);
+  assert.doesNotMatch(viewSource, /TaskHistoryPanel/);
+  assert.doesNotMatch(source, /Task history/);
 });
 
 test("agent page exposes visible signer and policy management and refreshes after wallet transactions", async () => {
@@ -347,10 +378,10 @@ test("agent page exposes visible signer and policy management and refreshes afte
   const source = `${viewSource}\n${managementSource}`;
 
   for (const token of [
-    "Policy metadata",
-    "Policy URI",
+    "Visa metadata",
+    "Visa URI",
     "agent_policy_hash",
-    "Update signer address",
+    "Update agent signer",
     "waitForTransactionReceipt",
     "refreshAgentReads",
     "generatePolicyMetadata",
@@ -369,7 +400,7 @@ test("agent page keeps explicit ENS proof and demo route intent visible in sourc
   const revokePageSource = await readText("apps/web/app/revoke/page.tsx");
 
   for (const token of [
-    "Agent proof",
+    "Passport proof",
     "Recovered signer",
     "Live resolver",
     "agentNode",
@@ -521,7 +552,7 @@ test("delete flow blocks wrapped agent subnames and waits for deletion receipts 
   assert.equal(blocked.canDelete, false);
   assert.match(blocked.reason ?? "", /wrapped agent/i);
 
-  for (const token of ["waitForTransactionReceipt", "onDeleted", "Delete agent transactions confirmed"]) {
+  for (const token of ["waitForTransactionReceipt", "onDeleted", "Delete Passport transactions confirmed"]) {
     assert.match(managementSource, new RegExp(token), `${token} should be used by the delete UI`);
   }
 });

@@ -6,7 +6,6 @@ import { encodeFunctionData } from "viem";
 import { usePublicClient, useReadContract, useReadContracts, useSendTransaction } from "wagmi";
 import { AgentManagementPanel } from "./AgentManagementPanel";
 import { StatusBanner } from "./StatusBanner";
-import { TaskHistoryPanel } from "./TaskHistoryPanel";
 import {
   AGENT_ENS_EXECUTOR_ABI,
   AGENT_TEXT_RECORD_KEYS,
@@ -23,10 +22,8 @@ import {
   loadKeeperHubAttestations,
   type KeeperHubAttestation
 } from "../lib/keeperhubAttestations";
-import {
-  loadTaskHistory,
-  type TaskHistoryItem
-} from "../lib/taskHistory";
+
+const KEEPERHUB_STAMP_PREVIEW_LIMIT = 2;
 
 type TextReadResult = {
   result?: unknown;
@@ -34,15 +31,14 @@ type TextReadResult = {
 };
 
 /**
- * Hydrates the agent passport with live ENS, executor, and TaskLog reads.
+ * Hydrates the agent passport with live ENS, executor, and KeeperHub Stamp reads.
  */
 export function AgentProfileView({ initialProfile }: { initialProfile: SerializableAgentProfile }) {
   const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
   const { sendTransactionAsync } = useSendTransaction();
-  const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
   const [keeperHubAttestations, setKeeperHubAttestations] = useState<KeeperHubAttestation[]>([]);
   const [keeperHubStatus, setKeeperHubStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [keeperHubMessage, setKeeperHubMessage] = useState("KeeperHub attestations have not loaded yet.");
+  const [keeperHubMessage, setKeeperHubMessage] = useState("KeeperHub Stamps have not loaded yet.");
   const [managementStatus, setManagementStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [managementMessage, setManagementMessage] = useState("Owner actions are ready.");
   const registryResolver = useReadContract({
@@ -128,14 +124,6 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
       gasBudgetRead.refetch(),
       nextNonceRead.refetch()
     ]);
-
-    const tasks = await loadTaskHistory({
-      agentNode: initialProfile.agentNode,
-      fromBlock: parseOptionalBigInt(initialProfile.taskLogStartBlock),
-      publicClient,
-      taskLogAddress: initialProfile.taskLogAddress
-    });
-    setTaskHistory(tasks);
   }
 
   async function sendAgentManagementCall(input: { data: Hex; label: string; to?: Hex | null; value?: bigint }) {
@@ -209,38 +197,9 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   useEffect(() => {
     let cancelled = false;
 
-    /**
-     * Reads indexed and onchain TaskLog records for the selected agent node.
-     */
-    async function refreshTaskHistory() {
-      const tasks = await loadTaskHistory({
-        agentNode: initialProfile.agentNode,
-        fromBlock: parseOptionalBigInt(initialProfile.taskLogStartBlock),
-        publicClient,
-        taskLogAddress: initialProfile.taskLogAddress
-      });
-      if (!cancelled) {
-        setTaskHistory(tasks);
-      }
-    }
-
-    refreshTaskHistory().catch(() => {
-      if (!cancelled) {
-        setTaskHistory([]);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [initialProfile.agentNode, initialProfile.taskLogAddress, initialProfile.taskLogStartBlock, publicClient]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     async function refreshKeeperHubAttestations() {
       setKeeperHubStatus("loading");
-      setKeeperHubMessage("Loading KeeperHub attestations...");
+      setKeeperHubMessage("Loading KeeperHub Stamps...");
       try {
         const rows = await loadKeeperHubAttestations({
           agentName: initialProfile.agentName,
@@ -250,13 +209,13 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
         if (!cancelled) {
           setKeeperHubAttestations(rows);
           setKeeperHubStatus("success");
-          setKeeperHubMessage(rows.length > 0 ? `${rows.length} KeeperHub attestations loaded.` : "No KeeperHub attestations found for this agent yet.");
+          setKeeperHubMessage(rows.length > 0 ? `${rows.length} KeeperHub Stamps loaded.` : "No KeeperHub Stamps found for this agent yet.");
         }
       } catch (error) {
         if (!cancelled) {
           setKeeperHubAttestations([]);
           setKeeperHubStatus("error");
-          setKeeperHubMessage(error instanceof Error ? error.message : "KeeperHub attestation request failed.");
+          setKeeperHubMessage(error instanceof Error ? error.message : "KeeperHub Stamp request failed.");
         }
       }
     }
@@ -264,7 +223,7 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     refreshKeeperHubAttestations().catch(() => {
       if (!cancelled) {
         setKeeperHubStatus("error");
-        setKeeperHubMessage("KeeperHub attestation request failed.");
+        setKeeperHubMessage("KeeperHub Stamp request failed.");
       }
     });
 
@@ -274,11 +233,12 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   }, [initialProfile.agentName, initialProfile.agentNode]);
 
   return (
-    <div className="agent-detail">
+    <div className="agent-detail agent-detail--permission-manager">
       <section className="agent-detail__topbar agent-detail__hero glass-panel" aria-labelledby="agent-title">
         <a className="agent-detail__back" href={`/owner/${encodeURIComponent(initialProfile.ownerName)}`}>
           <UiIcon name="arrow-left" size={15} /> Back to dashboard
         </a>
+        <span className="agent-detail__eyebrow">Passport Preview</span>
         <div className="agent-detail__header">
           <div className="agent-detail__identity">
             <span className="agent-detail__avatar" aria-hidden="true"><AgentBotIcon size={36} /></span>
@@ -291,11 +251,11 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
               </div>
               <dl className="agent-detail__quick-facts">
                 <div>
-                  <dt>Signer</dt>
+                  <dt>Agent signer</dt>
                   <dd title={liveAgentAddress ?? undefined}>{liveAgentAddress ? shortenHex(liveAgentAddress) : "Unknown"}</dd>
                 </div>
                 <div>
-                  <dt>Policy Source</dt>
+                  <dt>Passport proof</dt>
                   <dd><span className="status-pill status-pill--success">ENS</span></dd>
                 </div>
               </dl>
@@ -305,8 +265,8 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
             <button className="action-button action-button--secondary" type="button" onClick={() => void writeAgentStatus(nextStatusAction)}>
               <UiIcon name={nextStatusAction === "active" ? "check" : "shield"} size={16} /> {nextStatusAction === "active" ? "Enable" : "Disable"}
             </button>
-            <a className="action-button action-button--secondary" href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit policy</a>
-            <a className="agent-detail__delete-link action-button action-button--danger" href="#agent-management-delete-title" aria-label="Delete agent"><UiIcon name="trash" size={16} /> Delete</a>
+            <a className="action-button action-button--secondary" href="#agent-management-policy-title"><UiIcon name="edit" size={16} /> Edit Visa</a>
+            <a className="agent-detail__delete-link action-button action-button--danger" href="#agent-management-delete-title" aria-label="Delete Passport"><UiIcon name="trash" size={16} /> Delete Passport</a>
           </div>
         </div>
         <StatusBanner
@@ -315,6 +275,24 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           title="Owner action status"
           variant={managementStatus}
         />
+      </section>
+
+      <section className="agent-detail__protocol-strip" aria-label="AgentPassports trust flow">
+        <article>
+          <span>01</span>
+          <strong>Passport</strong>
+          <p>ENS identity for {initialProfile.agentName}; owner can update or revoke it onchain.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <strong>Visa state</strong>
+          <p>Exact scope from ENS text records: target, selector, value cap, expiry, and gas reimbursement.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <strong>KeeperHub Stamps</strong>
+          <p>KeeperHub validates the Passport/Visa before execution and records latest stamps.</p>
+        </article>
       </section>
 
       <div className="agent-detail__grid">
@@ -367,15 +345,6 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
             status={keeperHubStatus}
           />
         ) : null}
-        <TaskHistoryPanel
-          cardClassName="agent-panel agent-history-card"
-          emptyDescription="TaskLog events remain visible here after disable or delete."
-          emptyTitle="No task history"
-          eyebrow="TaskLog"
-          headingId="agent-history-title"
-          tasks={taskHistory}
-          title="Task history"
-        />
       </div>
 
       <AgentManagementPanel
@@ -416,7 +385,7 @@ function AgentProofPanel(props: {
 
   return (
     <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-proof-title">
-      <h2 id="agent-proof-title"><UiIcon name="shield" size={18} /> Agent proof</h2>
+      <h2 id="agent-proof-title"><UiIcon name="shield" size={18} /> Passport proof</h2>
       <dl className="agent-fact-table">
         {rows.map((row) => (
           <div key={row.label}>
@@ -444,23 +413,23 @@ function LiveEnsPassportPanel(props: {
   status: string;
 }) {
   const rows = [
-    { label: "addr", title: props.agentAddress ?? undefined, value: props.agentAddress ? shortenHex(props.agentAddress) : "Unknown" },
-    { label: "resolver", title: props.resolverAddress ?? undefined, value: props.resolverAddress ? shortenHex(props.resolverAddress) : "Unknown" },
-    { label: "owner", title: props.ownerNode, value: props.ownerName },
-    { label: "agent_status", value: props.status },
-    { label: "agent_policy_uri", title: props.policyUri, value: props.policyUri || "Unknown" },
-    { label: "agent_policy_digest", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash as Hex) : "Unknown" }
+    { label: "Agent signer", title: props.agentAddress ?? undefined, value: props.agentAddress ? shortenHex(props.agentAddress) : "Unknown" },
+    { label: "ENS resolver", title: props.resolverAddress ?? undefined, value: props.resolverAddress ? shortenHex(props.resolverAddress) : "Unknown" },
+    { label: "Owner Passport", title: props.ownerNode, value: props.ownerName },
+    { label: "Passport status", value: props.status },
+    { label: "Visa URI", title: props.policyUri, value: props.policyUri || "Unknown" },
+    { label: "Visa digest", title: props.policyHash ?? undefined, value: props.policyHash ? shortenHex(props.policyHash as Hex) : "Unknown" }
   ];
 
   return (
     <section className="agent-panel agent-passport-panel" aria-labelledby="agent-passport-title">
-      <h2 id="agent-passport-title"><UiIcon name="shield" size={18} /> Live ENS Passport</h2>
+      <h2 id="agent-passport-title"><UiIcon name="shield" size={18} /> Agent Passport</h2>
       <dl className="agent-fact-table">
         {rows.map((row) => (
           <div key={row.label}>
             <dt>{row.label}</dt>
             <dd title={row.title}>
-              {row.label === "agent_status" ? <span className="pill pill--success">{row.value}</span> : row.value}
+              {row.label === "Passport status" ? <span className="pill pill--success">{row.value}</span> : row.value}
             </dd>
           </div>
         ))}
@@ -490,18 +459,18 @@ function PolicyStatePanel(props: {
   taskLogAddress: Hex | null;
 }) {
   const rows = [
-    { label: "Allowed Target (TaskLog)", title: props.policyTarget ?? props.taskLogAddress ?? undefined, value: props.policyTarget ? shortenHex(props.policyTarget) : props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
-    { label: "Allowed Selector", title: props.policySelector || undefined, value: props.policySelector || "Unknown" },
-    { label: "Max Value per Call", value: props.maxValueWei ? formatWei(safeBigInt(props.maxValueWei)) : "Unknown" },
-    { label: "Reimbursement Cap", value: props.maxGasReimbursementWei ? formatWei(safeBigInt(props.maxGasReimbursementWei)) : "Unknown" },
-    { label: "Expiry", value: props.policyExpiresAt ? formatUnixTime(safeBigInt(props.policyExpiresAt)) : "Unknown" },
+    { label: "Visa target", title: props.policyTarget ?? props.taskLogAddress ?? undefined, value: props.policyTarget ? shortenHex(props.policyTarget) : props.taskLogAddress ? shortenHex(props.taskLogAddress) : "Unknown" },
+    { label: "Visa selector", title: props.policySelector || undefined, value: props.policySelector || "Unknown" },
+    { label: "Max value per call", value: props.maxValueWei ? formatWei(safeBigInt(props.maxValueWei)) : "Unknown" },
+    { label: "Gas reimbursement cap", value: props.maxGasReimbursementWei ? formatWei(safeBigInt(props.maxGasReimbursementWei)) : "Unknown" },
+    { label: "Visa expiry", value: props.policyExpiresAt ? formatUnixTime(safeBigInt(props.policyExpiresAt)) : "Unknown" },
     {
-      label: "Policy digest",
+      label: "Visa digest",
       title: props.policyDigest ?? undefined,
       value: props.policyDigest ? shortenHex(props.policyDigest) : "Unknown"
     },
     {
-      label: "Policy hash",
+      label: "Visa metadata hash",
       title: props.policyHash ?? undefined,
       value: props.policyHash ? shortenHex(props.policyHash) : "Unknown"
     },
@@ -510,14 +479,14 @@ function PolicyStatePanel(props: {
       title: props.executorAddress ?? undefined,
       value: props.executorAddress ? shortenHex(props.executorAddress) : "Unknown"
     },
-    { label: "Policy Source", value: props.policyUri ? "ENS" : "Unknown" },
-    { label: "Policy state", value: props.status === "active" ? "Enabled by exact ENS status" : "Disabled or unknown" },
+    { label: "Passport proof", value: props.policyUri ? "ENS" : "Unknown" },
+    { label: "Visa state", value: props.status === "active" ? "Enabled by exact ENS status" : "Disabled or unknown" },
     { label: "Next nonce", value: props.nextNonce }
   ];
 
   return (
     <section className="agent-panel agent-policy-card" aria-labelledby="agent-policy-title">
-      <h2 id="agent-policy-title"><UiIcon name="document" size={18} /> Policy</h2>
+      <h2 id="agent-policy-title"><UiIcon name="document" size={18} /> Visa state</h2>
       <dl className="agent-fact-table">
         {rows.map((row) => (
           <div key={row.label}>
@@ -527,7 +496,7 @@ function PolicyStatePanel(props: {
         ))}
       </dl>
       <div className="agent-policy-card__capabilities">
-        <span>Capabilities</span>
+        <span>Visa Scope</span>
         <div>
           {props.capabilities.map((capability) => (
             <span className="pill pill--info" key={capability}>{capability}</span>
@@ -548,7 +517,7 @@ function GasBudgetPanel(props: {
 
   return (
     <section className="agent-panel agent-gas-card" aria-labelledby="agent-gas-title">
-      <h2 id="agent-gas-title"><UiIcon name="gas" size={18} /> Gas Budget</h2>
+      <h2 id="agent-gas-title"><UiIcon name="gas" size={18} /> Gas budget</h2>
       <span>Balance</span>
       <strong>{formatWei(props.gasBudgetWei)}</strong>
       <div className="agent-gas-card__inputs">
@@ -606,22 +575,26 @@ type UniswapPolicyDisplay = {
 };
 
 function UniswapPolicyPanel(props: { policy: UniswapPolicyDisplay }) {
+  const allowedTokens = `${shortenAddressCsv(props.policy.allowedTokenIn)} → ${shortenAddressCsv(props.policy.allowedTokenOut)}`;
+  const allowedTokensTitle = `${props.policy.allowedTokenIn} → ${props.policy.allowedTokenOut}`;
+  const routerSelector = `${shortenMaybeHex(props.policy.router)} · ${props.policy.selector}`;
+  const limits = [
+    `${props.policy.maxInputAmount} max input`,
+    `${props.policy.maxSlippageBps} bps slippage`,
+    props.policy.deadlineSeconds === "Unknown" ? "deadline unknown" : `${props.policy.deadlineSeconds}s quote deadline`
+  ].join(" · ");
   const rows = [
-    { label: "Allowed chain ID", value: props.policy.allowedChainId },
-    { label: "Allowed token in", title: props.policy.allowedTokenIn, value: shortenAddressCsv(props.policy.allowedTokenIn) },
-    { label: "Allowed token out", title: props.policy.allowedTokenOut, value: shortenAddressCsv(props.policy.allowedTokenOut) },
-    { label: "Max input amount", value: props.policy.maxInputAmount },
-    { label: "Max slippage bps", value: props.policy.maxSlippageBps },
-    { label: "Quote deadline", value: props.policy.deadlineSeconds === "Unknown" ? "Unknown" : `${props.policy.deadlineSeconds}s` },
-    { label: "Policy enabled", value: props.policy.enabled },
+    { label: "Chain", value: props.policy.allowedChainId },
+    { label: "Router / selector", title: `${props.policy.router} · ${props.policy.selector}`, value: routerSelector },
+    { label: "Allowed tokens", title: allowedTokensTitle, value: allowedTokens },
+    { label: "Limits", value: limits },
     { label: "Recipient", title: props.policy.recipient, value: shortenMaybeHex(props.policy.recipient) },
-    { label: "Router", title: props.policy.router, value: shortenMaybeHex(props.policy.router) },
-    { label: "Selector", value: props.policy.selector }
+    { label: "Visa status", value: props.policy.enabled }
   ];
 
   return (
-    <section className="agent-panel agent-policy-card" aria-labelledby="agent-uniswap-policy-title">
-      <h2 id="agent-uniswap-policy-title"><UiIcon name="queue" size={18} /> Uniswap policy</h2>
+    <section className="agent-panel agent-policy-card agent-uniswap-card" aria-labelledby="agent-uniswap-policy-title">
+      <h2 id="agent-uniswap-policy-title"><UiIcon name="queue" size={18} /> Uniswap Visa</h2>
       <dl className="agent-fact-table">
         {rows.map((row) => (
           <div key={row.label}>
@@ -640,27 +613,32 @@ function KeeperHubAttestationsPanel(props: {
   policyDigest: string | null;
   status: "idle" | "loading" | "success" | "error";
 }) {
+  const [areStampsExpanded, setAreStampsExpanded] = useState(false);
   const digestLabel = props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown";
+  const visibleAttestations = areStampsExpanded ? props.attestations : props.attestations.slice(0, KEEPERHUB_STAMP_PREVIEW_LIMIT);
+  const hiddenStampCount = props.attestations.length - visibleAttestations.length;
+  const hasHiddenStamps = props.attestations.length > KEEPERHUB_STAMP_PREVIEW_LIMIT;
+
   return (
     <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-keeperhub-attestations-title">
       <div className="agent-section-heading">
-        <h2 id="agent-keeperhub-attestations-title"><UiIcon name="shield" size={18} /> KeeperHub attestations</h2>
+        <h2 id="agent-keeperhub-attestations-title"><UiIcon name="shield" size={18} /> KeeperHub Stamps</h2>
         <span className={`pill ${props.status === "error" ? "pill--danger" : props.status === "loading" ? "pill--warning" : "pill--success"}`}>{props.status}</span>
       </div>
       <p className="muted-copy">{props.message}</p>
       <dl className="agent-fact-table">
         <div>
-          <dt>Policy digest</dt>
+          <dt>Visa digest</dt>
           <dd title={props.policyDigest ?? undefined}>{digestLabel}</dd>
         </div>
         <div>
-          <dt>Attestations loaded</dt>
+          <dt>Stamps loaded</dt>
           <dd>{props.attestations.length}</dd>
         </div>
       </dl>
       {props.attestations.length > 0 ? (
         <div className="keeperhub-attestations" aria-label="Execution trace">
-          {props.attestations.map((attestation) => (
+          {visibleAttestations.map((attestation) => (
             <article className="keeperhub-attestation" key={attestation.executionId}>
               <div className="keeperhub-attestation__heading">
                 <div>
@@ -675,7 +653,7 @@ function KeeperHubAttestationsPanel(props: {
                   <dd title={attestation.txHash ?? undefined}>{attestation.txHash ? shortenHex(attestation.txHash as Hex) : "No tx"}</dd>
                 </div>
                 <div>
-                  <dt>Blocked stamp</dt>
+                  <dt>Latest Stamp</dt>
                   <dd title={attestation.stampReason ?? undefined}>{attestation.blockedCode ?? "None"}</dd>
                 </div>
                 <div>
@@ -699,11 +677,11 @@ function KeeperHubAttestationsPanel(props: {
                   <dd>{attestation.amount ?? "Unknown"}</dd>
                 </div>
                 <div>
-                  <dt>Target</dt>
+                  <dt>Visa target</dt>
                   <dd title={attestation.requestedTarget ?? undefined}>{attestation.requestedTarget ? shortenMaybeHex(attestation.requestedTarget) : "Unknown"}</dd>
                 </div>
                 <div>
-                  <dt>Selector</dt>
+                  <dt>Visa selector</dt>
                   <dd>{attestation.requestedSelector ?? "Unknown"}</dd>
                 </div>
                 <div>
@@ -717,6 +695,13 @@ function KeeperHubAttestationsPanel(props: {
               </dl>
             </article>
           ))}
+          {hasHiddenStamps ? (
+            <div className="keeperhub-attestations__footer">
+              <button className="keeperhub-attestations__toggle" type="button" onClick={() => setAreStampsExpanded((value) => !value)}>
+                {areStampsExpanded ? "Show less" : `See more (${hiddenStampCount} more)`}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -762,13 +747,6 @@ function readUniswapPolicyDisplay(records: readonly { key: string; value: string
  */
 function safeBigInt(value: string): bigint {
   return /^\d+$/u.test(value) ? BigInt(value) : 0n;
-}
-
-/**
- * Converts serialized optional block numbers into bigint values for bounded event reads.
- */
-function parseOptionalBigInt(value: string | null): bigint | null {
-  return value && /^\d+$/u.test(value) ? BigInt(value) : null;
 }
 
 function formatUnixTime(value: bigint): string {

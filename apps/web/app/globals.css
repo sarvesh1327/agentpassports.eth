@@ -1619,7 +1619,8 @@ label.register-field-stack {
 
 .segmented-control {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
 }
 
 .segmented-control button {
@@ -1627,7 +1628,12 @@ label.register-field-stack {
   border: 1px solid #cbd5e1;
   color: #334155;
   cursor: pointer;
-  padding: 10px;
+  line-height: 1.15;
+  min-height: 44px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  white-space: normal;
 }
 
 .segmented-control button[aria-pressed="true"] {
@@ -1904,6 +1910,32 @@ label.register-field-stack {
   font-size: 0.92rem;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.record-table__footer {
+  background: #f8fafc;
+}
+
+.record-table__toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #075de8;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.84rem;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  width: 100%;
+}
+
+.record-table--collapsed .record-table__footer {
+  border-top-color: #cbd5e1;
 }
 
 .record-table__meta {
@@ -3652,5 +3684,567 @@ body {
   .owner-dashboard--permission-manager .owner-summary-strip__cell + .owner-summary-strip__cell {
     border-left: 0;
     border-top: 1px solid var(--landing-line-soft);
+  }
+}
+
+/* Agent preview refresh: match the dark AgentPassports landing/dashboard scheme. */
+.page-shell--agent {
+  --landing-bg: #06070a;
+  --landing-panel: rgb(255 255 255 / 0.055);
+  --landing-panel-strong: rgb(255 255 255 / 0.085);
+  --landing-line: rgb(255 255 255 / 0.12);
+  --landing-line-soft: rgb(255 255 255 / 0.07);
+  --landing-ink: #f7f8ff;
+  --landing-muted: #a7b0c2;
+  --landing-soft: #768195;
+  --landing-accent: #7c6cff;
+  --landing-accent-2: #72e2ff;
+  --landing-success: #36d399;
+  background:
+    radial-gradient(circle at 14% 0%, rgb(74 91 255 / 0.32), transparent 34rem),
+    radial-gradient(circle at 88% 8%, rgb(114 226 255 / 0.17), transparent 28rem),
+    var(--landing-bg);
+  color: var(--landing-ink);
+  max-width: none;
+  overflow: hidden;
+  padding: 32px 24px 64px;
+  position: relative;
+}
+
+.page-shell--agent::before {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  content: "";
+  inset: 0;
+  mask-image: radial-gradient(circle at top, black, transparent 72%);
+  pointer-events: none;
+  position: absolute;
+}
+
+.page-shell--agent > * {
+  margin-inline: auto;
+  max-width: 1180px;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.agent-detail--permission-manager {
+  gap: 22px;
+}
+
+.agent-detail--permission-manager .agent-detail__hero {
+  background: linear-gradient(135deg, rgb(124 108 255 / 0.18), rgb(114 226 255 / 0.08));
+  border: 1px solid var(--landing-line);
+  border-radius: 32px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 0.28);
+  padding: 28px;
+}
+
+.agent-detail--permission-manager .agent-detail__back {
+  background: rgb(255 255 255 / 0.055);
+  border-color: var(--landing-line-soft);
+  color: #ffffff;
+}
+
+.agent-detail__eyebrow {
+  color: var(--landing-accent-2);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.agent-detail--permission-manager .agent-detail__avatar {
+  background: linear-gradient(135deg, rgb(124 108 255 / 0.34), rgb(114 226 255 / 0.16));
+  border: 1px solid var(--landing-line);
+  color: #ffffff;
+}
+
+.agent-detail--permission-manager .agent-detail__name-row h1,
+.agent-detail--permission-manager .agent-panel h2,
+.agent-detail--permission-manager .agent-gas-card strong,
+.agent-detail--permission-manager .agent-fact-table dt,
+.agent-detail--permission-manager .agent-fact-table dd,
+.agent-detail--permission-manager .keeperhub-attestation__heading strong,
+.agent-detail--permission-manager .management-panel h2,
+.agent-detail--permission-manager .management-panel h3,
+.agent-detail--permission-manager .management-panel label,
+.agent-detail--permission-manager .agent-delete-band h2 {
+  color: #ffffff;
+}
+
+.agent-detail--permission-manager .agent-detail__quick-facts dt,
+.agent-detail--permission-manager .agent-gas-card > span,
+.agent-detail--permission-manager .agent-policy-card__capabilities > span,
+.agent-detail--permission-manager .keeperhub-attestation__heading span:not(.pill),
+.agent-detail--permission-manager .status-banner span,
+.agent-detail--permission-manager .status-banner small,
+.agent-detail--permission-manager .transaction-result code,
+.agent-detail--permission-manager .transaction-result span,
+.agent-detail--permission-manager .muted-copy,
+.agent-detail--permission-manager .management-panel p,
+.agent-detail--permission-manager .management-panel span,
+.agent-detail--permission-manager .agent-delete-band p {
+  color: var(--landing-muted);
+}
+
+.agent-detail--permission-manager .status-banner {
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  padding: 14px 16px;
+}
+
+.agent-detail--permission-manager .status-banner strong {
+  color: #ffffff;
+}
+
+.agent-detail--permission-manager .status-banner--loading {
+  background: rgb(114 226 255 / 0.1);
+  border-color: rgb(114 226 255 / 0.22);
+}
+
+.agent-detail--permission-manager .status-banner--success {
+  background: rgb(54 211 153 / 0.1);
+  border-color: rgb(54 211 153 / 0.24);
+}
+
+.agent-detail--permission-manager .status-banner--error {
+  background: rgb(255 154 168 / 0.1);
+  border-color: rgb(255 154 168 / 0.26);
+}
+
+.agent-detail--permission-manager .transaction-result {
+  border-radius: 18px;
+  border-top: 1px solid var(--landing-line-soft);
+}
+
+.agent-detail--permission-manager .agent-detail__actions a,
+.agent-detail--permission-manager .agent-detail__actions button,
+.agent-detail--permission-manager .agent-gas-card__inputs form > button {
+  background: rgb(255 255 255 / 0.055);
+  border-color: var(--landing-line);
+  border-radius: 999px;
+  color: #ffffff;
+}
+
+.agent-detail--permission-manager .action-button--danger,
+.agent-detail--permission-manager .agent-detail__delete-link {
+  border-color: rgb(255 154 168 / 0.55) !important;
+  color: #ff9aa8 !important;
+}
+
+.agent-detail__protocol-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agent-detail__protocol-strip article {
+  background: var(--landing-panel-strong);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 22px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.agent-detail__protocol-strip span {
+  color: var(--landing-accent-2);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.agent-detail__protocol-strip strong {
+  color: #ffffff;
+  font-size: 1.05rem;
+}
+
+.agent-detail__protocol-strip p {
+  color: var(--landing-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.agent-detail--permission-manager .agent-panel,
+.agent-detail--permission-manager .management-panel,
+.agent-detail--permission-manager .agent-delete-band {
+  background: var(--landing-panel);
+  border-color: var(--landing-line-soft);
+  border-radius: 24px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 0.26);
+}
+
+.agent-detail--permission-manager .agent-detail__grid {
+  align-items: flex-start;
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+}
+
+.agent-detail--permission-manager .agent-uniswap-card .agent-fact-table div,
+.agent-detail--permission-manager .keeperhub-attestation__facts div {
+  gap: 10px;
+  grid-template-columns: minmax(104px, 0.38fr) minmax(0, 1fr);
+  padding: 8px 0;
+}
+
+.agent-detail--permission-manager .agent-uniswap-card .agent-fact-table dd,
+.agent-detail--permission-manager .keeperhub-attestation__facts dd {
+  font-size: 0.82rem;
+}
+
+.agent-detail--permission-manager .keeperhub-attestation {
+  border-radius: 18px;
+  gap: 8px;
+  padding: 12px;
+}
+
+.keeperhub-attestations__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.keeperhub-attestations__toggle {
+  background: rgb(114 226 255 / 0.1);
+  border: 1px solid rgb(114 226 255 / 0.24);
+  border-radius: 999px;
+  color: #dff9ff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 900;
+  padding: 8px 12px;
+}
+
+.keeperhub-attestations__toggle:hover,
+.keeperhub-attestations__toggle:focus-visible {
+  background: rgb(114 226 255 / 0.18);
+  outline: none;
+}
+
+.agent-detail--permission-manager .agent-panel h2,
+.agent-detail--permission-manager .agent-section-heading,
+.agent-detail--permission-manager .agent-fact-table div,
+.agent-detail--permission-manager .agent-policy-card__capabilities,
+.agent-detail--permission-manager .agent-delete-band__confirm {
+  border-color: var(--landing-line-soft);
+}
+
+.agent-detail--permission-manager .keeperhub-attestation,
+.agent-detail--permission-manager .management-panel__grid > section,
+.agent-detail--permission-manager .management-panel__grid > form,
+.agent-detail--permission-manager .status-banner,
+.agent-detail--permission-manager .transaction-result {
+  background: var(--landing-panel-strong);
+  border-color: var(--landing-line-soft);
+}
+
+.agent-detail--permission-manager input {
+  background: rgb(255 255 255 / 0.075);
+  border-color: var(--landing-line-soft);
+  color: #ffffff;
+}
+
+@media (max-width: 860px) {
+  .agent-detail__protocol-strip,
+  .agent-detail--permission-manager .agent-detail__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-shell--agent {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}
+
+/* Register Agent refresh: match the dark AgentPassports landing/dashboard scheme. */
+.page-shell--register {
+  --landing-bg: #06070a;
+  --landing-panel: rgb(255 255 255 / 0.055);
+  --landing-panel-strong: rgb(255 255 255 / 0.085);
+  --landing-line: rgb(255 255 255 / 0.12);
+  --landing-line-soft: rgb(255 255 255 / 0.07);
+  --landing-ink: #f7f8ff;
+  --landing-muted: #a7b0c2;
+  --landing-soft: #768195;
+  --landing-accent: #7c6cff;
+  --landing-accent-2: #72e2ff;
+  --landing-success: #36d399;
+  background:
+    radial-gradient(circle at 13% 0%, rgb(74 91 255 / 0.34), transparent 34rem),
+    radial-gradient(circle at 86% 12%, rgb(114 226 255 / 0.18), transparent 28rem),
+    linear-gradient(180deg, #07080d 0%, #080b11 48%, #050609 100%);
+  color: var(--landing-ink);
+  display: grid;
+  gap: 24px;
+  max-width: none;
+  min-height: calc(100vh - 73px);
+  overflow: hidden;
+  padding: clamp(28px, 4vw, 56px) 24px 72px;
+  position: relative;
+}
+
+.page-shell--register::before {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.72), transparent 80%);
+  pointer-events: none;
+  position: absolute;
+}
+
+.page-shell--register > * {
+  margin-inline: auto;
+  max-width: 1180px;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.register-hero--permission-manager,
+.register-workspace--permission-manager .register-step,
+.register-workspace--permission-manager .register-side-card,
+.register-workspace--permission-manager .empty-state,
+.register-workspace--permission-manager .status-banner,
+.register-workspace--permission-manager .transaction-result {
+  background: var(--landing-panel);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 28px;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 0.28);
+  color: var(--landing-ink);
+}
+
+.register-hero--permission-manager {
+  align-items: stretch;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  padding: clamp(24px, 4vw, 34px);
+}
+
+.register-hero__copy {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.register-hero__eyebrow {
+  align-items: center;
+  color: #dcd8ff;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 900;
+  gap: 9px;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.register-hero__eyebrow span {
+  background: var(--landing-success);
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px rgb(54 211 153 / 0.12);
+  height: 8px;
+  width: 8px;
+}
+
+.register-hero--permission-manager h1 {
+  color: #ffffff;
+  font-size: clamp(2.45rem, 5.4vw, 4.65rem);
+  letter-spacing: -0.062em;
+  line-height: 0.96;
+  margin: 0;
+  max-width: 820px;
+  text-wrap: balance;
+}
+
+.register-hero__copy p:not(.register-hero__eyebrow),
+.register-workspace--permission-manager .field-help,
+.register-workspace--permission-manager .empty-state span,
+.register-workspace--permission-manager .status-banner span,
+.register-workspace--permission-manager .status-banner small {
+  color: var(--landing-muted);
+  line-height: 1.6;
+}
+
+.register-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.register-hero__flow {
+  display: grid;
+  gap: 12px;
+}
+
+.register-hero__flow div {
+  background: var(--landing-panel-strong);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 22px;
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.register-hero__flow span,
+.register-hero__flow small,
+.register-workspace--permission-manager .register-field-stack span,
+.register-workspace--permission-manager .register-step label span,
+.register-workspace--permission-manager .field-grid span,
+.register-workspace--permission-manager .register-preview-list dt,
+.register-workspace--permission-manager .record-table__row span {
+  color: var(--landing-muted);
+}
+
+.register-hero__flow strong,
+.register-workspace--permission-manager .register-step__heading h2,
+.register-workspace--permission-manager .register-side-card__header h2,
+.register-workspace--permission-manager .register-side-card__header h3,
+.register-workspace--permission-manager .budget-preview strong,
+.register-workspace--permission-manager .register-preview-list dd,
+.register-workspace--permission-manager .record-table__row strong,
+.register-workspace--permission-manager .empty-state strong,
+.register-workspace--permission-manager .status-banner strong {
+  color: #ffffff;
+}
+
+.register-workspace--permission-manager {
+  color: var(--landing-ink);
+}
+
+.register-workspace--permission-manager .register-step,
+.register-workspace--permission-manager .register-side-card {
+  padding: 22px;
+}
+
+.register-workspace--permission-manager .register-step__heading > span,
+.register-workspace--permission-manager .transaction-queue li > span {
+  background: rgb(114 226 255 / 0.1);
+  border-color: rgb(114 226 255 / 0.22);
+  color: #b8f3ff;
+}
+
+.register-workspace--permission-manager .register-step__heading strong {
+  color: #b8f7de;
+}
+
+.register-workspace--permission-manager input {
+  background: rgb(255 255 255 / 0.045);
+  border-color: var(--landing-line-soft);
+  color: #ffffff;
+}
+
+.register-workspace--permission-manager input[readonly],
+.register-workspace--permission-manager input::placeholder {
+  color: #8c96aa;
+}
+
+.register-workspace--permission-manager input:focus {
+  border-color: var(--landing-accent-2);
+  outline: 2px solid rgb(114 226 255 / 0.18);
+}
+
+.register-workspace--permission-manager .segmented-control {
+  gap: 8px;
+}
+
+.register-workspace--permission-manager .segmented-control button,
+.register-workspace--permission-manager .capability-row span {
+  background: rgb(255 255 255 / 0.045);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 999px;
+  color: #cbd5e1;
+}
+
+.register-workspace--permission-manager .segmented-control button[aria-pressed="true"] {
+  background: rgb(114 226 255 / 0.1);
+  border-color: var(--landing-accent-2);
+  color: #ffffff;
+}
+
+.register-workspace--permission-manager .pill--info,
+.register-workspace--permission-manager .pill--success {
+  background: rgb(114 226 255 / 0.1);
+  border-color: rgb(114 226 255 / 0.22);
+  color: #b8f3ff;
+}
+
+.register-workspace--permission-manager .budget-preview {
+  background: linear-gradient(135deg, rgb(124 108 255 / 0.18), rgb(114 226 255 / 0.08));
+  border-color: var(--landing-line);
+}
+
+.register-workspace--permission-manager .budget-preview span,
+.register-workspace--permission-manager .transaction-queue em {
+  color: #b8f7de;
+}
+
+.register-workspace--permission-manager .register-workspace__actions a,
+.register-workspace--permission-manager .register-workspace__actions button {
+  background: rgb(255 255 255 / 0.045);
+  border-color: var(--landing-line);
+  border-radius: 999px;
+  color: #ffffff;
+}
+
+.register-workspace--permission-manager .register-workspace__actions button[type="submit"] {
+  background: linear-gradient(135deg, #ffffff, #dce3ff);
+  border-color: transparent;
+  color: #07080c;
+}
+
+.register-workspace--permission-manager .register-workspace__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.register-workspace--permission-manager .register-preview-list,
+.register-workspace--permission-manager .record-table {
+  border-color: var(--landing-line-soft);
+}
+
+.register-workspace--permission-manager .record-table__footer {
+  background: rgb(255 255 255 / 0.035);
+}
+
+.register-workspace--permission-manager .record-table__toggle {
+  background: rgb(114 226 255 / 0.1);
+  border-color: rgb(114 226 255 / 0.22);
+  color: #b8f3ff;
+}
+
+.register-workspace--permission-manager .record-table__toggle:hover {
+  background: rgb(114 226 255 / 0.16);
+}
+
+.register-workspace--permission-manager .register-preview-list div + div,
+.register-workspace--permission-manager .record-table__row + .record-table__row,
+.register-workspace--permission-manager .transaction-queue li + li {
+  border-top-color: var(--landing-line-soft);
+}
+
+.register-workspace--permission-manager .transaction-result {
+  border-top: 1px solid var(--landing-line-soft);
+}
+
+@media (max-width: 980px) {
+  .register-hero--permission-manager,
+  .register-workspace,
+  .register-workspace__main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-shell--register {
+    padding-left: 18px;
+    padding-right: 18px;
   }
 }

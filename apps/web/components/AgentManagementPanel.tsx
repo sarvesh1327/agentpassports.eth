@@ -179,7 +179,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
           )
         ]]
       }),
-      label: nextStatus === "active" ? "Enable policy" : "Disable policy",
+      label: nextStatus === "active" ? "Enable Visa" : "Disable Visa",
       to: props.resolverAddress
     });
   }
@@ -211,7 +211,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
           )
         ]]
       }),
-      label: "Edit policy metadata",
+      label: "Edit Visa metadata",
       to: props.resolverAddress
     });
     await unpinOldPolicyMetadata(policyUri, generatedPolicy.policyUri);
@@ -222,7 +222,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     event.preventDefault();
     if (!/^0x[0-9a-fA-F]{40}$/u.test(signerAddress)) {
       setStatus("error");
-      setStatusMessage("Enter a valid signer address before updating ENS addr(agent).");
+      setStatusMessage("Enter a valid agent signer address before updating the Passport signer.");
       return;
     }
 
@@ -232,7 +232,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
         functionName: "setAddr",
         args: [props.initialProfile.agentNode, signerAddress as Hex]
       }),
-      label: "Update signer address",
+      label: "Update agent signer",
       to: props.resolverAddress
     });
   }
@@ -246,12 +246,12 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
     if (!deletePlan.canDelete) {
       setStatus("error");
-      setStatusMessage(deletePlan.reason ?? "Delete is not available for this agent.");
+      setStatusMessage(deletePlan.reason ?? "Delete is not available for this Passport.");
       return;
     }
 
     setStatus("loading");
-    setStatusMessage("Awaiting wallet approval for Delete agent");
+    setStatusMessage("Awaiting wallet approval for Delete Passport");
     setDeleteProgressSteps(deletePlan.calls.map((call) => ({
       description: describeDeleteCall(call.label),
       label: readableDeleteCallLabel(call.label),
@@ -281,7 +281,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     }
     await props.onRefresh();
     setStatus("success");
-    setStatusMessage("Delete agent transactions confirmed. Historical task history remains visible.");
+    setStatusMessage("Delete Passport transactions confirmed. KeeperHub Stamps remain visible.");
     props.onDeleted();
   }
 
@@ -308,7 +308,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
     const body = (await response.json().catch(() => ({}))) as GeneratedPolicyMetadataResponse;
 
     if (!response.ok || body.status !== "pinned" || !body.policyUri || !body.policyHash) {
-      throw new Error("Policy metadata Pinata upload failed");
+      throw new Error("Visa metadata Pinata upload failed");
     }
 
     return { policyHash: body.policyHash, policyUri: body.policyUri };
@@ -332,11 +332,11 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
         isOpen={isDeleteProgressOpen}
         onClose={() => setIsDeleteProgressOpen(false)}
         steps={deleteProgressSteps}
-        title="Delete agent transactions"
+        title="Delete Passport transactions"
       />
       <section className="management-panel" aria-labelledby="agent-management-status-title">
         <div className="management-panel__header">
-          <h2 id="agent-management-status-title">Agent management</h2>
+          <h2 id="agent-management-status-title">Passport management</h2>
           <StatusBanner
             details={`Resolver ${props.resolverAddress ? shortenHex(props.resolverAddress) : "not configured"}`}
             message={statusMessage}
@@ -347,30 +347,30 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
 
         <div className="management-panel__grid">
           <section aria-labelledby="agent-management-policy-status-title">
-            <h3 id="agent-management-policy-status-title">Disable policy</h3>
-            <p>Current policy status: {props.policyEnabled ? "enabled" : "disabled or unknown"}</p>
+            <h3 id="agent-management-policy-status-title">Visa access</h3>
+            <p>Current Visa status: {props.policyEnabled ? "enabled" : "disabled or unknown"}</p>
             <div className="management-panel__actions">
-              <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("disabled"))}>Disable policy</button>
-              <button className="action-button action-button--secondary" type="button" onClick={() => void runManagementAction(() => handleStatusWrite("active"))}>Enable policy</button>
+              <button type="button" onClick={() => void runManagementAction(() => handleStatusWrite("disabled"))}>Disable Visa</button>
+              <button className="action-button action-button--secondary" type="button" onClick={() => void runManagementAction(() => handleStatusWrite("active"))}>Enable Visa</button>
             </div>
           </section>
 
           <form onSubmit={(event) => void runManagementAction(() => handlePolicyMetadataSubmit(event))}>
-            <h3 id="agent-management-policy-title">Edit policy metadata <span className="sr-only">Policy metadata</span></h3>
+            <h3 id="agent-management-policy-title">Edit Visa metadata <span className="sr-only">Visa metadata</span></h3>
             <label>
-              <span>Policy URI</span>
-              <input aria-label="Policy URI" readOnly value={policyUri || "Generated on save"} />
+              <span>Visa URI</span>
+              <input aria-label="Visa URI" readOnly value={policyUri || "Generated on save"} />
             </label>
-            <button type="submit">Regenerate policy metadata</button>
+            <button type="submit">Regenerate Visa metadata</button>
           </form>
 
           <form onSubmit={(event) => void runManagementAction(() => handleSignerSubmit(event))}>
-            <h3>Update signer address</h3>
+            <h3>Update agent signer</h3>
             <label>
-              <span>ENS addr(agent)</span>
-              <input aria-label="ENS addr(agent)" value={signerAddress} onChange={(event) => setSignerAddress(event.target.value)} />
+              <span>Passport signer address</span>
+              <input aria-label="Passport signer address" value={signerAddress} onChange={(event) => setSignerAddress(event.target.value)} />
             </label>
-            <button type="submit">Update signer address</button>
+            <button type="submit">Update agent signer</button>
           </form>
         </div>
       </section>
@@ -379,10 +379,10 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
         <div className="agent-delete-band__copy">
           <span className="agent-delete-band__icon" aria-hidden="true"><UiIcon name="warning" size={34} /></span>
           <div>
-            <h2 id="agent-management-delete-title">Delete agent</h2>
-            <p>This will permanently remove the agent's subname and dashboard index.</p>
-            <p>Remaining gas budget is withdrawn to the owner manager before deletion.</p>
-            <p>Task history remains on-chain and cannot be deleted.</p>
+            <h2 id="agent-management-delete-title">Delete Passport</h2>
+            <p>This permanently removes the agent Passport subname and dashboard index.</p>
+            <p>Remaining gas budget is withdrawn to the owner wallet before deletion.</p>
+            <p>KeeperHub Stamps remain available as validation receipts.</p>
           </div>
         </div>
 
@@ -399,7 +399,7 @@ export function AgentManagementPanel(props: AgentManagementPanelProps) {
                 />
               </label>
               <button type="button" className="agent-delete-band__button" onClick={() => void runManagementAction(handleDelete)}>
-                <UiIcon name="trash" size={18} /> Delete agent
+                <UiIcon name="trash" size={18} /> Delete Passport
               </button>
             </>
           ) : (
@@ -416,7 +416,7 @@ function readableDeleteCallLabel(label: string): string {
     case "withdrawGasBudget":
       return "Withdraw remaining gas budget";
     case "deleteSubname":
-      return "Delete agent ENS subname";
+      return "Delete Passport ENS subname";
     case "setOwnerIndex":
       return "Update owner dashboard index";
     default:
@@ -429,9 +429,9 @@ function describeDeleteCall(label: string): string {
     case "withdrawGasBudget":
       return "Returns the executor-held gas budget before ENS records are removed.";
     case "deleteSubname":
-      return "Clears the agent subname owner and resolver in the ENS registry.";
+      return "Clears the Passport subname owner and resolver in the ENS registry.";
     case "setOwnerIndex":
-      return "Removes the agent label from the owner ENS dashboard index.";
+      return "Removes the Passport label from the owner ENS dashboard index.";
     default:
       return "Wallet transaction required for deletion.";
   }

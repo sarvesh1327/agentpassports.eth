@@ -200,7 +200,7 @@ test("agent page renders KeeperHub swap attestations with failed stamp details",
 
   assert.match(agentSource, /KeeperHubAttestationsPanel/);
   assert.match(libSource, /\/api\/keeperhub\/attestations/);
-  for (const label of ["KeeperHub attestations", "Blocked stamp", "Failed node", "Execution trace", "Policy digest", "Tx hash"]) {
+  for (const label of ["KeeperHub Stamps", "Latest Stamp", "Failed node", "Execution trace", "Visa digest", "Tx hash"]) {
     assert.match(agentSource, new RegExp(label), `${label} should be shown on the Agent page`);
   }
   assert.doesNotMatch(agentSource, /Latest swap proof/);
@@ -248,17 +248,17 @@ test("register page renders the ENS registration workflow", async () => {
   const requiredText = [
     "Owner ENS",
     "Agent label",
-    "Agent address",
-    "Agent ENS",
+    "Agent signer address",
+    "Passport ENS",
     "Owner node",
-    "Agent node",
+    "Passport node",
     "Resolver",
-    "Policy target",
+    "Visa target",
     "TaskLog",
-    "Policy digest",
+    "Visa digest",
     "Gas budget",
-    "Policy URI",
-    "ENS text records",
+    "Visa URI",
+    "Passport/Visa ENS records",
     "Prepared transactions"
   ];
 
@@ -299,7 +299,7 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /formatWeiAsEth/);
   assert.match(formSource, /Initial gas budget \(ETH\)/);
   assert.match(formSource, /maxReimbursementEth/);
-  assert.match(formSource, /Reimbursement cap \(ETH\)/);
+  assert.match(formSource, /Visa gas reimbursement cap \(ETH\)/);
   assert.match(formSource, /generatePolicyMetadata/);
   assert.match(formSource, /\/api\/policy-metadata/);
   assert.match(formSource, /unpinOldPolicyMetadata/);
@@ -317,13 +317,28 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /submitRegistrationBatch/);
   assert.match(batchSource, /multicall/);
   assert.match(formSource, /hasPreparedTransactions/);
-  assert.match(formSource, /ENS text records appear after owner ENS, agent label, and agent address are ready/);
-  assert.match(formSource, /Prepared transactions appear after the ENS records, resolver, and gas budget are ready/);
+  assert.match(formSource, /Passport\/Visa ENS records appear after owner ENS, agent label, and agent signer are ready/);
+  assert.match(formSource, /Wallet transactions appear after the Passport, Visa, resolver, and gas budget are ready/);
   assert.match(batchSource, /setSubnodeRecord\(owner ENS, agent label, connected wallet, public resolver\)/);
   assert.match(formSource, /disabled={status === "submitting" \|\| Boolean\(submitBlocker\)}/);
   for (const label of requiredText) {
     assert.match(formSource, new RegExp(label), `${label} should be rendered`);
   }
+});
+
+test("register preview contains dense Swapper records and keeps write copy owner/ENS scoped", async () => {
+  const formSource = await readText("apps/web/components/RegisterAgentForm.tsx");
+
+  assert.match(formSource, /const RECORD_PREVIEW_LIMIT = 6/);
+  assert.match(formSource, /areRecordsExpanded/);
+  assert.match(formSource, /displayedTextRecords/);
+  assert.match(formSource, /record-table--collapsed/);
+  assert.match(formSource, /See more/);
+  assert.match(formSource, /Show less/);
+  assert.match(formSource, /ENS record writes/);
+  assert.match(formSource, /ENS preview/);
+  assert.doesNotMatch(formSource, /KeeperHub-readable writes/);
+  assert.doesNotMatch(formSource, /<span className="pill pill--info">KeeperHub-readable<\/span>/);
 });
 
 test("dashboard-scoped register uses mockup defaults while revoke remains blank and run points to MCP", async () => {
@@ -353,7 +368,6 @@ test("dashboard-scoped register uses mockup defaults while revoke remains blank 
 
 test("agent passport page exposes route-level ENS profile sections", async () => {
   await assertFile("apps/web/app/agent/[name]/page.tsx");
-  await assertFile("apps/web/components/TaskHistoryPanel.tsx");
 
   const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
   const demoSource = await readText("apps/web/lib/demoProfile.ts");
@@ -361,11 +375,11 @@ test("agent passport page exposes route-level ENS profile sections", async () =>
   const source = `${pageSource}\n${demoSource}\n${viewSource}`;
   const requiredText = [
     "decodeURIComponent",
-    "Live ENS Passport",
-    "Policy Source",
-    "Gas Budget",
+    "Agent Passport",
+    "Passport proof",
+    "Gas budget",
     "Next nonce",
-    "Task history",
+    "KeeperHub Stamps",
     "agent_policy_hash",
     "agent_executor"
   ];
@@ -496,40 +510,30 @@ test("register form resolves ENS ownership and submits wallet transactions", asy
   assert.match(contractsSource, /AGENT_ENS_EXECUTOR_ABI/);
 });
 
-test("agent page reads live ENS, policy, gas budget, and task history", async () => {
+test("agent page reads live ENS, policy, gas budget, and KeeperHub Stamps", async () => {
   await assertFile("apps/web/components/AgentProfileView.tsx");
   await assertFile("apps/web/lib/agentProfileDisplay.ts");
 
   const pageSource = await readText("apps/web/app/agent/[name]/page.tsx");
   const viewSource = await readText("apps/web/components/AgentProfileView.tsx");
-  const historyPanelSource = await readText("apps/web/components/TaskHistoryPanel.tsx");
   const displaySource = await readText("apps/web/lib/agentProfileDisplay.ts");
-  const taskHistorySource = await readText("apps/web/lib/taskHistory.ts");
   const contractsSource = await readText("apps/web/lib/contracts.ts");
-  const source = `${pageSource}\n${viewSource}\n${historyPanelSource}\n${displaySource}\n${taskHistorySource}\n${contractsSource}`;
+  const source = `${pageSource}\n${viewSource}\n${displaySource}\n${contractsSource}`;
 
   assert.match(pageSource, /serializeAgentProfile/);
   assert.match(viewSource, /useReadContract/);
   assert.match(viewSource, /useReadContracts/);
   assert.match(viewSource, /usePublicClient\(\{ chainId: Number\(initialProfile\.chainId\) \}\)/);
-  assert.match(viewSource, /loadTaskHistory/);
-  assert.match(viewSource, /fromBlock: parseOptionalBigInt\(initialProfile\.taskLogStartBlock\)/);
-  assert.match(taskHistorySource, /\/api\/tasks\?agentNode=/);
-  assert.match(taskHistorySource, /getLogs/);
-  assert.match(source, /TaskRecorded/);
-  assert.match(viewSource, /from "\.\.\/lib\/taskHistory"/);
-  assert.match(viewSource, /from "\.\/TaskHistoryPanel"/);
+  assert.doesNotMatch(viewSource, /loadTaskHistory/);
+  assert.doesNotMatch(viewSource, /from "\.\.\/lib\/taskHistory"/);
+  assert.doesNotMatch(viewSource, /from "\.\/TaskHistoryPanel"/);
+  assert.doesNotMatch(viewSource, /Task history/);
   assert.doesNotMatch(viewSource, /fromBlock: 0n/);
   assert.doesNotMatch(viewSource, /function taskFromLog/);
   assert.doesNotMatch(viewSource, /function TaskHistoryPanel/);
   assert.match(viewSource, /AGENT_TEXT_RECORD_KEYS/);
-  assert.match(historyPanelSource, /export function TaskHistoryPanel/);
-  assert.match(historyPanelSource, /emptyDescription/);
-  assert.match(historyPanelSource, /CopyableValue/);
-  assert.match(historyPanelSource, /explorerKind="tx"/);
   assert.match(source, /ENS_REGISTRY_ABI/);
   assert.match(source, /PUBLIC_RESOLVER_ABI/);
-  assert.match(source, /TASK_LOG_ABI/);
   assert.match(source, /gasBudgetWei/);
   assert.match(source, /nextNonce/);
   assert.match(viewSource, /agentAddressReadSettled/);
@@ -545,13 +549,15 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(displaySource, /export function parseCapabilities/);
   assert.match(displaySource, /export function readPassportStatus/);
   assert.match(contractsSource, /agent_policy_uniswap_chain_id/);
-  assert.match(viewSource, /Uniswap policy/);
-  assert.match(viewSource, /Allowed token in/);
-  assert.match(viewSource, /Allowed token out/);
-  assert.match(viewSource, /Max input amount/);
-  assert.match(viewSource, /Max slippage bps/);
-  assert.match(viewSource, /KeeperHub attestations/);
+  assert.match(viewSource, /Uniswap Visa/);
+  assert.match(viewSource, /Allowed tokens/);
+  assert.match(viewSource, /Router \/ selector/);
+  assert.match(viewSource, /Limits/);
+  assert.match(viewSource, /KeeperHub Stamps/);
   assert.match(viewSource, /KeeperHubAttestationsPanel/);
+  assert.match(viewSource, /KEEPERHUB_STAMP_PREVIEW_LIMIT = 2/);
+  assert.match(viewSource, /See more/);
+  assert.match(viewSource, /Show less/);
   assert.match(viewSource, /policyDigest/);
   assert.doesNotMatch(viewSource, /latestSwapTask/);
 });
@@ -564,15 +570,30 @@ test("agent page uses the owner-management mockup layout instead of legacy passp
   assert.doesNotMatch(pageSource, /<section className="page-heading"/);
   assert.doesNotMatch(viewSource, /AgentPassportCard/);
   assert.doesNotMatch(viewSource, /DemoReadinessPanel/);
-  assert.match(viewSource, /agent-detail/);
+  assert.match(pageSource, /page-shell--agent/);
+  assert.match(viewSource, /agent-detail--permission-manager/);
+  assert.match(viewSource, /agent-detail__protocol-strip/);
   assert.match(viewSource, /Back to dashboard/);
-  assert.match(viewSource, /Live ENS Passport/);
-  assert.match(viewSource, /Policy Source/);
+  assert.match(viewSource, /Passport Preview/);
+  assert.match(viewSource, /Agent Passport/);
+  assert.match(viewSource, /Visa state/);
+  assert.match(viewSource, /Visa Scope/);
+  assert.match(viewSource, /KeeperHub Stamps/);
+  assert.match(viewSource, /Passport proof/);
+  assert.doesNotMatch(viewSource, /Policy Source/);
+  assert.doesNotMatch(viewSource, /Task history/);
+  assert.doesNotMatch(viewSource, /TaskHistoryPanel/);
+  assert.doesNotMatch(viewSource, /<h2 id="agent-policy-title"><UiIcon name="document" size={18} \/> Policy<\/h2>/);
+  assert.doesNotMatch(viewSource, />Capabilities</);
   assert.match(viewSource, /Withdraw gas/);
-  assert.match(viewSource, /Delete agent/);
+  assert.match(viewSource, /Delete Passport/);
   assert.match(styles, /\.agent-detail__topbar/);
   assert.match(styles, /\.agent-detail__grid/);
+  assert.match(styles, /\.page-shell--agent/);
+  assert.match(styles, /\.agent-detail--permission-manager/);
   assert.match(styles, /\.agent-policy-card/);
+  assert.match(styles, /\.keeperhub-attestations__toggle/);
+  assert.match(styles, /\.agent-detail--permission-manager \.status-banner/);
   assert.match(styles, /\.agent-delete-band/);
 });
 

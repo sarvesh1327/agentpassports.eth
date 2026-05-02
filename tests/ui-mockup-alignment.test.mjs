@@ -70,6 +70,10 @@ test("owner dashboard and agent detail use mockup-aligned cards and chips", asyn
   assert.match(owner, /action-button/);
   assert.match(owner, /owner-dashboard__preview/);
   assert.match(agent, /agent-detail__hero/);
+  assert.match(agent, /agent-detail--permission-manager/);
+  assert.match(agent, /agent-detail__protocol-strip/);
+  assert.match(agent, /KeeperHub Stamps/);
+  assert.match(agent, /Visa Scope/);
   assert.match(agent, /status-pill/);
   assert.match(agent, /metric-card/);
   assert.match(management, /action-button/);
@@ -91,6 +95,10 @@ test("agent fact table labels and values can shrink and wrap without overlap", a
 test("register page label and value rows can shrink and wrap without overlap", async () => {
   const css = await readText("apps/web/app/globals.css");
 
+  assert.match(css, /\.segmented-control\s*{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(145px,\s*1fr\)\)/s);
+  assert.match(css, /\.segmented-control button\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.segmented-control button\s*{[^}]*white-space:\s*normal/s);
+  assert.match(css, /\.segmented-control button\s*{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /\.register-preview-list div\s*{[^}]*align-items:\s*start/s);
   assert.match(css, /\.register-preview-list dt\s*{[^}]*min-width:\s*0/s);
   assert.match(css, /\.register-preview-list dt\s*{[^}]*overflow-wrap:\s*anywhere/s);
@@ -109,6 +117,8 @@ test("register page label and value rows can shrink and wrap without overlap", a
   assert.match(css, /\.register-step__heading strong\s*{[^}]*overflow-wrap:\s*anywhere/s);
   assert.match(css, /\.register-side-card__header > span\s*{[^}]*min-width:\s*0/s);
   assert.match(css, /\.register-side-card__header > span\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.record-table__footer\s*{[^}]*background:/s);
+  assert.match(css, /\.record-table__toggle\s*{[^}]*width:\s*100%/s);
 });
 
 test("MCP page uses polished setup cards and no demo wording", async () => {
