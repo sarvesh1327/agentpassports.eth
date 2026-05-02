@@ -2,6 +2,7 @@ import {
   buildPolicyMetadata,
   buildSwapPolicyMetadata,
   hashPolicyMetadata,
+  normalizeSwapPolicy,
   taskLogRecordTaskSelector,
   type Hex,
   type PolicyMetadata,
@@ -70,16 +71,27 @@ type PinataConfig = {
  * Builds the canonical policy/profile document that gets pinned and referenced from ENS.
  */
 export function buildAgentPolicyDocument(input: AgentPolicyDocumentInput): GeneratedAgentPolicy {
+  const sortedCapabilities = [...new Set(input.capabilities.map((capability) => capability.trim()).filter(Boolean))].sort();
+  const hasUniswapCapability = sortedCapabilities.includes("uniswap-swap");
+  if (hasUniswapCapability && !input.swapPolicy) {
+    throw new Error("swapPolicy is required for uniswap-swap capability");
+  }
+  const swapPolicy = input.swapPolicy ? normalizeSwapPolicy(input.swapPolicy) : null;
+  const executableTarget = swapPolicy?.router ?? input.target;
+  const executableSelector = swapPolicy?.selector ?? taskLogRecordTaskSelector();
+
   const policy = buildPolicyMetadata({
     agentNode: input.agentNode,
     expiresAt: input.expiresAt,
     maxGasReimbursementWei: input.maxGasReimbursementWei,
     maxValueWei: input.maxValueWei,
     ownerNode: input.ownerNode,
-    selector: taskLogRecordTaskSelector(),
-    target: input.target
+    // Trust boundary: for Swapper registrations the digest authorizes the router
+    // calldata executed by AgentEnsExecutor.executeOwnerFundedERC20. The additional
+    // swap limits below are public preflight metadata, not a replacement for digest checks.
+    selector: executableSelector,
+    target: executableTarget
   });
-  const sortedCapabilities = [...new Set(input.capabilities.map((capability) => capability.trim()).filter(Boolean))].sort();
   const document: AgentPolicyDocument = {
     version: 1,
     agent: {
@@ -96,10 +108,10 @@ export function buildAgentPolicyDocument(input: AgentPolicyDocumentInput): Gener
     policy
   };
 
-  // Keep the executable V1 policy hash stable while attaching V2 swap guardrails
-  // as transparent metadata for agents, MCP, UI, and reviewers.
-  if (input.swapPolicy) {
-    document.swapPolicy = buildSwapPolicyMetadata(input.swapPolicy);
+  // Attach V2 swap guardrails as transparent metadata for agents, MCP, UI, and
+  // reviewers while the executable V1 policy above remains the router call.
+  if (swapPolicy) {
+    document.swapPolicy = buildSwapPolicyMetadata(swapPolicy);
   }
 
   return {

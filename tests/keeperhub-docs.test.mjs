@@ -73,25 +73,50 @@ test("KeeperHub action-pack docs describe MCP build-submit-status order", async 
   assert.doesNotMatch(actionPack, /kh_[A-Za-z0-9]/);
 });
 
-test("MCP docs keep Uniswap out of the main KeeperHub demo path", async () => {
+test("MCP docs document the proven owner-funded Uniswap path without adding Uniswap MCP tools", async () => {
   const readme = await readText("packages/mcp-server/README.md");
 
   assert.match(readme, /Uniswap/i);
-  assert.match(readme, /experimental policy-gated action module/i);
-  assert.match(readme, /full gasless sponsored swaps are frozen/i);
-  assert.match(readme, /ERC20 approval/i);
-  assert.match(readme, /Permit2/i);
-  assert.match(readme, /agent holds no gas token/i);
+  assert.match(readme, /owner-funded/i);
+  assert.match(readme, /owner wallet holds `tokenIn` and approves `AgentEnsExecutor`/i);
+  assert.match(readme, /AgentEnsExecutor\.executeOwnerFundedERC20/i);
+  assert.match(readme, /SwapRouter02/i);
+  assert.match(readme, /exactInputSingle/i);
+  assert.match(readme, /build_task_intent.*callData/is);
+  assert.match(readme, /ownerFundedErc20/is);
+  assert.match(readme, /tokenIn/i);
+  assert.match(readme, /amount/i);
+  assert.match(readme, /swapContext/is);
+  assert.match(readme, /tokenOut/i);
+  assert.match(readme, /check_task_status/i);
+  assert.match(readme, /UNISWAP_TOKEN_IN_BLOCKED|agentens_execute/i);
+  assert.match(readme, /without the agent wallet holding gas token or user funds/i);
+  assert.match(readme, /No docs or helpers should require the agent wallet to approve Permit2/i);
+  assert.doesNotMatch(readme, /not.*live completed sponsored-swap path/i);
 });
 
-test("Uniswap feedback records the live approval blocker and frozen scope", async () => {
+test("Uniswap API feedback is limited to what worked and what did not", async () => {
   const feedback = await readText("FEEDBACK.md");
 
-  assert.match(feedback, /live \/quote/i);
-  assert.match(feedback, /TRANSFER_FROM_FAILED/);
-  assert.match(feedback, /WETH/i);
-  assert.match(feedback, /approve Permit2/i);
-  assert.match(feedback, /agent wallet holds no gas token/i);
-  assert.match(feedback, /full gasless sponsored swap execution is frozen/i);
+  assert.match(feedback, /What we used the Uniswap API for/i);
+  assert.match(feedback, /What worked well/i);
+  assert.match(feedback, /What did not work well/i);
+  assert.match(feedback, /reference quotes\/routes/i);
+  assert.match(feedback, /generated transaction shape/i);
+  assert.match(feedback, /delegated execution model/i);
+  assert.match(feedback, /quote/i);
+  assert.match(feedback, /Permit2/i);
+  assert.match(feedback, /Universal Router/i);
+  assert.match(feedback, /SwapRouter02/i);
+  assert.match(feedback, /agent wallet/i);
+  assert.match(feedback, /owner-funded/i);
+  assert.doesNotMatch(feedback, /What we built/i);
+  assert.doesNotMatch(feedback, /Endpoints \/ contracts used/i);
+  assert.doesNotMatch(feedback, /Documentation gaps closed/i);
+  assert.doesNotMatch(feedback, /Screenshots \/ logs/i);
+  assert.doesNotMatch(feedback, /Approved WETH -> UNI/i);
+  assert.doesNotMatch(feedback, /UNISWAP_TOKEN_IN_BLOCKED/i);
+  assert.doesNotMatch(feedback, /agentens_execute/i);
+  assert.doesNotMatch(feedback, /executeOwnerFundedERC20/i);
   assert.doesNotMatch(feedback, /Pending real API testing/i);
 });

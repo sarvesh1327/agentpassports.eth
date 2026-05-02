@@ -77,6 +77,40 @@ test("owner dashboard and agent detail use mockup-aligned cards and chips", asyn
   assert.match(proof, /policy-source-badge/);
 });
 
+test("agent fact table labels and values can shrink and wrap without overlap", async () => {
+  const css = await readText("apps/web/app/globals.css");
+
+  assert.match(css, /\.agent-fact-table div\s*{[^}]*align-items:\s*start/s);
+  assert.match(css, /\.agent-fact-table div\s*{[^}]*grid-template-columns:\s*minmax\(140px,\s*0\.55fr\)\s+minmax\(0,\s*1fr\)/s);
+  assert.match(css, /\.agent-fact-table dt\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.agent-fact-table dt\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.agent-fact-table dd\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.agent-fact-table dd\s*{[^}]*overflow-wrap:\s*anywhere/s);
+});
+
+test("register page label and value rows can shrink and wrap without overlap", async () => {
+  const css = await readText("apps/web/app/globals.css");
+
+  assert.match(css, /\.register-preview-list div\s*{[^}]*align-items:\s*start/s);
+  assert.match(css, /\.register-preview-list dt\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.register-preview-list dt\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.register-preview-list dd\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.register-preview-list dd\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.record-table__row\s*{[^}]*align-items:\s*start/s);
+  assert.match(css, /\.record-table__row span\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.record-table__row span\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.record-table__row strong\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.record-table__row strong\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.register-step__heading,\s*\.register-side-card__header\s*{[^}]*align-items:\s*flex-start/s);
+  assert.match(css, /\.register-step__heading,\s*\.register-side-card__header\s*{[^}]*flex-wrap:\s*wrap/s);
+  assert.match(css, /\.register-step__heading h2,\s*\.register-side-card__header h2,\s*\.register-side-card__header h3\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.register-step__heading h2,\s*\.register-side-card__header h2,\s*\.register-side-card__header h3\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.register-step__heading strong\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.register-step__heading strong\s*{[^}]*overflow-wrap:\s*anywhere/s);
+  assert.match(css, /\.register-side-card__header > span\s*{[^}]*min-width:\s*0/s);
+  assert.match(css, /\.register-side-card__header > span\s*{[^}]*overflow-wrap:\s*anywhere/s);
+});
+
 test("MCP page uses polished setup cards and no demo wording", async () => {
   const mcp = await readText("apps/web/app/mcp/page.tsx");
 

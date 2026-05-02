@@ -31,6 +31,19 @@ const policySnapshotSchema = z.object({
   enabled: z.boolean()
 });
 
+const ownerFundedErc20Schema = z.object({
+  tokenIn: address.describe("ERC20 token held by the owner wallet and approved to AgentEnsExecutor."),
+  amount: uintString.describe("Exact tokenIn amount AgentEnsExecutor may pull from the owner wallet.")
+});
+
+const swapContextSchema = z.object({
+  chainId: uintString.optional().describe("Optional chain id copied into KeeperHub swap-gate evidence."),
+  deadlineSeconds: uintString.optional().describe("Optional router deadline/slippage context copied into KeeperHub evidence."),
+  recipient: address.optional().describe("Swap output recipient, usually the owner wallet."),
+  slippageBps: uintString.optional().describe("Allowed slippage basis points used when the calldata was built."),
+  tokenOut: address.optional().describe("Expected ERC20 output token for KeeperHub Uniswap policy gates.")
+});
+
 export type AgentPassportToolName = "build_task_intent" | "submit_task" | "check_task_status";
 
 export type AgentPassportToolDefinition = {
@@ -55,6 +68,7 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
       agentName: ensName,
       task: taskSchema,
       metadataURI: z.string().min(1).describe("URI stored in TaskLog metadataURI for the task proof."),
+      callData: hex.optional().describe("Optional exact calldata to bind in the intent instead of TaskLog.recordTask; used for policy-approved router calls such as Uniswap SwapRouter02 exactInputSingle."),
       policySnapshot: policySnapshotSchema.describe("Policy snapshot to include with the KeeperHub submission. MCP hashes it into the intent but does not verify it against ENS."),
       nonce: uintString.optional().describe("Optional executor nonce. If omitted, MCP reads AgentEnsExecutor.nextNonce(agentNode); this is not a policy check."),
       expiresAt: uintString.optional().describe("Optional absolute Unix expiry timestamp. If omitted, latest block time + ttlSeconds is used."),
@@ -71,6 +85,8 @@ export const AGENTPASSPORT_MCP_TOOLS: AgentPassportToolDefinition[] = [
       policySnapshot: policySnapshotSchema,
       callData: hex,
       signature: hex,
+      ownerFundedErc20: ownerFundedErc20Schema.optional().describe("Optional owner-funded ERC20 context for AgentEnsExecutor.executeOwnerFundedERC20. MCP forwards this to KeeperHub and appends tokenIn/amount to functionArgs; it does not check allowance."),
+      swapContext: swapContextSchema.optional().describe("Optional Uniswap swap metadata for KeeperHub policy gates and attestations. MCP forwards it without doing quote/policy validation."),
       workflowId: z.string().min(1).optional().describe("KeeperHub workflow id. Defaults to KEEPERHUB_WORKFLOW_ID."),
       metadataURI: z.string().min(1).optional().describe("Optional metadata URI for KeeperHub audit payload."),
       taskDescription: z.string().min(1).optional().describe("Optional task description for KeeperHub audit payload."),

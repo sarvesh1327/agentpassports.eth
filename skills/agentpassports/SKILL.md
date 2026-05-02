@@ -22,3 +22,7 @@ Skill scripts = local key creation and local signing
 ## Core rule
 
 Do not ask MCP to perform policy or identity checks. MCP should only build the unsigned intent from explicit inputs, submit the externally signed payload to KeeperHub, and read KeeperHub execution status/logs by execution id. If KeeperHub rejects or errors, return KeeperHub's result to the user instead of inventing a backend-side authorization decision.
+
+## Owner-funded Uniswap support
+
+Owner-funded Uniswap swaps use the same thin MCP flow. The owner wallet holds `tokenIn` and approves `AgentEnsExecutor`; the agent wallet only signs exact router calldata and should not hold gas token or user funds. Use `mcp-safety-flow.md` plus `sign-intent.ts` for this path: build a `SwapRouter02.exactInputSingle` intent with explicit `callData`, sign the returned typed data locally, submit with `ownerFundedErc20` (`tokenIn`, `amount`) and `swapContext` (`tokenOut`, recipient/slippage/deadline/chain metadata), then use `check_task_status` for KeeperHub evidence from `AgentEnsExecutor.executeOwnerFundedERC20`.

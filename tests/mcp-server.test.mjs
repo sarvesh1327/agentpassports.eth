@@ -63,6 +63,7 @@ test("thin MCP tools use explicit public arguments and no keypair input", async 
     "agentName",
     "task",
     "metadataURI",
+    "callData",
     "policySnapshot",
     "nonce",
     "expiresAt",
@@ -74,6 +75,8 @@ test("thin MCP tools use explicit public arguments and no keypair input", async 
     "policySnapshot",
     "callData",
     "signature",
+    "ownerFundedErc20",
+    "swapContext",
     "workflowId",
     "metadataURI",
     "taskDescription",
@@ -120,6 +123,43 @@ test("build_task_intent builds without resolving ENS or checking policy", async 
   assert.equal(result.signingPayload.typedData.primaryType, "TaskIntent");
 });
 
+test("build_task_intent can bind exact caller-provided calldata for owner-funded Uniswap swaps", async () => {
+  const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
+  const swapRouter = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E";
+  const swapSelector = "0x04e45aaf";
+  const swapCallData = `${swapSelector}${"00".repeat(128)}`;
+  const fakeClient = {
+    async readContract(args) {
+      assert.equal(args.functionName, "nextNonce", "custom calldata builds may only read executor nonce");
+      return 11n;
+    },
+    async getBlock() {
+      return { timestamp: 1_700_000_000n };
+    }
+  };
+  const handlers = createAgentPassportHandlers(testMcpConfig(), fakeClient);
+
+  const result = await handlers.build_task_intent({
+    agentName: "claw.sarvesh.eth",
+    callData: swapCallData,
+    metadataURI: "keeperhub://unit-test-uniswap-swap",
+    policySnapshot: {
+      ...testPolicySnapshot(),
+      selector: swapSelector,
+      target: swapRouter
+    },
+    task: { description: "WETH -> UNI owner-funded exactInputSingle", valueWei: "0" },
+    ttlSeconds: 600
+  });
+
+  assert.equal(result.callData, swapCallData);
+  assert.equal(result.intent.target, swapRouter);
+  assert.equal(result.policySnapshot.selector, swapSelector);
+  assert.equal(result.signingPayload.typedData.message.target, swapRouter);
+  assert.equal(result.signingPayload.typedData.message.callDataHash, result.intent.callDataHash);
+  assert.doesNotMatch(result.callData, /^0x36736d1e/u, "custom swap calldata must not be replaced by TaskLog.recordTask calldata");
+});
+
 test("submit_task starts KeeperHub execution without waiting by default or doing local policy checks", async () => {
   const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
   const originalFetch = globalThis.fetch;
@@ -153,6 +193,69 @@ test("submit_task starts KeeperHub execution without waiting by default or doing
     assert.equal(result.keeperhub.status, undefined);
     assert.equal(result.keeperhub.logs, undefined);
     assert.deepEqual(result.keeperhub.txHashes, []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("submit_task can forward owner-funded ERC20 swap context for KeeperHub Uniswap execution", async () => {
+  const { createAgentPassportHandlers } = await import("../packages/mcp-server/src/runtime.ts");
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const tokenIn = "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14";
+  const tokenOut = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984";
+  const amount = "10000000000000";
+  const recipient = "0xc828e4A8A0e821d26416b56Cb492b92D618ABE0E";
+  const callData = `0x04e45aaf${"00".repeat(128)}`;
+  globalThis.fetch = async (url, init = {}) => {
+    requests.push({ body: init.body ? JSON.parse(init.body) : undefined, method: init.method, url: String(url) });
+    if (String(url).endsWith("/api/workflow/wf_swap/execute")) {
+      return jsonResponse({ executionId: "exec_swap" });
+    }
+    throw new Error(`unexpected URL ${url}`);
+  };
+
+  try {
+    const handlers = createAgentPassportHandlers(testMcpConfig());
+    const result = await handlers.submit_task({
+      agentName: "claw.sarvesh.eth",
+      callData,
+      intent: {
+        ...testIntent(),
+        callDataHash: "0x" + "78".repeat(32),
+        target: "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
+      },
+      ownerFundedErc20: { amount, tokenIn },
+      policySnapshot: {
+        ...testPolicySnapshot(),
+        selector: "0x04e45aaf",
+        target: "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
+      },
+      signature: "0x" + "11".repeat(65),
+      swapContext: {
+        chainId: "11155111",
+        deadlineSeconds: "1200",
+        recipient,
+        slippageBps: "50",
+        tokenOut
+      },
+      workflowId: "wf_swap"
+    });
+
+    const input = requests[0].body.input;
+    const functionArgs = JSON.parse(input.functionArgs);
+    assert.equal(input.tokenIn, tokenIn);
+    assert.equal(input.tokenOut, tokenOut);
+    assert.equal(input.amount, amount);
+    assert.equal(input.chainId, "11155111");
+    assert.equal(input.recipient, recipient);
+    assert.equal(input.slippageBps, "50");
+    assert.equal(input.deadlineSeconds, "1200");
+    assert.equal(input.requestedSelector, "0x04e45aaf");
+    assert.equal(input.requestedTarget, "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E");
+    assert.deepEqual(functionArgs.slice(4), [tokenIn, amount]);
+    assert.equal(functionArgs.length, 6, "KeeperHub executeOwnerFundedERC20 requires tokenIn and amountIn args");
+    assert.equal(result.keeperhub.executionId, "exec_swap");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -268,6 +371,38 @@ test("Uniswap MCP helpers build documented quote and approval payloads", async (
   assert.deepEqual(
     normalizeUniswapQuoteResponse({ requestId: "req", routing: "CLASSIC", quote: { quoteId: "qid", gasFee: "1", routeString: "USDC/WETH" } }),
     { gasFee: "1", quoteId: "qid", requestId: "req", routeString: "USDC/WETH", routing: "CLASSIC" }
+  );
+});
+
+test("Uniswap owner-funded helpers distinguish owner, executor, agent, and recipient", async () => {
+  const { buildOwnerFundedSwapMetadata, buildOwnerFundedUniswapQuotePayload } = await import("../packages/mcp-server/src/uniswap.ts");
+  const owner = "0x1111111111111111111111111111111111111111";
+  const executor = "0x2222222222222222222222222222222222222222";
+  const agent = "0x3333333333333333333333333333333333333333";
+  const recipient = "0x4444444444444444444444444444444444444444";
+
+  assert.deepEqual(buildOwnerFundedSwapMetadata({ agent, amount: "1000000", executor, owner, recipient }), {
+    agentSigner: agent,
+    amount: "1000000",
+    executorSpender: executor,
+    fundingSource: owner,
+    recipient,
+    schema: "agentpassport.ownerFundedSwap.v1"
+  });
+
+  assert.equal(
+    buildOwnerFundedUniswapQuotePayload({
+      executor,
+      request: {
+        amount: "1000000",
+        chainId: "1",
+        slippageBps: "50",
+        tokenIn: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        tokenOut: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      }
+    }).swapper,
+    executor,
+    "executor is the router caller/spender for owner-funded calldata"
   );
 });
 

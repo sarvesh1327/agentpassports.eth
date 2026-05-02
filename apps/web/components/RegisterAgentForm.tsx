@@ -24,6 +24,7 @@ import {
 } from "../lib/contracts";
 import { normalizeAddressInput } from "../lib/addressInput";
 import {
+  buildDefaultSwapPolicyFormValues,
   buildOwnerEnsStatus,
   buildRegisterPreview,
   buildRegistrationDraftStatus,
@@ -77,7 +78,6 @@ type GeneratedPolicyMetadataResponse = {
 
 const AGENT_DIRECTORY_INDEX_RETRY_DELAYS_MS = [0, 2_000, 6_000, 12_000] as const;
 const BASE_AGENT_CAPABILITIES = ["task-log", "sponsored-execution"] as const;
-const UNISWAP_SWAP_SELECTOR = "0x12aa3caf" as const;
 const LEGACY_AGENT_TEXT_RECORD_KEY_SET = new Set<string>(LEGACY_AGENT_TEXT_RECORD_KEYS);
 const AGENT_KIND_OPTIONS: readonly { label: string; value: AgentKind }[] = [
   { label: "Personal assistant", value: "personal-assistant" },
@@ -97,18 +97,20 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
   const walletClient = useWalletClient({ chainId: Number(props.chainId) });
   const [ownerName, setOwnerName] = useState(props.defaultOwnerName);
   const [ownerNameEdited, setOwnerNameEdited] = useState(false);
+  const defaultSwapPolicyFormValues = buildDefaultSwapPolicyFormValues(connectedWallet ?? null);
   const [agentLabel, setAgentLabel] = useState(props.defaultAgentLabel);
   const [agentAddress, setAgentAddress] = useState(props.defaultAgentAddress ?? "");
   const [agentKind, setAgentKind] = useState<AgentKind>("personal-assistant");
-  const [swapChainId, setSwapChainId] = useState("1");
-  const [swapTokenIn, setSwapTokenIn] = useState("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-  const [swapTokenOut, setSwapTokenOut] = useState("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
-  const [swapMaxAmountInWei, setSwapMaxAmountInWei] = useState("10000000");
-  const [swapMaxSlippageBps, setSwapMaxSlippageBps] = useState("50");
-  const [swapDeadlineSeconds, setSwapDeadlineSeconds] = useState("60");
-  const [swapRecipient, setSwapRecipient] = useState(props.defaultAgentAddress ?? "");
-  const [swapRouter, setSwapRouter] = useState("");
-  const [swapSelector, setSwapSelector] = useState<Hex>(UNISWAP_SWAP_SELECTOR);
+  const [swapChainId, setSwapChainId] = useState(defaultSwapPolicyFormValues.allowedChainId);
+  const [swapTokenIn, setSwapTokenIn] = useState(defaultSwapPolicyFormValues.allowedTokensIn);
+  const [swapTokenOut, setSwapTokenOut] = useState(defaultSwapPolicyFormValues.allowedTokensOut);
+  const [swapMaxAmountInWei, setSwapMaxAmountInWei] = useState(defaultSwapPolicyFormValues.maxAmountInWei);
+  const [swapMaxSlippageBps, setSwapMaxSlippageBps] = useState(defaultSwapPolicyFormValues.maxSlippageBps);
+  const [swapDeadlineSeconds, setSwapDeadlineSeconds] = useState(defaultSwapPolicyFormValues.deadlineSeconds);
+  const [swapRecipient, setSwapRecipient] = useState(defaultSwapPolicyFormValues.recipient);
+  const [swapRecipientEdited, setSwapRecipientEdited] = useState(false);
+  const [swapRouter, setSwapRouter] = useState(defaultSwapPolicyFormValues.router);
+  const [swapSelector, setSwapSelector] = useState<Hex>(defaultSwapPolicyFormValues.selector as Hex);
   const [gasBudgetEth, setGasBudgetEth] = useState(formatWeiInputAsEth(props.defaultGasBudgetWei));
   const [maxReimbursementEth, setMaxReimbursementEth] = useState(formatWeiInputAsEth(props.defaultMaxGasReimbursementWei));
   const [status, setStatus] = useState<"idle" | "submitting" | "submitted" | "error">("idle");
@@ -126,11 +128,11 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       deadlineSeconds: swapDeadlineSeconds,
       maxAmountInWei: swapMaxAmountInWei,
       maxSlippageBps: swapMaxSlippageBps,
-      recipient: swapRecipient || agentAddress,
+      recipient: swapRecipient || connectedWallet || "",
       router: swapRouter,
       selector: swapSelector
     }),
-    [agentAddress, swapChainId, swapDeadlineSeconds, swapMaxAmountInWei, swapMaxSlippageBps, swapRecipient, swapRouter, swapSelector, swapTokenIn, swapTokenOut]
+    [connectedWallet, swapChainId, swapDeadlineSeconds, swapMaxAmountInWei, swapMaxSlippageBps, swapRecipient, swapRouter, swapSelector, swapTokenIn, swapTokenOut]
   );
   const agentCapabilities = useMemo(() => buildAgentCapabilities(agentKind), [agentKind]);
   const preview = useMemo(
@@ -342,6 +344,12 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
       setOwnerName(ownerEnsAutofill);
     }
   }, [ownerEnsAutofill]);
+
+  useEffect(() => {
+    if (!swapRecipientEdited && connectedWallet) {
+      setSwapRecipient(connectedWallet);
+    }
+  }, [connectedWallet, swapRecipientEdited]);
 
   /**
    * Marks owner ENS as user-controlled so late reverse ENS reads never overwrite manual input.
@@ -556,7 +564,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         ownerNode: preview.ownerNode,
         status: "active",
         swapPolicy: agentKind === "swapper" && swapPolicy ? swapPolicy : undefined,
-        target: taskLogAddress
+        target: agentKind === "swapper" && swapPolicy ? swapPolicy.router : taskLogAddress
       }),
       headers: { "content-type": "application/json" },
       method: "POST"
@@ -658,6 +666,8 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
         ownerName,
         policyExpiresAt: props.defaultPolicyExpiresAt,
         policyUri: generatedPolicy.policyUri,
+        agentKind,
+        swapPolicy: agentKind === "swapper" ? swapPolicy : null,
         taskLogAddress: props.taskLogAddress
       });
 
@@ -785,13 +795,13 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
           </div>
           <div className="field-grid">
             <label>
-              <span>Target (TaskLog)</span>
+              <span>{agentKind === "swapper" ? "Target (Uniswap router)" : "Target (TaskLog)"}</span>
               <span className="sr-only">Policy target</span>
-              <input readOnly value={props.taskLogAddress ?? "TaskLog not configured"} />
+              <input readOnly value={agentKind === "swapper" ? swapPolicy?.router ?? "Complete Uniswap router" : props.taskLogAddress ?? "TaskLog not configured"} />
             </label>
             <label>
               <span>Selector</span>
-              <input readOnly value={taskLogRecordTaskSelector()} />
+              <input readOnly value={agentKind === "swapper" ? swapPolicy?.selector ?? "Complete router selector" : taskLogRecordTaskSelector()} />
             </label>
             <label>
               <span>Max value per call (ETH)</span>
@@ -851,7 +861,14 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               </label>
               <label>
                 <span>Recipient</span>
-                <input placeholder="defaults to agent address" value={swapRecipient} onChange={(event) => setSwapRecipient(event.target.value)} />
+                <input
+                  placeholder="defaults to owner address"
+                  value={swapRecipient}
+                  onChange={(event) => {
+                    setSwapRecipientEdited(true);
+                    setSwapRecipient(event.target.value);
+                  }}
+                />
               </label>
               <label>
                 <span>Uniswap router</span>
@@ -863,7 +880,7 @@ export function RegisterAgentForm(props: RegisterAgentFormProps) {
               </label>
             </div>
             <small className="field-help">
-              These records are published to ENS and checked by MCP before every Uniswap API quote or swap.
+              These records are published to ENS and checked by MCP before every Uniswap API quote or swap. The owner wallet must separately approve AgentEnsExecutor for tokenIn; registration never grants token approval.
             </small>
           </section>
         ) : null}

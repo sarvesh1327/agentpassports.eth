@@ -56,11 +56,37 @@ test("KeeperHub workflow definition is a direct-ENS-first multi-node Passport/Vi
     "check_status_active",
     "check_policy_digest",
     "check_action_allowed",
+    "read_uniswap_enabled",
+    "check_uniswap_enabled",
+    "read_uniswap_chain_id",
+    "check_uniswap_chain_id",
+    "read_uniswap_router",
+    "read_uniswap_selector",
+    "check_uniswap_route",
+    "read_uniswap_allowed_token_in",
+    "check_uniswap_token_in_allowed",
+    "read_uniswap_allowed_token_out",
+    "check_uniswap_token_out_allowed",
+    "read_uniswap_max_input_amount",
+    "check_uniswap_amount_allowed",
+    "read_uniswap_recipient",
+    "check_uniswap_recipient_allowed",
+    "read_uniswap_max_slippage_bps",
+    "read_uniswap_deadline_seconds",
+    "check_uniswap_execution_window",
     "agentens_execute",
     "stamp_blocked_agent_missing",
     "stamp_blocked_status_inactive",
     "stamp_blocked_policy_invalid",
-    "stamp_blocked_action_disallowed"
+    "stamp_blocked_action_disallowed",
+    "stamp_blocked_uniswap_disabled",
+    "stamp_blocked_uniswap_chain_mismatch",
+    "stamp_blocked_uniswap_route_mismatch",
+    "stamp_blocked_uniswap_token_in",
+    "stamp_blocked_uniswap_token_out",
+    "stamp_blocked_uniswap_amount",
+    "stamp_blocked_uniswap_recipient",
+    "stamp_blocked_uniswap_execution_window"
   ]) {
     assert.ok(nodeIds.includes(id), `${id} should be present`);
   }
@@ -68,9 +94,27 @@ test("KeeperHub workflow definition is a direct-ENS-first multi-node Passport/Vi
   assert.match(JSON.stringify(nodeById.ens_resolve_passport), /eth_call/);
   assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_status/);
   assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_digest/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_uniswap_enabled/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_uniswap_allowed_token_in/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_uniswap_allowed_token_out/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_uniswap_max_input_amount/);
+  assert.match(JSON.stringify(nodeById.ens_resolve_passport), /agent_policy_uniswap_recipient/);
   assert.match(JSON.stringify(nodeById.ens_resolve_passport), /resolver\(bytes32\)|addr\(bytes32\)|text\(bytes32,string\)/);
 
-  for (const id of ["check_agent_exists", "check_status_active", "check_policy_digest", "check_action_allowed"]) {
+  for (const id of [
+    "check_agent_exists",
+    "check_status_active",
+    "check_policy_digest",
+    "check_action_allowed",
+    "check_uniswap_enabled",
+    "check_uniswap_chain_id",
+    "check_uniswap_route",
+    "check_uniswap_token_in_allowed",
+    "check_uniswap_token_out_allowed",
+    "check_uniswap_amount_allowed",
+    "check_uniswap_recipient_allowed",
+    "check_uniswap_execution_window"
+  ]) {
     assert.equal(nodeById[id].type, "condition", `${id} should be a visible KeeperHub condition node`);
   }
 
@@ -78,10 +122,22 @@ test("KeeperHub workflow definition is a direct-ENS-first multi-node Passport/Vi
   assert.ok(edgePairs.some((edge) => edge.startsWith("check_status_active->stamp_blocked_status_inactive:false")));
   assert.ok(edgePairs.some((edge) => edge.startsWith("check_policy_digest->stamp_blocked_policy_invalid:false")));
   assert.ok(edgePairs.some((edge) => edge.startsWith("check_action_allowed->stamp_blocked_action_disallowed:false")));
-  assert.ok(edgePairs.some((edge) => edge.startsWith("check_action_allowed->agentens_execute:true")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_action_allowed->read_uniswap_enabled:true")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_enabled->stamp_blocked_uniswap_disabled:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_chain_id->stamp_blocked_uniswap_chain_mismatch:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_route->stamp_blocked_uniswap_route_mismatch:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_token_in_allowed->stamp_blocked_uniswap_token_in:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_token_out_allowed->stamp_blocked_uniswap_token_out:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_amount_allowed->stamp_blocked_uniswap_amount:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_recipient_allowed->stamp_blocked_uniswap_recipient:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_execution_window->stamp_blocked_uniswap_execution_window:false")));
+  assert.ok(edgePairs.some((edge) => edge.startsWith("check_uniswap_execution_window->agentens_execute:true")));
 
   const executionIncoming = definition.edges.filter((edge) => edge.target === "agentens_execute");
-  assert.deepEqual(executionIncoming.map((edge) => edge.source), ["check_action_allowed"]);
+  assert.deepEqual(executionIncoming.map((edge) => edge.source), ["check_uniswap_execution_window"]);
+  assert.equal(nodeById.agentens_execute.data.config.function, "AgentEnsExecutor.executeOwnerFundedERC20");
+  assert.equal(nodeById.agentens_execute.data.config.abiFunction, "executeOwnerFundedERC20");
+  assert.match(nodeById.agentens_execute.data.config.functionArgsShape, /tokenIn, amountIn/);
   assert.equal(JSON.stringify(definition).includes(API_KEY), false);
   assert.doesNotMatch(JSON.stringify(definition), /privateKey|KEEPERHUB_API_KEY|kh_[A-Za-z0-9]/);
 });

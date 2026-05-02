@@ -6,6 +6,8 @@ const AGENT_NODE = "0xdd6fbcc964c82b43fdd8e204adf97622963b719d8fe12ebf48264a4677
 const AGENT_ADDRESS = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const EXECUTOR_ADDRESS = "0x3B42d507E1B13eE164cAb0FbA4EA66f8a1B653f1";
 const TASK_LOG_ADDRESS = "0x3AB718580b476D64fdD3CE6a9Ab63491B15767d9";
+const UNISWAP_ROUTER = "0x1111111111111111111111111111111111111111";
+const UNISWAP_SELECTOR = "0x12aa3caf";
 
 function policyInput(overrides = {}) {
   return {
@@ -72,15 +74,26 @@ test("policy metadata document can include Uniswap swap policy for Swapper agent
       maxAmountInWei: 10000000n,
       maxSlippageBps: 50n,
       recipient: AGENT_ADDRESS,
-      router: "0x1111111111111111111111111111111111111111",
-      selector: "0x12aa3caf",
+      router: UNISWAP_ROUTER,
+      selector: UNISWAP_SELECTOR,
     },
   }));
 
   assert.equal(result.document.swapPolicy.schema, "agentpassport.swapPolicy.v2");
+  assert.equal(result.document.policy.target, UNISWAP_ROUTER);
+  assert.equal(result.document.policy.selector, UNISWAP_SELECTOR);
   assert.equal(result.document.swapPolicy.allowedChainId, "1");
   assert.equal(result.document.swapPolicy.maxSlippageBps, "50");
   assert.deepEqual(result.document.agent.capabilities, ["sponsored-execution", "task-log", "uniswap-swap"]);
+});
+
+test("policy metadata rejects Uniswap capability without a valid swap policy", async () => {
+  const { buildAgentPolicyDocument } = await import("../apps/web/lib/policyMetadata.ts");
+
+  assert.throws(
+    () => buildAgentPolicyDocument(policyInput({ capabilities: ["task-log", "sponsored-execution", "uniswap-swap"] })),
+    /swapPolicy is required/,
+  );
 });
 
 test("Pinata upload uses server-only credentials and returns an IPFS policy URI", async () => {

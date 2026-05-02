@@ -18,6 +18,14 @@ const DEFAULT_KEY_PATH = ".agentPassports/keys.txt";
  * Run:
  *   npx tsx sign-intent.ts --input build-task-intent.json
  *
+ * Owner-funded Uniswap note: for a SwapRouter02 exactInputSingle flow, first
+ * call MCP `build_task_intent` with the exact router `callData`, then use this
+ * script unchanged to sign that returned typed data. Submit the signature via
+ * MCP `submit_task` with public `ownerFundedErc20` (`tokenIn`, `amount`) and
+ * `swapContext` (`tokenOut`, recipient/slippage/deadline metadata). This script
+ * does not call KeeperHub, does not execute swaps, and does not check owner
+ * allowance for `AgentEnsExecutor.executeOwnerFundedERC20`.
+ *
  * Never paste the private key in chat. Never send `.agentPassports/keys.txt` to
  * the MCP server. The MCP server provides intent JSON; this script only signs it.
  */

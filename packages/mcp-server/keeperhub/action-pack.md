@@ -25,7 +25,7 @@ AgentPassports MCP is a thin build/submit/status bridge for KeeperHub execution.
 - MCP must not resolve ENS, read Visa policy, check active status, validate spend limits, verify Passport/Visa identity, or preflight KeeperHub decisions.
 - KeeperHub output is authoritative for approved, blocked, error, running, and success states.
 - If `submit_task` returns `running`, continue with `check_task_status` until a terminal KeeperHub state or an explicit caller timeout.
-- Uniswap remains an experimental policy-gated module; full gasless sponsored swaps are frozen until the ERC20 approval / Permit2 gasless setup is proven.
+- Uniswap remains an experimental policy-gated module; the local owner-wallet approval route has the owner approve `AgentEnsExecutor` instead of requiring the agent wallet to fund or approve Permit2.
 
 ## Demo narrative
 

@@ -108,6 +108,41 @@ test("MCP flow skill teaches build_task_intent, submit_task, then check_task_sta
   assert.doesNotMatch(skill, /RPC_URL|ENS_REGISTRY|EXECUTOR_ADDRESS|TASK_LOG_ADDRESS|AGENT_PRIVATE_KEY/i, "skill should not ask agents to configure server env vars");
 });
 
+test("AgentPassports skill docs explain owner-funded Uniswap swaps through the same thin MCP flow", async () => {
+  const source = [
+    await readText("skills/agentpassports/SKILL.md"),
+    await readText("skills/agentpassports/mcp-safety-flow.md"),
+    await readText("skills/agentpassports/sign-intent.ts")
+  ].join("\n");
+
+  assertMentionsAll(
+    source,
+    [
+      "owner-funded Uniswap",
+      "AgentEnsExecutor",
+      "executeOwnerFundedERC20",
+      "owner wallet holds `tokenIn` and approves `AgentEnsExecutor`",
+      "agent wallet",
+      "gas token or user funds",
+      "build_task_intent",
+      "callData",
+      "SwapRouter02",
+      "exactInputSingle",
+      "sign-intent\\.ts",
+      "submit_task",
+      "ownerFundedErc20",
+      "tokenIn",
+      "amount",
+      "swapContext",
+      "tokenOut",
+      "check_task_status"
+    ],
+    "owner-funded Uniswap MCP skill flow"
+  );
+  assert.doesNotMatch(source, /agent wallet.*approve Permit2/i);
+  assert.doesNotMatch(source, /KEEPERHUB_API_KEY=kh_|RPC_URL=https:\/\//i);
+});
+
 test("MCP flow skill teaches local signing script and submission via MCP", async () => {
   const skill = await readText("skills/agentpassports/mcp-safety-flow.md");
 

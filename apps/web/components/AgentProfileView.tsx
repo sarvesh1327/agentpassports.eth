@@ -20,6 +20,10 @@ import type { SerializableAgentProfile } from "../lib/demoProfile";
 import { formatWeiAsEth, formatWeiInputAsEth, parseEthInputToWei } from "../lib/ethAmount";
 import { AgentBotIcon, UiIcon } from "./icons/UiIcons";
 import {
+  loadKeeperHubAttestations,
+  type KeeperHubAttestation
+} from "../lib/keeperhubAttestations";
+import {
   loadTaskHistory,
   type TaskHistoryItem
 } from "../lib/taskHistory";
@@ -36,6 +40,9 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const publicClient = usePublicClient({ chainId: Number(initialProfile.chainId) });
   const { sendTransactionAsync } = useSendTransaction();
   const [taskHistory, setTaskHistory] = useState<TaskHistoryItem[]>([]);
+  const [keeperHubAttestations, setKeeperHubAttestations] = useState<KeeperHubAttestation[]>([]);
+  const [keeperHubStatus, setKeeperHubStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [keeperHubMessage, setKeeperHubMessage] = useState("KeeperHub attestations have not loaded yet.");
   const [managementStatus, setManagementStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [managementMessage, setManagementMessage] = useState("Owner actions are ready.");
   const registryResolver = useReadContract({
@@ -107,7 +114,8 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
   const maxGasReimbursementWei = textRecords.find((record) => record.key === "agent_policy_max_gas_reimbursement_wei")?.value || "";
   const policyExpiresAt = textRecords.find((record) => record.key === "agent_policy_expires_at")?.value || "";
   const uniswapPolicy = readUniswapPolicyDisplay(textRecords);
-  const latestSwapTask = capabilities.includes("uniswap-swap") ? taskHistory[0] ?? null : null;
+  const hasUniswapSwapCapability = capabilities.includes("uniswap-swap");
+  const shouldShowKeeperHubAttestations = hasUniswapSwapCapability || keeperHubStatus === "loading" || keeperHubStatus === "error" || keeperHubAttestations.length > 0;
   const passportStatus = readPassportStatus(statusText, liveAgentAddress);
   const policyEnabled = passportStatus === "active";
   const nextStatusAction = passportStatus === "disabled" ? "active" : "disabled";
@@ -227,6 +235,44 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
     };
   }, [initialProfile.agentNode, initialProfile.taskLogAddress, initialProfile.taskLogStartBlock, publicClient]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshKeeperHubAttestations() {
+      setKeeperHubStatus("loading");
+      setKeeperHubMessage("Loading KeeperHub attestations...");
+      try {
+        const rows = await loadKeeperHubAttestations({
+          agentName: initialProfile.agentName,
+          agentNode: initialProfile.agentNode,
+          limit: 50
+        });
+        if (!cancelled) {
+          setKeeperHubAttestations(rows);
+          setKeeperHubStatus("success");
+          setKeeperHubMessage(rows.length > 0 ? `${rows.length} KeeperHub attestations loaded.` : "No KeeperHub attestations found for this agent yet.");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setKeeperHubAttestations([]);
+          setKeeperHubStatus("error");
+          setKeeperHubMessage(error instanceof Error ? error.message : "KeeperHub attestation request failed.");
+        }
+      }
+    }
+
+    refreshKeeperHubAttestations().catch(() => {
+      if (!cancelled) {
+        setKeeperHubStatus("error");
+        setKeeperHubMessage("KeeperHub attestation request failed.");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialProfile.agentName, initialProfile.agentNode]);
+
   return (
     <div className="agent-detail">
       <section className="agent-detail__topbar agent-detail__hero glass-panel" aria-labelledby="agent-title">
@@ -310,11 +356,16 @@ export function AgentProfileView({ initialProfile }: { initialProfile: Serializa
           onAddGas={(amountEth) => void submitGasBudgetChange("deposit", amountEth)}
           onWithdrawGas={(amountEth) => void submitGasBudgetChange("withdraw", amountEth)}
         />
-        {capabilities.includes("uniswap-swap") ? (
+        {hasUniswapSwapCapability ? (
           <UniswapPolicyPanel policy={uniswapPolicy} />
         ) : null}
-        {capabilities.includes("uniswap-swap") ? (
-          <LatestSwapProofPanel latestSwapTask={latestSwapTask} policyDigest={policyDigest} />
+        {shouldShowKeeperHubAttestations ? (
+          <KeeperHubAttestationsPanel
+            attestations={keeperHubAttestations}
+            message={keeperHubMessage}
+            policyDigest={policyDigest}
+            status={keeperHubStatus}
+          />
         ) : null}
         <TaskHistoryPanel
           cardClassName="agent-panel agent-history-card"
@@ -583,32 +634,91 @@ function UniswapPolicyPanel(props: { policy: UniswapPolicyDisplay }) {
   );
 }
 
-function LatestSwapProofPanel(props: { latestSwapTask: TaskHistoryItem | null; policyDigest: string | null }) {
-  const rows = props.latestSwapTask
-    ? [
-        { label: "Latest quote/proof URI", title: props.latestSwapTask.metadataURI, value: props.latestSwapTask.metadataURI || "No metadata URI" },
-        { label: "Swap tx", title: props.latestSwapTask.txHash, value: shortenHex(props.latestSwapTask.txHash) },
-        { label: "Task hash", title: props.latestSwapTask.taskHash, value: shortenMaybeHex(props.latestSwapTask.taskHash) },
-        { label: "Timestamp", value: props.latestSwapTask.timestamp },
-        { label: "Policy digest used", title: props.policyDigest ?? undefined, value: props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown" }
-      ]
-    : [
-        { label: "Latest quote/proof URI", value: "No swap proof yet" },
-        { label: "Swap tx", value: "Waiting for Uniswap execution" },
-        { label: "Policy digest used", title: props.policyDigest ?? undefined, value: props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown" }
-      ];
-
+function KeeperHubAttestationsPanel(props: {
+  attestations: readonly KeeperHubAttestation[];
+  message: string;
+  policyDigest: string | null;
+  status: "idle" | "loading" | "success" | "error";
+}) {
+  const digestLabel = props.policyDigest && props.policyDigest.startsWith("0x") ? shortenHex(props.policyDigest as Hex) : "Unknown";
   return (
-    <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-latest-swap-proof-title">
-      <h2 id="agent-latest-swap-proof-title"><UiIcon name="shield" size={18} /> Latest swap proof</h2>
+    <section className="agent-panel agent-proof-card metric-card" aria-labelledby="agent-keeperhub-attestations-title">
+      <div className="agent-section-heading">
+        <h2 id="agent-keeperhub-attestations-title"><UiIcon name="shield" size={18} /> KeeperHub attestations</h2>
+        <span className={`pill ${props.status === "error" ? "pill--danger" : props.status === "loading" ? "pill--warning" : "pill--success"}`}>{props.status}</span>
+      </div>
+      <p className="muted-copy">{props.message}</p>
       <dl className="agent-fact-table">
-        {rows.map((row) => (
-          <div key={row.label}>
-            <dt>{row.label}</dt>
-            <dd title={row.title}>{row.value}</dd>
-          </div>
-        ))}
+        <div>
+          <dt>Policy digest</dt>
+          <dd title={props.policyDigest ?? undefined}>{digestLabel}</dd>
+        </div>
+        <div>
+          <dt>Attestations loaded</dt>
+          <dd>{props.attestations.length}</dd>
+        </div>
       </dl>
+      {props.attestations.length > 0 ? (
+        <div className="keeperhub-attestations" aria-label="Execution trace">
+          {props.attestations.map((attestation) => (
+            <article className="keeperhub-attestation" key={attestation.executionId}>
+              <div className="keeperhub-attestation__heading">
+                <div>
+                  <strong>{attestation.taskDescription || "Uniswap swap"}</strong>
+                  <span>{formatMaybeDate(attestation.startedAt)} · {attestation.executionId}</span>
+                </div>
+                <span className={`pill ${keeperHubDecisionTone(attestation.decision)}`}>{attestation.decision}</span>
+              </div>
+              <dl className="agent-fact-table keeperhub-attestation__facts">
+                <div>
+                  <dt>Tx hash</dt>
+                  <dd title={attestation.txHash ?? undefined}>{attestation.txHash ? shortenHex(attestation.txHash as Hex) : "No tx"}</dd>
+                </div>
+                <div>
+                  <dt>Blocked stamp</dt>
+                  <dd title={attestation.stampReason ?? undefined}>{attestation.blockedCode ?? "None"}</dd>
+                </div>
+                <div>
+                  <dt>Failed node</dt>
+                  <dd title={attestation.failedNodeId ?? undefined}>{attestation.failedNodeId ?? "None"}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{attestation.status}</dd>
+                </div>
+                <div>
+                  <dt>Token in</dt>
+                  <dd title={attestation.tokenIn ?? undefined}>{attestation.tokenIn ? shortenMaybeHex(attestation.tokenIn) : "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Token out</dt>
+                  <dd title={attestation.tokenOut ?? undefined}>{attestation.tokenOut ? shortenMaybeHex(attestation.tokenOut) : "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Amount</dt>
+                  <dd>{attestation.amount ?? "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Target</dt>
+                  <dd title={attestation.requestedTarget ?? undefined}>{attestation.requestedTarget ? shortenMaybeHex(attestation.requestedTarget) : "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Selector</dt>
+                  <dd>{attestation.requestedSelector ?? "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>Execution trace</dt>
+                  <dd title={attestation.trace.join(" → ")}>{formatTrace(attestation.trace)}</dd>
+                </div>
+                <div>
+                  <dt>Error</dt>
+                  <dd title={attestation.failureReason ?? attestation.stampReason ?? undefined}>{attestation.failureReason ?? attestation.stampReason ?? "None"}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -672,6 +782,38 @@ function formatUnixTime(value: bigint): string {
     timeStyle: "short",
     timeZone: "UTC"
   }).format(new Date(timestamp * 1000));
+}
+
+function formatMaybeDate(value: string | null): string {
+  if (!value) {
+    return "Unknown time";
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC"
+  }).format(new Date(parsed));
+}
+
+function formatTrace(trace: readonly string[]): string {
+  if (trace.length === 0) {
+    return "No trace";
+  }
+  if (trace.length <= 4) {
+    return trace.join(" → ");
+  }
+  return `${trace[0]} → ${trace[1]} → … → ${trace[trace.length - 2]} → ${trace[trace.length - 1]}`;
+}
+
+function keeperHubDecisionTone(decision: KeeperHubAttestation["decision"]): string {
+  if (decision === "executed") return "pill--success";
+  if (decision === "blocked") return "pill--warning";
+  if (decision === "failed") return "pill--danger";
+  return "pill--info";
 }
 
 function formatWei(value?: bigint): string {

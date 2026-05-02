@@ -1,435 +1,1211 @@
 {
   "name": "AgentPassports Execute ENS-Verified Task",
-  "version": "v1-live",
-  "executionMode": "live-keeperhub-api",
-  "liveKeeperHubSubmit": true,
-  "policySource": "ENS",
-  "verifiedKeeperHubEndpoints": {
-    "listWorkflows": "GET /api/workflows",
-    "createWorkflow": "POST /api/workflows/create",
-    "executeWorkflow": "POST /api/workflow/{workflowId}/execute",
-    "executionStatus": "GET /api/workflows/executions/{executionId}/status",
-    "executionLogs": "GET /api/workflows/executions/{executionId}/logs"
-  },
-  "requiredToolOrder": [
-    "build_task_intent",
-    "submit_task",
-    "check_task_status"
-  ],
-  "keeperHubWorkflowDefinition": {
-    "name": "AgentPassports Execute ENS-Verified Task",
-    "description": "AgentPassports direct ENS KeeperHub gate template. KeeperHub reads Passport/Visa state from ENS first and routes failed checks to blocked stamps.",
-    "gateMode": "direct-ens-first",
-    "capabilityStatus": {
-      "directEnsReads": "template-not-live-import-proven",
-      "conditionBranches": "template-not-live-import-proven",
-      "blockedStampRouting": "template-not-live-import-proven",
-      "agentEnsExecuteWrite": "previous-live-proof-web3-write-supported"
-    },
-    "inputs": {
-      "chainId": "{{CHAIN_ID}}",
-      "rpcUrl": "{{RPC_URL}}",
-      "ensRegistryAddress": "{{ENS_REGISTRY}}",
-      "executorAddress": "{{EXECUTOR_ADDRESS}}",
-      "taskLogAddress": "{{TASK_LOG_ADDRESS}}",
-      "requiredTextRecords": [
-        "agent_status",
-        "agent_policy_digest",
-        "agent_policy_target",
-        "agent_policy_selector",
-        "agent_policy_max_value_wei",
-        "agent_policy_max_gas_reimbursement_wei",
-        "agent_policy_expires_at"
-      ]
-    },
-    "nodes": [
-      {
-        "id": "agentpassports_trigger",
-        "type": "trigger",
-        "position": {
-          "x": 0,
-          "y": 0
-        },
-        "data": {
-          "type": "trigger",
-          "label": "AgentPassports action request",
-          "config": {
-            "triggerType": "Manual"
-          },
-          "status": "idle",
-          "description": "Receives the agent action request. All subsequent KeeperHub nodes must pass before execution."
-        }
-      },
-      {
-        "id": "ens_resolve_passport",
-        "type": "http-json-rpc",
-        "position": {
-          "x": 320,
-          "y": 0
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Direct ENS Passport/Visa reads",
-          "method": "POST",
-          "url": "{{RPC_URL}}",
-          "description": "KeeperHub direct ENS read node. It performs eth_call reads against the registry/resolver so KeeperHub, not the AgentPassports API, observes live Passport and Visa state.",
-          "config": {
-            "jsonrpc": "2.0",
-            "calls": [
-              {
-                "purpose": "Passport resolver lookup",
-                "to": "{{ENS_REGISTRY}}",
-                "function": "resolver(bytes32)",
-                "params": [
-                  "{{input.agentNode}}"
-                ]
-              },
-              {
-                "purpose": "Passport signer exists",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "addr(bytes32)",
-                "params": [
-                  "{{input.agentNode}}"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_status",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_status"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_digest",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_digest"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_target",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_target"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_selector",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_selector"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_max_value_wei",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_max_value_wei"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_max_gas_reimbursement_wei",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_max_gas_reimbursement_wei"
-                ]
-              },
-              {
-                "purpose": "Visa text record agent_policy_expires_at",
-                "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
-                "function": "text(bytes32,string)",
-                "params": [
-                  "{{input.agentNode}}",
-                  "agent_policy_expires_at"
-                ]
-              }
-            ]
-          }
-        }
-      },
-      {
-        "id": "check_agent_exists",
-        "type": "condition",
-        "position": {
-          "x": 640,
-          "y": -180
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Passport exists?",
-          "blockedCode": "MISSING_SIGNER",
-          "description": "Requires nonzero resolver and addr(agent) from live ENS.",
-          "config": {
-            "trueLabel": "continue",
-            "falseLabel": "emit blocked-stamp",
-            "expression": "{{checks.check_agent_exists.passed}}"
-          }
-        }
-      },
-      {
-        "id": "check_status_active",
-        "type": "condition",
-        "position": {
-          "x": 960,
-          "y": -180
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Visa status active?",
-          "blockedCode": "STATUS_NOT_ACTIVE",
-          "description": "Requires ENS text agent_status to be exactly active.",
-          "config": {
-            "trueLabel": "continue",
-            "falseLabel": "emit blocked-stamp",
-            "expression": "{{checks.check_status_active.passed}}"
-          }
-        }
-      },
-      {
-        "id": "check_policy_digest",
-        "type": "condition",
-        "position": {
-          "x": 1280,
-          "y": -180
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Visa digest and fields valid?",
-          "blockedCode": "POLICY_INVALID",
-          "description": "Reconstructs policy fields and compares digest, expiry, target, selector, and spend caps.",
-          "config": {
-            "trueLabel": "continue",
-            "falseLabel": "emit blocked-stamp",
-            "expression": "{{checks.check_policy_digest.passed}}"
-          }
-        }
-      },
-      {
-        "id": "check_action_allowed",
-        "type": "condition",
-        "position": {
-          "x": 1600,
-          "y": -180
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Action inside Visa?",
-          "blockedCode": "ACTION_OUTSIDE_POLICY",
-          "description": "Checks requested task target, selector, and value against the ENS Visa fields.",
-          "config": {
-            "trueLabel": "continue",
-            "falseLabel": "emit blocked-stamp",
-            "expression": "{{checks.check_action_allowed.passed}}"
-          }
-        }
-      },
-      {
-        "id": "stamp_blocked_agent_missing",
-        "type": "stamp/blocked",
-        "position": {
-          "x": 640,
-          "y": 160
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Blocked stamp: AGENT_NOT_FOUND",
-          "blockedCode": "AGENT_NOT_FOUND",
-          "reason": "Passport is missing resolver or signer.",
-          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
-        }
-      },
-      {
-        "id": "stamp_blocked_status_inactive",
-        "type": "stamp/blocked",
-        "position": {
-          "x": 960,
-          "y": 160
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Blocked stamp: STATUS_NOT_ACTIVE",
-          "blockedCode": "STATUS_NOT_ACTIVE",
-          "reason": "Visa status is not exactly active.",
-          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
-        }
-      },
-      {
-        "id": "stamp_blocked_policy_invalid",
-        "type": "stamp/blocked",
-        "position": {
-          "x": 1280,
-          "y": 160
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Blocked stamp: POLICY_INVALID",
-          "blockedCode": "POLICY_INVALID",
-          "reason": "Visa digest, expiry, or policy fields are invalid.",
-          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
-        }
-      },
-      {
-        "id": "stamp_blocked_action_disallowed",
-        "type": "stamp/blocked",
-        "position": {
-          "x": 1600,
-          "y": 160
-        },
-        "capabilityStatus": "template-not-live-import-proven",
-        "data": {
-          "label": "Blocked stamp: ACTION_OUTSIDE_POLICY",
-          "blockedCode": "ACTION_OUTSIDE_POLICY",
-          "reason": "Requested action is outside the Visa grant.",
-          "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
-        }
-      },
-      {
-        "id": "agentens_execute",
-        "type": "web3/write-contract",
-        "position": {
-          "x": 1920,
-          "y": -180
-        },
-        "capabilityStatus": "previous-live-proof-web3-write-supported",
-        "data": {
-          "label": "Execute after Passport/Visa approval",
-          "description": "Execution is reachable only from the true edge of check_action_allowed, so KeeperHub visibly blocks before any onchain write when a Passport or Visa check fails.",
-          "config": {
-            "contractAddress": "{{EXECUTOR_ADDRESS}}",
-            "function": "AgentEnsExecutor.execute",
-            "targetPolicyAddress": "{{TASK_LOG_ADDRESS}}",
-            "valueSource": "{{input.signedAgentPassportsPayload}}"
-          }
-        }
-      }
-    ],
-    "edges": [
-      {
-        "id": "agentpassports_trigger__request__ens_resolve_passport",
-        "source": "agentpassports_trigger",
-        "target": "ens_resolve_passport",
-        "label": "request",
-        "data": {
-          "label": "request"
-        }
-      },
-      {
-        "id": "ens_resolve_passport__resolved__check_agent_exists",
-        "source": "ens_resolve_passport",
-        "target": "check_agent_exists",
-        "label": "resolved",
-        "data": {
-          "label": "resolved"
-        }
-      },
-      {
-        "id": "check_agent_exists__true__check_status_active",
-        "source": "check_agent_exists",
-        "target": "check_status_active",
-        "label": "true",
-        "data": {
-          "label": "true"
-        }
-      },
-      {
-        "id": "check_agent_exists__false__stamp_blocked_agent_missing",
-        "source": "check_agent_exists",
-        "target": "stamp_blocked_agent_missing",
-        "label": "false",
-        "data": {
-          "label": "false"
-        }
-      },
-      {
-        "id": "check_status_active__true__check_policy_digest",
-        "source": "check_status_active",
-        "target": "check_policy_digest",
-        "label": "true",
-        "data": {
-          "label": "true"
-        }
-      },
-      {
-        "id": "check_status_active__false__stamp_blocked_status_inactive",
-        "source": "check_status_active",
-        "target": "stamp_blocked_status_inactive",
-        "label": "false",
-        "data": {
-          "label": "false"
-        }
-      },
-      {
-        "id": "check_policy_digest__true__check_action_allowed",
-        "source": "check_policy_digest",
-        "target": "check_action_allowed",
-        "label": "true",
-        "data": {
-          "label": "true"
-        }
-      },
-      {
-        "id": "check_policy_digest__false__stamp_blocked_policy_invalid",
-        "source": "check_policy_digest",
-        "target": "stamp_blocked_policy_invalid",
-        "label": "false",
-        "data": {
-          "label": "false"
-        }
-      },
-      {
-        "id": "check_action_allowed__true__agentens_execute",
-        "source": "check_action_allowed",
-        "target": "agentens_execute",
-        "label": "true",
-        "data": {
-          "label": "true"
-        }
-      },
-      {
-        "id": "check_action_allowed__false__stamp_blocked_action_disallowed",
-        "source": "check_action_allowed",
-        "target": "stamp_blocked_action_disallowed",
-        "label": "false",
-        "data": {
-          "label": "false"
-        }
-      }
-    ]
+  "description": "AgentPassports direct ENS KeeperHub gate. KeeperHub reads the Passport/Visa state from ENS first, routes failures to blocked stamps, and only then reaches execution. Payload contains no secrets.",
+  "gateMode": "direct-ens-first",
+  "capabilityStatus": {
+    "directEnsReads": "template-not-live-import-proven",
+    "conditionBranches": "template-not-live-import-proven",
+    "blockedStampRouting": "template-not-live-import-proven",
+    "agentEnsExecuteWrite": "previous-live-proof-web3-write-supported"
   },
   "inputs": {
-    "agentName": "ENS agent name",
-    "task": {
-      "description": "Natural-language task to gate",
-      "ownerName": "Optional owner ENS name",
-      "valueWei": "Optional ETH value, defaults to 0"
+    "chainId": "{{CHAIN_ID}}",
+    "rpcUrl": "{{RPC_URL}}",
+    "ensRegistryAddress": "{{ENS_REGISTRY}}",
+    "executorAddress": "{{EXECUTOR_ADDRESS}}",
+    "taskLogAddress": "{{TASK_LOG_ADDRESS}}",
+    "requiredTextRecords": [
+      "agent_status",
+      "agent_policy_digest",
+      "agent_policy_target",
+      "agent_policy_selector",
+      "agent_policy_max_value_wei",
+      "agent_policy_max_gas_reimbursement_wei",
+      "agent_policy_expires_at",
+      "agent_policy_uniswap_enabled",
+      "agent_policy_uniswap_chain_id",
+      "agent_policy_uniswap_allowed_token_in",
+      "agent_policy_uniswap_allowed_token_out",
+      "agent_policy_uniswap_max_input_amount",
+      "agent_policy_uniswap_max_slippage_bps",
+      "agent_policy_uniswap_deadline_seconds",
+      "agent_policy_uniswap_recipient",
+      "agent_policy_uniswap_router",
+      "agent_policy_uniswap_selector"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "agentpassports_trigger",
+      "type": "trigger",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "type": "trigger",
+        "label": "AgentPassports action request",
+        "config": {
+          "triggerType": "Manual"
+        },
+        "status": "idle",
+        "description": "Receives the agent action request. All subsequent KeeperHub nodes must pass before execution."
+      }
     },
-    "metadataURI": "Task proof URI used by the unsigned AgentPassports intent",
-    "workflowId": "Optional KeeperHub workflow id; defaults to KEEPERHUB_WORKFLOW_ID"
-  },
-  "outputs": {
-    "gateDecision": "approved or blocked AgentPassports KeeperHub Gate decision",
-    "workflowPayload": "Unsigned AgentPassports workflow payload produced only after approval",
-    "keeperhub": "Live KeeperHub execution/status/log evidence",
-    "runAttestation": "agentpassport.keeperhubRunAttestation.v1 JSON"
-  },
-  "safetyBoundaries": [
-    "Resolve live ENS before every run",
-    "Do not sign inside MCP",
-    "Do not expose KEEPERHUB_API_KEY",
-    "Do not call KeeperHub when the gate is blocked",
-    "Do not approve blocked policy/status/preflight failures",
-    "Arbitrary execution body persistence is not proven for the simple manual trigger workflow"
+    {
+      "id": "ens_resolve_passport",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 320,
+        "y": 0
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Direct ENS Passport/Visa reads",
+        "method": "POST",
+        "url": "{{RPC_URL}}",
+        "description": "KeeperHub direct ENS read node. It performs eth_call reads against the registry/resolver so KeeperHub, not the AgentPassports API, observes live Passport and Visa state.",
+        "config": {
+          "jsonrpc": "2.0",
+          "calls": [
+            {
+              "purpose": "Passport resolver lookup",
+              "to": "{{ENS_REGISTRY}}",
+              "function": "resolver(bytes32)",
+              "params": [
+                "{{input.agentNode}}"
+              ]
+            },
+            {
+              "purpose": "Passport signer exists",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "addr(bytes32)",
+              "params": [
+                "{{input.agentNode}}"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_status",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_status"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_digest",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_digest"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_target",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_target"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_selector",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_selector"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_max_value_wei",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_max_value_wei"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_max_gas_reimbursement_wei",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_max_gas_reimbursement_wei"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_expires_at",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_expires_at"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_enabled",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_enabled"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_chain_id",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_chain_id"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_allowed_token_in",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_allowed_token_in"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_allowed_token_out",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_allowed_token_out"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_max_input_amount",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_max_input_amount"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_max_slippage_bps",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_max_slippage_bps"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_deadline_seconds",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_deadline_seconds"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_recipient",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_recipient"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_router",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_router"
+              ]
+            },
+            {
+              "purpose": "Visa text record agent_policy_uniswap_selector",
+              "to": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
+              "function": "text(bytes32,string)",
+              "params": [
+                "{{input.agentNode}}",
+                "agent_policy_uniswap_selector"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "check_agent_exists",
+      "type": "condition",
+      "position": {
+        "x": 640,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Passport exists?",
+        "blockedCode": "MISSING_SIGNER",
+        "description": "Requires nonzero resolver and addr(agent) from live ENS.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_agent_exists.passed}}"
+        }
+      }
+    },
+    {
+      "id": "check_status_active",
+      "type": "condition",
+      "position": {
+        "x": 960,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Visa status active?",
+        "blockedCode": "STATUS_NOT_ACTIVE",
+        "description": "Requires ENS text agent_status to be exactly active.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_status_active.passed}}"
+        }
+      }
+    },
+    {
+      "id": "check_policy_digest",
+      "type": "condition",
+      "position": {
+        "x": 1280,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Visa digest and fields valid?",
+        "blockedCode": "POLICY_INVALID",
+        "description": "Reconstructs policy fields and compares digest, expiry, target, selector, and spend caps.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_policy_digest.passed}}"
+        }
+      }
+    },
+    {
+      "id": "check_action_allowed",
+      "type": "condition",
+      "position": {
+        "x": 1600,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Action inside Visa?",
+        "blockedCode": "ACTION_OUTSIDE_POLICY",
+        "description": "Checks requested task target, selector, and value against the ENS Visa fields.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_action_allowed.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_enabled",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 1920,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read Uniswap enabled flag",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_enabled. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_enabled"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_enabled",
+      "type": "condition",
+      "position": {
+        "x": 2240,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Uniswap Visa enabled?",
+        "blockedCode": "UNISWAP_DISABLED",
+        "description": "Requires the Swapper Visa to publish agent_policy_uniswap_enabled=true.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_enabled.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_chain_id",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 2560,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read Uniswap chain id",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_chain_id. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_chain_id"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_chain_id",
+      "type": "condition",
+      "position": {
+        "x": 2880,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Uniswap chain matches?",
+        "blockedCode": "UNISWAP_CHAIN_MISMATCH",
+        "description": "Requires the Swapper chain id record to match the request and KeeperHub network.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_chain_id.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_router",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 3200,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read Uniswap router",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_router. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_router"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_selector",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 3520,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read Uniswap selector",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_selector. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_selector"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_route",
+      "type": "condition",
+      "position": {
+        "x": 3840,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Uniswap route matches Visa?",
+        "blockedCode": "UNISWAP_ROUTE_MISMATCH",
+        "description": "Requires router and selector records to match the executable Visa target/selector and request.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_route.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_allowed_token_in",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 4160,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read allowed token-in list",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_allowed_token_in. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_allowed_token_in"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_token_in_allowed",
+      "type": "condition",
+      "position": {
+        "x": 4480,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Token-in allowed?",
+        "blockedCode": "UNISWAP_TOKEN_IN_BLOCKED",
+        "description": "Requires tokenIn to be listed in agent_policy_uniswap_allowed_token_in.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_token_in_allowed.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_allowed_token_out",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 4800,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read allowed token-out list",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_allowed_token_out. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_allowed_token_out"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_token_out_allowed",
+      "type": "condition",
+      "position": {
+        "x": 5120,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Token-out allowed?",
+        "blockedCode": "UNISWAP_TOKEN_OUT_BLOCKED",
+        "description": "Requires tokenOut to be listed in agent_policy_uniswap_allowed_token_out.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_token_out_allowed.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_max_input_amount",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 5440,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read max input amount",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_max_input_amount. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_max_input_amount"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_amount_allowed",
+      "type": "condition",
+      "position": {
+        "x": 5760,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Amount inside Swapper Visa?",
+        "blockedCode": "UNISWAP_AMOUNT_EXCEEDED",
+        "description": "Requires amountIn to be positive and within the Swapper max input amount.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_amount_allowed.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_recipient",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 6080,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read constrained token-out recipient",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_recipient. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_recipient"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_recipient_allowed",
+      "type": "condition",
+      "position": {
+        "x": 6400,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Recipient allowed?",
+        "blockedCode": "UNISWAP_RECIPIENT_BLOCKED",
+        "description": "Requires recipient to match the owner-recipient record when one is published.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_recipient_allowed.passed}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_max_slippage_bps",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 6720,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read max slippage bps",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_max_slippage_bps. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_max_slippage_bps"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "read_uniswap_deadline_seconds",
+      "type": "http-json-rpc",
+      "position": {
+        "x": 7040,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Read deadline window",
+        "description": "Direct ENS text-record read for agent_policy_uniswap_deadline_seconds. KeeperHub reads this Swapper Visa metadata before execution.",
+        "config": {
+          "function": "text(bytes32,string)",
+          "params": [
+            "{{input.agentNode}}",
+            "agent_policy_uniswap_deadline_seconds"
+          ],
+          "sourceResolver": "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+        }
+      }
+    },
+    {
+      "id": "check_uniswap_execution_window",
+      "type": "condition",
+      "position": {
+        "x": 7360,
+        "y": -180
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Slippage/deadline allowed?",
+        "blockedCode": "UNISWAP_WINDOW_BLOCKED",
+        "description": "Requires requested slippage and deadline window to stay inside Swapper Visa guardrails.",
+        "config": {
+          "trueLabel": "continue",
+          "falseLabel": "emit blocked-stamp",
+          "expression": "{{checks.check_uniswap_execution_window.passed}}"
+        }
+      }
+    },
+    {
+      "id": "stamp_blocked_agent_missing",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 640,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: AGENT_NOT_FOUND",
+        "blockedCode": "AGENT_NOT_FOUND",
+        "reason": "Passport is missing resolver or signer.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_status_inactive",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 960,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: STATUS_NOT_ACTIVE",
+        "blockedCode": "STATUS_NOT_ACTIVE",
+        "reason": "Visa status is not exactly active.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_policy_invalid",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 1280,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: POLICY_INVALID",
+        "blockedCode": "POLICY_INVALID",
+        "reason": "Visa digest, expiry, or policy fields are invalid.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_action_disallowed",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 1600,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: ACTION_OUTSIDE_POLICY",
+        "blockedCode": "ACTION_OUTSIDE_POLICY",
+        "reason": "Requested action is outside the Visa grant.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_disabled",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 2240,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_DISABLED",
+        "blockedCode": "UNISWAP_DISABLED",
+        "reason": "Swapper Visa is not enabled for Uniswap.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_chain_mismatch",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 2880,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_CHAIN_MISMATCH",
+        "blockedCode": "UNISWAP_CHAIN_MISMATCH",
+        "reason": "Requested chain does not match the Swapper Visa.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_route_mismatch",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 3840,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_ROUTE_MISMATCH",
+        "blockedCode": "UNISWAP_ROUTE_MISMATCH",
+        "reason": "Router or selector does not match the executable Visa.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_token_in",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 4480,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_TOKEN_IN_BLOCKED",
+        "blockedCode": "UNISWAP_TOKEN_IN_BLOCKED",
+        "reason": "Token-in is outside the Swapper Visa allow-list.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_token_out",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 5120,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_TOKEN_OUT_BLOCKED",
+        "blockedCode": "UNISWAP_TOKEN_OUT_BLOCKED",
+        "reason": "Token-out is outside the Swapper Visa allow-list.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_amount",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 5760,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_AMOUNT_EXCEEDED",
+        "blockedCode": "UNISWAP_AMOUNT_EXCEEDED",
+        "reason": "Amount-in exceeds the Swapper Visa max input amount.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_recipient",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 6400,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_RECIPIENT_BLOCKED",
+        "blockedCode": "UNISWAP_RECIPIENT_BLOCKED",
+        "reason": "Recipient is outside the Swapper Visa constraint.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "stamp_blocked_uniswap_execution_window",
+      "type": "stamp/blocked",
+      "position": {
+        "x": 7360,
+        "y": 160
+      },
+      "capabilityStatus": "template-not-live-import-proven",
+      "data": {
+        "label": "Blocked stamp: UNISWAP_WINDOW_BLOCKED",
+        "blockedCode": "UNISWAP_WINDOW_BLOCKED",
+        "reason": "Requested slippage or deadline exceeds the Swapper Visa guardrails.",
+        "description": "Terminal blocked-stamp node. It records failed node, blocked code, human reason, agent name/node, policy digest when available, and KeeperHub execution context."
+      }
+    },
+    {
+      "id": "agentens_execute",
+      "type": "web3/write-contract",
+      "position": {
+        "x": 7680,
+        "y": -180
+      },
+      "capabilityStatus": "previous-live-proof-web3-write-supported",
+      "data": {
+        "label": "Execute after Passport/Visa approval",
+        "description": "Execution is reachable only from the true edge of check_uniswap_execution_window, so KeeperHub visibly blocks before any onchain write when a Passport, Visa, or Swapper policy check fails.",
+        "config": {
+          "contractAddress": "{{EXECUTOR_ADDRESS}}",
+          "function": "AgentEnsExecutor.executeOwnerFundedERC20",
+          "abiFunction": "executeOwnerFundedERC20",
+          "targetPolicyAddress": "{{TASK_LOG_ADDRESS}}",
+          "functionArgs": "{{@agentpassports_gate_trigger:AgentPassports Gate Trigger.functionArgs}}",
+          "functionArgsShape": "JSON.stringify([intent, policySnapshot, callData, signature, tokenIn, amountIn])",
+          "valueSource": "{{input.signedAgentPassportsPayload}}"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "agentpassports_trigger__request__ens_resolve_passport",
+      "source": "agentpassports_trigger",
+      "target": "ens_resolve_passport",
+      "label": "request",
+      "data": {
+        "label": "request"
+      }
+    },
+    {
+      "id": "ens_resolve_passport__resolved__check_agent_exists",
+      "source": "ens_resolve_passport",
+      "target": "check_agent_exists",
+      "label": "resolved",
+      "data": {
+        "label": "resolved"
+      }
+    },
+    {
+      "id": "check_agent_exists__true__check_status_active",
+      "source": "check_agent_exists",
+      "target": "check_status_active",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_agent_exists__false__stamp_blocked_agent_missing",
+      "source": "check_agent_exists",
+      "target": "stamp_blocked_agent_missing",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "check_status_active__true__check_policy_digest",
+      "source": "check_status_active",
+      "target": "check_policy_digest",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_status_active__false__stamp_blocked_status_inactive",
+      "source": "check_status_active",
+      "target": "stamp_blocked_status_inactive",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "check_policy_digest__true__check_action_allowed",
+      "source": "check_policy_digest",
+      "target": "check_action_allowed",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_policy_digest__false__stamp_blocked_policy_invalid",
+      "source": "check_policy_digest",
+      "target": "stamp_blocked_policy_invalid",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "check_action_allowed__true__read_uniswap_enabled",
+      "source": "check_action_allowed",
+      "target": "read_uniswap_enabled",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_action_allowed__false__stamp_blocked_action_disallowed",
+      "source": "check_action_allowed",
+      "target": "stamp_blocked_action_disallowed",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_enabled__read__check_uniswap_enabled",
+      "source": "read_uniswap_enabled",
+      "target": "check_uniswap_enabled",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_enabled__true__read_uniswap_chain_id",
+      "source": "check_uniswap_enabled",
+      "target": "read_uniswap_chain_id",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_enabled__false__stamp_blocked_uniswap_disabled",
+      "source": "check_uniswap_enabled",
+      "target": "stamp_blocked_uniswap_disabled",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_chain_id__read__check_uniswap_chain_id",
+      "source": "read_uniswap_chain_id",
+      "target": "check_uniswap_chain_id",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_chain_id__true__read_uniswap_router",
+      "source": "check_uniswap_chain_id",
+      "target": "read_uniswap_router",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_chain_id__false__stamp_blocked_uniswap_chain_mismatch",
+      "source": "check_uniswap_chain_id",
+      "target": "stamp_blocked_uniswap_chain_mismatch",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_router__read__read_uniswap_selector",
+      "source": "read_uniswap_router",
+      "target": "read_uniswap_selector",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "read_uniswap_selector__read__check_uniswap_route",
+      "source": "read_uniswap_selector",
+      "target": "check_uniswap_route",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_route__true__read_uniswap_allowed_token_in",
+      "source": "check_uniswap_route",
+      "target": "read_uniswap_allowed_token_in",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_route__false__stamp_blocked_uniswap_route_mismatch",
+      "source": "check_uniswap_route",
+      "target": "stamp_blocked_uniswap_route_mismatch",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_allowed_token_in__read__check_uniswap_token_in_allowed",
+      "source": "read_uniswap_allowed_token_in",
+      "target": "check_uniswap_token_in_allowed",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_token_in_allowed__true__read_uniswap_allowed_token_out",
+      "source": "check_uniswap_token_in_allowed",
+      "target": "read_uniswap_allowed_token_out",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_token_in_allowed__false__stamp_blocked_uniswap_token_in",
+      "source": "check_uniswap_token_in_allowed",
+      "target": "stamp_blocked_uniswap_token_in",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_allowed_token_out__read__check_uniswap_token_out_allowed",
+      "source": "read_uniswap_allowed_token_out",
+      "target": "check_uniswap_token_out_allowed",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_token_out_allowed__true__read_uniswap_max_input_amount",
+      "source": "check_uniswap_token_out_allowed",
+      "target": "read_uniswap_max_input_amount",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_token_out_allowed__false__stamp_blocked_uniswap_token_out",
+      "source": "check_uniswap_token_out_allowed",
+      "target": "stamp_blocked_uniswap_token_out",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_max_input_amount__read__check_uniswap_amount_allowed",
+      "source": "read_uniswap_max_input_amount",
+      "target": "check_uniswap_amount_allowed",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_amount_allowed__true__read_uniswap_recipient",
+      "source": "check_uniswap_amount_allowed",
+      "target": "read_uniswap_recipient",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_amount_allowed__false__stamp_blocked_uniswap_amount",
+      "source": "check_uniswap_amount_allowed",
+      "target": "stamp_blocked_uniswap_amount",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_recipient__read__check_uniswap_recipient_allowed",
+      "source": "read_uniswap_recipient",
+      "target": "check_uniswap_recipient_allowed",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_recipient_allowed__true__read_uniswap_max_slippage_bps",
+      "source": "check_uniswap_recipient_allowed",
+      "target": "read_uniswap_max_slippage_bps",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_recipient_allowed__false__stamp_blocked_uniswap_recipient",
+      "source": "check_uniswap_recipient_allowed",
+      "target": "stamp_blocked_uniswap_recipient",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    },
+    {
+      "id": "read_uniswap_max_slippage_bps__read__read_uniswap_deadline_seconds",
+      "source": "read_uniswap_max_slippage_bps",
+      "target": "read_uniswap_deadline_seconds",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "read_uniswap_deadline_seconds__read__check_uniswap_execution_window",
+      "source": "read_uniswap_deadline_seconds",
+      "target": "check_uniswap_execution_window",
+      "label": "read",
+      "data": {
+        "label": "read"
+      }
+    },
+    {
+      "id": "check_uniswap_execution_window__true__agentens_execute",
+      "source": "check_uniswap_execution_window",
+      "target": "agentens_execute",
+      "label": "true",
+      "data": {
+        "label": "true"
+      }
+    },
+    {
+      "id": "check_uniswap_execution_window__false__stamp_blocked_uniswap_execution_window",
+      "source": "check_uniswap_execution_window",
+      "target": "stamp_blocked_uniswap_execution_window",
+      "label": "false",
+      "data": {
+        "label": "false"
+      }
+    }
   ]
 }

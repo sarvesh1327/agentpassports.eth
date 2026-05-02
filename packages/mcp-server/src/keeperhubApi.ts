@@ -20,6 +20,27 @@ type WorkflowDefinitionInput = {
 
 const DEFAULT_KEEPERHUB_API_BASE_URL = "https://app.keeperhub.com";
 const PLACEHOLDER_BYTES32 = "{{input.agentNode}}";
+const BASE_TEXT_RECORD_KEYS = [
+  "agent_status",
+  "agent_policy_digest",
+  "agent_policy_target",
+  "agent_policy_selector",
+  "agent_policy_max_value_wei",
+  "agent_policy_max_gas_reimbursement_wei",
+  "agent_policy_expires_at"
+];
+const UNISWAP_TEXT_RECORD_KEYS = [
+  "agent_policy_uniswap_enabled",
+  "agent_policy_uniswap_chain_id",
+  "agent_policy_uniswap_allowed_token_in",
+  "agent_policy_uniswap_allowed_token_out",
+  "agent_policy_uniswap_max_input_amount",
+  "agent_policy_uniswap_max_slippage_bps",
+  "agent_policy_uniswap_deadline_seconds",
+  "agent_policy_uniswap_recipient",
+  "agent_policy_uniswap_router",
+  "agent_policy_uniswap_selector"
+];
 
 export function loadKeeperHubApiConfig(env: Record<string, string | undefined> = process.env): KeeperHubApiConfig {
   const apiKey = env.KEEPERHUB_API_KEY?.trim();
@@ -38,7 +59,7 @@ export function loadKeeperHubApiConfig(env: Record<string, string | undefined> =
  * runtime that decides whether an agent action proceeds, not a black-box caller
  * that trusts our backend. The graph below therefore models Passport checks
  * (agent ENS identity exists) and Visa checks (ENS policy grants the requested
- * action) as separate KeeperHub nodes before the `AgentEnsExecutor.execute` node.
+ * action) as separate KeeperHub nodes before the owner-funded `AgentEnsExecutor.executeOwnerFundedERC20` node.
  *
  * Why direct ENS first: the preferred security boundary is that KeeperHub reads
  * current ENS state itself through public `eth_call`s. The AgentPassports MCP/API
@@ -78,13 +99,8 @@ export function buildAgentPassportsKeeperHubWorkflowDefinition(input: WorkflowDe
       executorAddress,
       taskLogAddress,
       requiredTextRecords: [
-        "agent_status",
-        "agent_policy_digest",
-        "agent_policy_target",
-        "agent_policy_selector",
-        "agent_policy_max_value_wei",
-        "agent_policy_max_gas_reimbursement_wei",
-        "agent_policy_expires_at"
+        ...BASE_TEXT_RECORD_KEYS,
+        ...UNISWAP_TEXT_RECORD_KEYS
       ]
     },
     nodes: buildDirectEnsKeeperHubNodes({ ensRegistryAddress, executorAddress, rpcUrl, taskLogAddress }),
@@ -138,13 +154,8 @@ function buildDirectEnsKeeperHubNodes(input: {
               params: [PLACEHOLDER_BYTES32]
             },
             ...[
-              "agent_status",
-              "agent_policy_digest",
-              "agent_policy_target",
-              "agent_policy_selector",
-              "agent_policy_max_value_wei",
-              "agent_policy_max_gas_reimbursement_wei",
-              "agent_policy_expires_at"
+              ...BASE_TEXT_RECORD_KEYS,
+              ...UNISWAP_TEXT_RECORD_KEYS
             ].map((key) => ({
               purpose: `Visa text record ${key}`,
               to: "{{nodes.ens_resolve_passport.outputs.resolverAddress}}",
@@ -159,28 +170,77 @@ function buildDirectEnsKeeperHubNodes(input: {
     conditionNode("check_status_active", 960, -180, "Visa status active?", "STATUS_NOT_ACTIVE", "Requires ENS text agent_status to be exactly active."),
     conditionNode("check_policy_digest", 1280, -180, "Visa digest and fields valid?", "POLICY_INVALID", "Reconstructs policy fields and compares digest, expiry, target, selector, and spend caps."),
     conditionNode("check_action_allowed", 1600, -180, "Action inside Visa?", "ACTION_OUTSIDE_POLICY", "Checks requested task target, selector, and value against the ENS Visa fields."),
+    textReadNode("read_uniswap_enabled", 1920, -180, "agent_policy_uniswap_enabled", "Read Uniswap enabled flag"),
+    conditionNode("check_uniswap_enabled", 2240, -180, "Uniswap Visa enabled?", "UNISWAP_DISABLED", "Requires the Swapper Visa to publish agent_policy_uniswap_enabled=true."),
+    textReadNode("read_uniswap_chain_id", 2560, -180, "agent_policy_uniswap_chain_id", "Read Uniswap chain id"),
+    conditionNode("check_uniswap_chain_id", 2880, -180, "Uniswap chain matches?", "UNISWAP_CHAIN_MISMATCH", "Requires the Swapper chain id record to match the request and KeeperHub network."),
+    textReadNode("read_uniswap_router", 3200, -180, "agent_policy_uniswap_router", "Read Uniswap router"),
+    textReadNode("read_uniswap_selector", 3520, -180, "agent_policy_uniswap_selector", "Read Uniswap selector"),
+    conditionNode("check_uniswap_route", 3840, -180, "Uniswap route matches Visa?", "UNISWAP_ROUTE_MISMATCH", "Requires router and selector records to match the executable Visa target/selector and request."),
+    textReadNode("read_uniswap_allowed_token_in", 4160, -180, "agent_policy_uniswap_allowed_token_in", "Read allowed token-in list"),
+    conditionNode("check_uniswap_token_in_allowed", 4480, -180, "Token-in allowed?", "UNISWAP_TOKEN_IN_BLOCKED", "Requires tokenIn to be listed in agent_policy_uniswap_allowed_token_in."),
+    textReadNode("read_uniswap_allowed_token_out", 4800, -180, "agent_policy_uniswap_allowed_token_out", "Read allowed token-out list"),
+    conditionNode("check_uniswap_token_out_allowed", 5120, -180, "Token-out allowed?", "UNISWAP_TOKEN_OUT_BLOCKED", "Requires tokenOut to be listed in agent_policy_uniswap_allowed_token_out."),
+    textReadNode("read_uniswap_max_input_amount", 5440, -180, "agent_policy_uniswap_max_input_amount", "Read max input amount"),
+    conditionNode("check_uniswap_amount_allowed", 5760, -180, "Amount inside Swapper Visa?", "UNISWAP_AMOUNT_EXCEEDED", "Requires amountIn to be positive and within the Swapper max input amount."),
+    textReadNode("read_uniswap_recipient", 6080, -180, "agent_policy_uniswap_recipient", "Read constrained token-out recipient"),
+    conditionNode("check_uniswap_recipient_allowed", 6400, -180, "Recipient allowed?", "UNISWAP_RECIPIENT_BLOCKED", "Requires recipient to match the owner-recipient record when one is published."),
+    textReadNode("read_uniswap_max_slippage_bps", 6720, -180, "agent_policy_uniswap_max_slippage_bps", "Read max slippage bps"),
+    textReadNode("read_uniswap_deadline_seconds", 7040, -180, "agent_policy_uniswap_deadline_seconds", "Read deadline window"),
+    conditionNode("check_uniswap_execution_window", 7360, -180, "Slippage/deadline allowed?", "UNISWAP_WINDOW_BLOCKED", "Requires requested slippage and deadline window to stay inside Swapper Visa guardrails."),
     blockedStampNode("stamp_blocked_agent_missing", 640, 160, "AGENT_NOT_FOUND", "Passport is missing resolver or signer."),
     blockedStampNode("stamp_blocked_status_inactive", 960, 160, "STATUS_NOT_ACTIVE", "Visa status is not exactly active."),
     blockedStampNode("stamp_blocked_policy_invalid", 1280, 160, "POLICY_INVALID", "Visa digest, expiry, or policy fields are invalid."),
     blockedStampNode("stamp_blocked_action_disallowed", 1600, 160, "ACTION_OUTSIDE_POLICY", "Requested action is outside the Visa grant."),
+    blockedStampNode("stamp_blocked_uniswap_disabled", 2240, 160, "UNISWAP_DISABLED", "Swapper Visa is not enabled for Uniswap."),
+    blockedStampNode("stamp_blocked_uniswap_chain_mismatch", 2880, 160, "UNISWAP_CHAIN_MISMATCH", "Requested chain does not match the Swapper Visa."),
+    blockedStampNode("stamp_blocked_uniswap_route_mismatch", 3840, 160, "UNISWAP_ROUTE_MISMATCH", "Router or selector does not match the executable Visa."),
+    blockedStampNode("stamp_blocked_uniswap_token_in", 4480, 160, "UNISWAP_TOKEN_IN_BLOCKED", "Token-in is outside the Swapper Visa allow-list."),
+    blockedStampNode("stamp_blocked_uniswap_token_out", 5120, 160, "UNISWAP_TOKEN_OUT_BLOCKED", "Token-out is outside the Swapper Visa allow-list."),
+    blockedStampNode("stamp_blocked_uniswap_amount", 5760, 160, "UNISWAP_AMOUNT_EXCEEDED", "Amount-in exceeds the Swapper Visa max input amount."),
+    blockedStampNode("stamp_blocked_uniswap_recipient", 6400, 160, "UNISWAP_RECIPIENT_BLOCKED", "Recipient is outside the Swapper Visa constraint."),
+    blockedStampNode("stamp_blocked_uniswap_execution_window", 7360, 160, "UNISWAP_WINDOW_BLOCKED", "Requested slippage or deadline exceeds the Swapper Visa guardrails."),
     {
       id: "agentens_execute",
       type: "web3/write-contract",
-      position: { x: 1920, y: -180 },
+      position: { x: 7680, y: -180 },
       capabilityStatus: "previous-live-proof-web3-write-supported",
       data: {
         label: "Execute after Passport/Visa approval",
         description:
-          "Execution is reachable only from the true edge of check_action_allowed, so KeeperHub visibly blocks before any onchain write when a Passport or Visa check fails.",
+          "Execution is reachable only from the true edge of check_uniswap_execution_window, so KeeperHub visibly blocks before any onchain write when a Passport, Visa, or Swapper policy check fails.",
         config: {
           contractAddress: input.executorAddress,
-          function: "AgentEnsExecutor.execute",
+          function: "AgentEnsExecutor.executeOwnerFundedERC20",
+          abiFunction: "executeOwnerFundedERC20",
           targetPolicyAddress: input.taskLogAddress,
+          functionArgs:
+            "{{@agentpassports_gate_trigger:AgentPassports Gate Trigger.functionArgs}}",
+          functionArgsShape:
+            "JSON.stringify([intent, policySnapshot, callData, signature, tokenIn, amountIn])",
           valueSource: "{{input.signedAgentPassportsPayload}}"
         }
       }
     }
   ];
+}
+
+function textReadNode(id: string, x: number, y: number, key: string, label: string) {
+  return {
+    id,
+    type: "http-json-rpc",
+    position: { x, y },
+    capabilityStatus: "template-not-live-import-proven",
+    data: {
+      label,
+      description: `Direct ENS text-record read for ${key}. KeeperHub reads this Swapper Visa metadata before execution.`,
+      config: {
+        function: "text(bytes32,string)",
+        params: [PLACEHOLDER_BYTES32, key],
+        sourceResolver: "{{nodes.ens_resolve_passport.outputs.resolverAddress}}"
+      }
+    }
+  };
 }
 
 function conditionNode(id: string, x: number, y: number, label: string, blockedCode: string, description: string) {
@@ -228,8 +288,34 @@ function buildDirectEnsKeeperHubEdges() {
     edge("check_status_active", "stamp_blocked_status_inactive", "false"),
     edge("check_policy_digest", "check_action_allowed", "true"),
     edge("check_policy_digest", "stamp_blocked_policy_invalid", "false"),
-    edge("check_action_allowed", "agentens_execute", "true"),
-    edge("check_action_allowed", "stamp_blocked_action_disallowed", "false")
+    edge("check_action_allowed", "read_uniswap_enabled", "true"),
+    edge("check_action_allowed", "stamp_blocked_action_disallowed", "false"),
+    edge("read_uniswap_enabled", "check_uniswap_enabled", "read"),
+    edge("check_uniswap_enabled", "read_uniswap_chain_id", "true"),
+    edge("check_uniswap_enabled", "stamp_blocked_uniswap_disabled", "false"),
+    edge("read_uniswap_chain_id", "check_uniswap_chain_id", "read"),
+    edge("check_uniswap_chain_id", "read_uniswap_router", "true"),
+    edge("check_uniswap_chain_id", "stamp_blocked_uniswap_chain_mismatch", "false"),
+    edge("read_uniswap_router", "read_uniswap_selector", "read"),
+    edge("read_uniswap_selector", "check_uniswap_route", "read"),
+    edge("check_uniswap_route", "read_uniswap_allowed_token_in", "true"),
+    edge("check_uniswap_route", "stamp_blocked_uniswap_route_mismatch", "false"),
+    edge("read_uniswap_allowed_token_in", "check_uniswap_token_in_allowed", "read"),
+    edge("check_uniswap_token_in_allowed", "read_uniswap_allowed_token_out", "true"),
+    edge("check_uniswap_token_in_allowed", "stamp_blocked_uniswap_token_in", "false"),
+    edge("read_uniswap_allowed_token_out", "check_uniswap_token_out_allowed", "read"),
+    edge("check_uniswap_token_out_allowed", "read_uniswap_max_input_amount", "true"),
+    edge("check_uniswap_token_out_allowed", "stamp_blocked_uniswap_token_out", "false"),
+    edge("read_uniswap_max_input_amount", "check_uniswap_amount_allowed", "read"),
+    edge("check_uniswap_amount_allowed", "read_uniswap_recipient", "true"),
+    edge("check_uniswap_amount_allowed", "stamp_blocked_uniswap_amount", "false"),
+    edge("read_uniswap_recipient", "check_uniswap_recipient_allowed", "read"),
+    edge("check_uniswap_recipient_allowed", "read_uniswap_max_slippage_bps", "true"),
+    edge("check_uniswap_recipient_allowed", "stamp_blocked_uniswap_recipient", "false"),
+    edge("read_uniswap_max_slippage_bps", "read_uniswap_deadline_seconds", "read"),
+    edge("read_uniswap_deadline_seconds", "check_uniswap_execution_window", "read"),
+    edge("check_uniswap_execution_window", "agentens_execute", "true"),
+    edge("check_uniswap_execution_window", "stamp_blocked_uniswap_execution_window", "false")
   ];
 }
 

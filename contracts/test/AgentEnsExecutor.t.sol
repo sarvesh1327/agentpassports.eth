@@ -5,8 +5,10 @@ import { AgentEnsExecutor } from "../src/AgentEnsExecutor.sol";
 import { TaskLog } from "../src/TaskLog.sol";
 import { TestBase } from "./TestBase.sol";
 import { MockENSRegistry } from "./mocks/MockENSRegistry.sol";
+import { MockERC20 } from "./mocks/MockERC20.sol";
 import { MockNameWrapper } from "./mocks/MockNameWrapper.sol";
 import { MockResolver } from "./mocks/MockResolver.sol";
+import { MockSwapRouter } from "./mocks/MockSwapRouter.sol";
 import { MockValueTarget } from "./mocks/MockValueTarget.sol";
 
 /// @title AgentEnsExecutorTest
@@ -39,6 +41,9 @@ contract AgentEnsExecutorTest is TestBase {
     MockENSRegistry private ens;
     MockNameWrapper private nameWrapper;
     MockResolver private resolver;
+    MockERC20 private tokenIn;
+    MockERC20 private tokenOut;
+    MockSwapRouter private swapRouter;
     MockValueTarget private valueTarget;
     AgentEnsExecutor private executor;
     TaskLog private taskLog;
@@ -53,6 +58,9 @@ contract AgentEnsExecutorTest is TestBase {
         ens = new MockENSRegistry();
         nameWrapper = new MockNameWrapper();
         resolver = new MockResolver();
+        tokenIn = new MockERC20("Token In", "TIN");
+        tokenOut = new MockERC20("Token Out", "TOUT");
+        swapRouter = new MockSwapRouter();
         valueTarget = new MockValueTarget();
         executor = new AgentEnsExecutor(address(ens), address(nameWrapper));
         taskLog = new TaskLog(address(executor));
@@ -61,6 +69,72 @@ contract AgentEnsExecutorTest is TestBase {
         ens.setResolver(agentNode, address(resolver));
         resolver.setAddr(agentNode, agent);
         vm.deal(owner, 10 ether);
+    }
+
+    /// @notice Owner-wallet swaps pull tokenIn from the current ENS manager, not the agent signer.
+    function testOwnerFundedErc20SwapPullsFromEnsOwnerAndDeliversTokenOut() public {
+        uint256 amountIn = 100 ether;
+        uint256 amountOut = 97 ether;
+        tokenIn.mint(owner, amountIn);
+        assertEq(tokenIn.balanceOf(agent), 0, "agent starts with no tokenIn custody");
+
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveSwapPolicy();
+        bytes memory callData = _swapCallData(owner, amountIn, amountOut);
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.prank(owner);
+        tokenIn.approve(address(executor), amountIn);
+
+        vm.prank(relayer);
+        bytes memory result = executor.executeOwnerFundedERC20(
+            intent, policy, callData, signature, address(tokenIn), amountIn
+        );
+
+        assertEq(abi.decode(result, (uint256)), amountOut, "router result");
+        assertEq(tokenIn.balanceOf(owner), 0, "owner funded exact input");
+        assertEq(tokenIn.balanceOf(agent), 0, "agent never custodies tokenIn");
+        assertEq(tokenIn.balanceOf(address(swapRouter)), amountIn, "router consumed input");
+        assertEq(tokenOut.balanceOf(owner), amountOut, "recipient receives output");
+        assertEq(tokenIn.allowance(address(executor), address(swapRouter)), 0, "router allowance cleared");
+        assertEq(executor.nextNonce(agentNode), 1, "nonce consumed");
+    }
+
+    /// @notice Missing owner approval must fail before any swap output is minted.
+    function testOwnerFundedErc20SwapRequiresOwnerAllowance() public {
+        uint256 amountIn = 100 ether;
+        uint256 amountOut = 97 ether;
+        tokenIn.mint(owner, amountIn);
+
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveSwapPolicy();
+        bytes memory callData = _swapCallData(owner, amountIn, amountOut);
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.expectRevert(AgentEnsExecutor.ERC20OperationFailed.selector);
+        executor.executeOwnerFundedERC20(intent, policy, callData, signature, address(tokenIn), amountIn);
+
+        assertEq(tokenOut.balanceOf(owner), 0, "no output minted after failed pull");
+        assertEq(executor.nextNonce(agentNode), 0, "nonce not consumed on failed pull");
+    }
+
+    /// @notice ENS status/policy gates run before token transfer so disabled agents cannot move owner funds.
+    function testOwnerFundedErc20SwapDisabledEnsBlocksBeforeTokenPull() public {
+        uint256 amountIn = 100 ether;
+        tokenIn.mint(owner, amountIn);
+        AgentEnsExecutor.PolicySnapshot memory policy = _publishActiveSwapPolicy();
+        resolver.setText(agentNode, "agent_status", "disabled");
+        bytes memory callData = _swapCallData(owner, amountIn, 97 ether);
+        AgentEnsExecutor.TaskIntent memory intent = _intent(policy, callData, 0, block.timestamp + 1 hours);
+        bytes memory signature = _sign(agentKey, intent);
+
+        vm.prank(owner);
+        tokenIn.approve(address(executor), amountIn);
+
+        vm.expectRevert(AgentEnsExecutor.PolicyDisabled.selector);
+        executor.executeOwnerFundedERC20(intent, policy, callData, signature, address(tokenIn), amountIn);
+
+        assertEq(tokenIn.balanceOf(owner), amountIn, "owner balance unchanged");
     }
 
     /// @notice Verifies deployments cannot omit the ENS registry authorization source.
@@ -347,6 +421,27 @@ contract AgentEnsExecutorTest is TestBase {
             enabled: true
         });
         _publishPolicy(policy);
+    }
+
+    /// @notice Publishes a policy that only allows the mock router swap selector.
+    function _publishActiveSwapPolicy() private returns (AgentEnsExecutor.PolicySnapshot memory policy) {
+        policy = AgentEnsExecutor.PolicySnapshot({
+            target: address(swapRouter),
+            selector: MockSwapRouter.swapExactInput.selector,
+            maxValueWei: 0,
+            maxGasReimbursementWei: 0,
+            expiresAt: uint64(block.timestamp + 1 days),
+            enabled: true
+        });
+        _publishPolicy(policy);
+    }
+
+    /// @notice Builds calldata whose recipient is owner-controlled per swap policy expectations.
+    function _swapCallData(address recipient, uint256 amountIn, uint256 amountOut) private view returns (bytes memory) {
+        return abi.encodeCall(
+            MockSwapRouter.swapExactInput,
+            (address(tokenIn), address(tokenOut), recipient, amountIn, amountOut)
+        );
     }
 
     /// @notice Writes the policy digest and active status exactly as V1 ENS records will.

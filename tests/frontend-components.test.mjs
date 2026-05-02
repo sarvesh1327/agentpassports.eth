@@ -165,6 +165,26 @@ test("agent passport card exposes public profile and policy metadata", async () 
   }
 });
 
+test("agent page renders KeeperHub swap attestations with failed stamp details", async () => {
+  await assertFile("apps/web/lib/keeperhubAttestations.ts");
+  await assertFile("apps/web/app/api/keeperhub/attestations/route.ts");
+
+  const agentSource = await readText("apps/web/components/AgentProfileView.tsx");
+  const apiSource = await readText("apps/web/app/api/keeperhub/attestations/route.ts");
+  const libSource = await readText("apps/web/lib/keeperhubAttestations.ts");
+
+  assert.match(agentSource, /KeeperHubAttestationsPanel/);
+  assert.match(libSource, /\/api\/keeperhub\/attestations/);
+  for (const label of ["KeeperHub attestations", "Blocked stamp", "Failed node", "Execution trace", "Policy digest", "Tx hash"]) {
+    assert.match(agentSource, new RegExp(label), `${label} should be shown on the Agent page`);
+  }
+  assert.doesNotMatch(agentSource, /Latest swap proof/);
+  assert.match(apiSource, /fetchKeeperHubAttestations/);
+  assert.match(apiSource, /KEEPERHUB_WORKFLOW_ID/);
+  assert.match(libSource, /agentpassport\.blockedStamp\.v1/);
+  assert.match(libSource, /functionArgs|callData|signature/);
+});
+
 test("home page and demo profile do not prefill user-owned ENS values", async () => {
   const pageSource = await readText("apps/web/app/page.tsx");
   const demoSource = await readText("apps/web/lib/demoProfile.ts");
@@ -224,6 +244,10 @@ test("register page renders the ENS registration workflow", async () => {
   assert.match(formSource, /ownerNameEdited/);
   assert.match(formSource, /readOwnerEnsAutofill/);
   assert.match(formSource, /setOwnerName\(ownerEnsAutofill\)/);
+  assert.match(formSource, /buildDefaultSwapPolicyFormValues\(connectedWallet \?\? null\)/);
+  assert.match(formSource, /setSwapRecipient\(connectedWallet\)/);
+  assert.match(formSource, /placeholder="defaults to owner address"/);
+  assert.doesNotMatch(formSource, /recipient: swapRecipient \|\| agentAddress/);
   assert.match(helperSource, /safeNamehash/);
   assert.match(helperSource, /computeSubnode/);
   assert.match(source, /agent_policy_hash/);
@@ -500,9 +524,10 @@ test("agent page reads live ENS, policy, gas budget, and task history", async ()
   assert.match(viewSource, /Allowed token out/);
   assert.match(viewSource, /Max input amount/);
   assert.match(viewSource, /Max slippage bps/);
-  assert.match(viewSource, /Latest swap proof/);
-  assert.match(viewSource, /latestSwapTask/);
+  assert.match(viewSource, /KeeperHub attestations/);
+  assert.match(viewSource, /KeeperHubAttestationsPanel/);
   assert.match(viewSource, /policyDigest/);
+  assert.doesNotMatch(viewSource, /latestSwapTask/);
 });
 
 test("agent page uses the owner-management mockup layout instead of legacy passport cards", async () => {

@@ -33,3 +33,4 @@ contracts/broadcast/
 # Local planning/spec docs are intentionally not pushed upstream.
 /docs/*
 /.agent-bridge/*
+**/.tmp/*

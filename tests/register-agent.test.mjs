@@ -6,6 +6,8 @@ const TASK_LOG_ADDRESS = "0x3AB718580b476D64fdD3CE6a9Ab63491B15767d9";
 const PUBLIC_RESOLVER_ADDRESS = "0x1111111111111111111111111111111111111111";
 const ENS_REGISTRY_ADDRESS = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const OWNER_WALLET = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const UNISWAP_ROUTER = "0x1111111111111111111111111111111111111111";
+const UNISWAP_SELECTOR = "0x12aa3caf";
 
 test("ETH amount helpers keep small nonzero budgets visible", async () => {
   const { formatWeiAsEth } = await import("../apps/web/lib/ethAmount.ts");
@@ -30,6 +32,24 @@ test("ETH amount helpers parse registration ETH inputs into wei", async () => {
   assert.equal(formatWeiInputAsEth("100000000000"), "0.0000001");
   assert.equal(formatWeiInputAsEth("10000000000000000000"), "10");
   assert.equal(formatWeiInputAsEth(""), "");
+});
+
+test("default Uniswap registration values target Sepolia Universal Router and owner recipient", async () => {
+  const { buildDefaultSwapPolicyFormValues } = await import("../apps/web/lib/registerAgent.ts");
+  const ownerAddress = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+  assert.deepEqual(buildDefaultSwapPolicyFormValues(ownerAddress), {
+    allowedChainId: "11155111",
+    allowedTokensIn: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    allowedTokensOut: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    deadlineSeconds: "60",
+    maxAmountInWei: "10000000000000000",
+    maxSlippageBps: "50",
+    recipient: ownerAddress,
+    router: "0x8b844f885672f333bc0042cb669255f93a4c1e6b",
+    selector: "0x24856bc3"
+  });
+  assert.equal(buildDefaultSwapPolicyFormValues(null).recipient, "");
 });
 
 test("register preview derives ENS nodes, policy hash, and text records from form input", async () => {
@@ -71,6 +91,7 @@ test("register preview derives ENS nodes, policy hash, and text records from for
 
 test("register preview publishes Swapper kind, capability, and Uniswap policy text records", async () => {
   const { buildRegisterPreview } = await import("../apps/web/lib/registerAgent.ts");
+  const { hashPolicyMetadata, buildPolicyMetadata, hashPolicySnapshot } = await import("../packages/config/src/index.ts");
 
   const preview = buildRegisterPreview({
     agentAddress: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -92,8 +113,8 @@ test("register preview publishes Swapper kind, capability, and Uniswap policy te
       maxAmountInWei: "10000000",
       maxSlippageBps: "50",
       recipient: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      router: "0x1111111111111111111111111111111111111111",
-      selector: "0x12aa3caf",
+      router: UNISWAP_ROUTER,
+      selector: UNISWAP_SELECTOR,
     },
     taskLogAddress: TASK_LOG_ADDRESS,
   });
@@ -101,6 +122,25 @@ test("register preview publishes Swapper kind, capability, and Uniswap policy te
 
   assert.equal(records["agent_kind"], "swapper");
   assert.equal(records["agent_capabilities"], "task-log,sponsored-execution,uniswap-swap");
+  assert.equal(records["agent_policy_target"], UNISWAP_ROUTER);
+  assert.equal(records["agent_policy_selector"], UNISWAP_SELECTOR);
+  assert.equal(preview.policyHash, hashPolicyMetadata(buildPolicyMetadata({
+    agentNode: preview.agentNode,
+    expiresAt: 1790000000n,
+    maxGasReimbursementWei: 1000000000000000n,
+    maxValueWei: 0n,
+    ownerNode: preview.ownerNode,
+    selector: UNISWAP_SELECTOR,
+    target: UNISWAP_ROUTER,
+  })));
+  assert.equal(preview.policyDigest, hashPolicySnapshot(preview.agentNode, {
+    enabled: true,
+    expiresAt: 1790000000n,
+    maxGasReimbursementWei: 1000000000000000n,
+    maxValueWei: 0n,
+    selector: UNISWAP_SELECTOR,
+    target: UNISWAP_ROUTER,
+  }));
   assert.equal(records["agent_policy_uniswap_chain_id"], "1");
   assert.equal(records["agent_policy_uniswap_allowed_token_in"], "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
   assert.equal(records["agent_policy_uniswap_allowed_token_out"], "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");

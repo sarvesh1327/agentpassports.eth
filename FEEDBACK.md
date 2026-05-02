@@ -1,49 +1,24 @@
 # Uniswap API Feedback
 
-## What we built
+## What we used the Uniswap API for
 
-- Added MCP tools for policy-gated Uniswap API usage:
-  - `uniswap_check_approval`
-  - `uniswap_validate_swap_against_ens_policy`
-  - `uniswap_quote`
-  - `uniswap_execute_swap`
-- Added ENS text-record parsing for V2 Uniswap swap policy.
-- Added server-side Uniswap API calls so API keys are not exposed to the browser.
-
-## Endpoints used
-
-- `/check_approval`
-- `/quote`
-- `/swap`
+- Getting reference quotes/routes for the intended token pair and chain.
+- Inspecting the generated transaction shape: router target, calldata, recipient, slippage/deadline, spender, and approval assumptions.
+- Comparing Uniswap's default wallet-driven swap flow against our owner-funded, delegated execution model.
 
 ## What worked well
 
-- The API maps naturally to an agent workflow: check approval, quote, validate, execute.
-- Keeping the API call in MCP/server code makes secret handling straightforward.
-- A live /quote worked on Sepolia for WETH -> UNI, so quote metadata is usable as an experimental policy-gated proof path.
+- The quote/build API is useful as a fast sanity check for supported chains, token pairs, routing availability, and rough swap outputs.
+- It works well for the default wallet-driven Uniswap flow where the same user wallet owns tokens, manages approvals, and submits the generated transaction.
+- It surfaced the important swap assumptions quickly: token holder, spender, approval path, recipient, slippage, deadline, and router choice.
+- For our owner-funded design, it was still useful as a reference for route economics and expected token movement, even when we did not use its generated transaction directly.
+- Once we moved to direct `SwapRouter02.exactInputSingle` calldata, the execution shape became simpler and easier to bind to an explicit policy.
 
-## Bugs or confusing behavior
+## What did not work well
 
-- `/swap` currently fails with `TRANSFER_FROM_FAILED` because WETH must approve Permit2 before Permit2 can transfer tokens.
-- That approval blocker conflicts with the product constraint that the agent wallet holds no gas token.
-- Owner-funded `AgentEnsExecutor` gas sponsorship cannot directly create ERC20 approval for tokens owned by the agent EOA without a separate delegation/account-abstraction model.
-- Therefore full gasless sponsored swap execution is frozen and should not be part of the main KeeperHub demo path.
-
-## Documentation gaps
-
-- `/quote` field shape has been exercised with the live API. `/swap` still needs a proven initial approval/delegation architecture before it can be documented as a complete sponsored-swap flow.
-- If Uniswap is revisited, document the exact Permit2 allowance state, initial ERC20 approval requirement, and who pays gas for that setup transaction.
-
-## DX friction
-
-- Agentic flows need a clear quote ID / transaction / order object that can be carried between quote and execution tools.
-- Gasless execution needs a clean answer for the initial ERC20 approval to Permit2 while preserving the rule that the agent wallet holds no gas token.
-
-## Missing features we wished existed
-
-- A compact, canonical policy-validation schema for API consumers would make agent guardrails easier to standardize.
-- A supported account/delegation flow for owner-sponsored initial ERC20 approvals would make sponsored swaps much easier to demo safely.
-
-## Screenshots / logs
-
-- Pending final demo capture.
+- The API-generated flow is too wallet-centric for our agent-permission model: it assumes token holder, approver, and transaction submitter are the same actor, while our design separates owner-funded assets from agent authorization.
+- Permit2 expectations do not fit our no-agent-funds constraint. We do not want the agent wallet holding tokens, holding gas, or performing approvals.
+- Error messages were not diagnostic enough for agentic/server flows. `TRANSFER_FROM_FAILED` and `"value" contains an invalid value` did not clearly identify whether the issue was token holder, Permit2 allowance, transaction value, spender, or route-build shape.
+- Universal Router calldata was harder to reason about and policy-gate than a single explicit router function. It is flexible, but too opaque for exact intent signing and deterministic allowlists.
+- The API did not give us a clean owner-funded/delegated execution mode: owner approves an executor, executor pulls exact `tokenIn`, swaps, and sends `tokenOut` to the intended recipient.
+- Net: good for quotes/reference and normal wallet swaps; not ideal as the primary transaction builder for AgentPassports-style delegated, policy-gated execution unless Uniswap adds a first-class owner-funded/delegated build mode.

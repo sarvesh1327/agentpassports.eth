@@ -3,6 +3,7 @@ import {
   buildSwapPolicyMetadata,
   computeSubnode,
   hashPolicyMetadata,
+  hashPolicySnapshot,
   taskLogRecordTaskSelector,
   type Hex,
   type SwapPolicy
@@ -10,7 +11,6 @@ import {
 import { normalizeAddressInput } from "./addressInput.ts";
 import { LEGACY_AGENT_TEXT_RECORD_KEYS } from "./contracts.ts";
 import { buildAgentName, safeNamehash, safeSubnode } from "./ensPreview.ts";
-import { hashTaskLogPolicySnapshot } from "./policySnapshot.ts";
 
 export type RegisterPreviewInput = {
   agentAddress: string;
@@ -28,6 +28,37 @@ export type RegisterPreviewInput = {
 };
 
 export type AgentKind = "personal-assistant" | "swapper" | "researcher" | "keeper";
+
+export type SwapPolicyFormValues = {
+  allowedChainId: string;
+  allowedTokensIn: string;
+  allowedTokensOut: string;
+  deadlineSeconds: string;
+  maxAmountInWei: string;
+  maxSlippageBps: string;
+  recipient: string;
+  router: string;
+  selector: string;
+};
+
+const SEPOLIA_UNISWAP_ALLOWED_TOKEN_PAIR = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14" as const;
+
+/**
+ * Returns the demo-ready Sepolia Uniswap defaults for the Swapper registration form.
+ */
+export function buildDefaultSwapPolicyFormValues(ownerAddress?: Hex | null): SwapPolicyFormValues {
+  return {
+    allowedChainId: "11155111",
+    allowedTokensIn: SEPOLIA_UNISWAP_ALLOWED_TOKEN_PAIR,
+    allowedTokensOut: SEPOLIA_UNISWAP_ALLOWED_TOKEN_PAIR,
+    deadlineSeconds: "60",
+    maxAmountInWei: "10000000000000000",
+    maxSlippageBps: "50",
+    recipient: ownerAddress ?? "",
+    router: "0x8b844f885672f333bc0042cb669255f93a4c1e6b",
+    selector: "0x24856bc3"
+  };
+}
 
 export type SwapPolicyInput = {
   allowedChainId: bigint | string;
@@ -114,20 +145,24 @@ export function buildRegisterPreview(input: RegisterPreviewInput): RegisterPrevi
   const ownerNode = safeNamehash(normalizedOwnerName);
   const agentNode = normalizedAgentLabel ? safeSubnode(ownerNode, normalizedAgentLabel) : safeNamehash(agentName);
   const policyHash = buildPreviewPolicyHash({
+    agentKind: input.agentKind ?? "personal-assistant",
     agentNode,
     expiresAt: input.policyExpiresAt,
     hasCompleteEnsInput,
     maxGasReimbursementWei: input.maxGasReimbursementWei,
     maxValueWei: input.maxValueWei,
     ownerNode,
+    swapPolicy: input.swapPolicy,
     taskLogAddress: input.taskLogAddress
   });
   const policyDigest = buildPreviewPolicyDigest({
+    agentKind: input.agentKind ?? "personal-assistant",
     agentNode,
     expiresAt: input.policyExpiresAt,
     hasCompleteEnsInput,
     maxGasReimbursementWei: input.maxGasReimbursementWei,
     maxValueWei: input.maxValueWei,
+    swapPolicy: input.swapPolicy,
     taskLogAddress: input.taskLogAddress
   });
 
@@ -240,15 +275,18 @@ export function requireAddress(value: Hex | null | undefined, message: string): 
  * Builds a deterministic policy hash only when the target contract is configured.
  */
 function buildPreviewPolicyHash(input: {
+  agentKind: AgentKind;
   agentNode: Hex;
   expiresAt: string;
   hasCompleteEnsInput: boolean;
   maxGasReimbursementWei: string;
   maxValueWei: string;
   ownerNode: Hex;
+  swapPolicy?: SwapPolicyInput | null;
   taskLogAddress?: Hex | null;
 }): Hex | null {
-  if (!input.hasCompleteEnsInput || !input.taskLogAddress) {
+  const executable = readExecutablePolicy(input);
+  if (!input.hasCompleteEnsInput || !executable) {
     return null;
   }
 
@@ -259,8 +297,8 @@ function buildPreviewPolicyHash(input: {
       maxGasReimbursementWei: safeBigInt(input.maxGasReimbursementWei),
       maxValueWei: safeBigInt(input.maxValueWei),
       ownerNode: input.ownerNode,
-      selector: taskLogRecordTaskSelector(),
-      target: input.taskLogAddress
+      selector: executable.selector,
+      target: executable.target
     })
   );
 }
@@ -269,24 +307,47 @@ function buildPreviewPolicyHash(input: {
  * Builds the exact policy snapshot digest that AgentEnsExecutor verifies against ENS.
  */
 function buildPreviewPolicyDigest(input: {
+  agentKind: AgentKind;
   agentNode: Hex;
   expiresAt: string;
   hasCompleteEnsInput: boolean;
   maxGasReimbursementWei: string;
   maxValueWei: string;
+  swapPolicy?: SwapPolicyInput | null;
   taskLogAddress?: Hex | null;
 }): Hex | null {
-  if (!input.hasCompleteEnsInput || !input.taskLogAddress) {
+  const executable = readExecutablePolicy(input);
+  if (!input.hasCompleteEnsInput || !executable) {
     return null;
   }
 
-  return hashTaskLogPolicySnapshot({
-    agentNode: input.agentNode,
+  return hashPolicySnapshot(input.agentNode, {
+    enabled: true,
     expiresAt: safeBigInt(input.expiresAt),
     maxGasReimbursementWei: safeBigInt(input.maxGasReimbursementWei),
     maxValueWei: safeBigInt(input.maxValueWei),
-    target: input.taskLogAddress
+    selector: executable.selector,
+    target: executable.target
   });
+}
+
+function readExecutablePolicy(input: {
+  agentKind: AgentKind;
+  swapPolicy?: SwapPolicyInput | null;
+  taskLogAddress?: Hex | null;
+}): { selector: Hex; target: Hex } | null {
+  if (input.agentKind === "swapper") {
+    if (!input.swapPolicy) {
+      return null;
+    }
+    const policy = buildSwapPolicyMetadata(readSwapPolicyInput(input.swapPolicy));
+    // Trust boundary: AgentEnsExecutor enforces the executable target/selector from the
+    // ENS policy digest. For owner-funded Swapper agents that executable is the router
+    // call made by executeOwnerFundedERC20, not TaskLog's recordTask helper.
+    return { selector: policy.selector, target: policy.router };
+  }
+
+  return input.taskLogAddress ? { selector: taskLogRecordTaskSelector(), target: input.taskLogAddress } : null;
 }
 
 /**
@@ -425,12 +486,13 @@ function buildAgentTextRecords(input: {
     !input.executorAddress ||
     !input.policyHash ||
     !input.policyDigest ||
-    !input.taskLogAddress
+    !readExecutablePolicy(input)
   ) {
     return [];
   }
 
   const capabilities = buildCapabilities(input.agentKind);
+  const executable = readExecutablePolicy(input)!;
   const records = [
     ...LEGACY_AGENT_TEXT_RECORD_KEYS.map((key) => ({ key, value: "" })),
     { key: "agent_v", value: "2" },
@@ -439,8 +501,8 @@ function buildAgentTextRecords(input: {
     { key: "agent_capabilities", value: capabilities.join(",") },
     { key: "agent_policy_schema", value: "agentpassport.policy.v1" },
     { key: "agent_policy_digest", value: input.policyDigest },
-    { key: "agent_policy_target", value: input.taskLogAddress },
-    { key: "agent_policy_selector", value: taskLogRecordTaskSelector() },
+    { key: "agent_policy_target", value: executable.target },
+    { key: "agent_policy_selector", value: executable.selector },
     { key: "agent_policy_max_value_wei", value: safeBigInt(input.maxValueWei).toString() },
     { key: "agent_policy_max_gas_reimbursement_wei", value: safeBigInt(input.maxGasReimbursementWei).toString() },
     { key: "agent_policy_expires_at", value: safeBigInt(input.policyExpiresAt).toString() },
@@ -451,7 +513,9 @@ function buildAgentTextRecords(input: {
   ];
 
   // Swapper agents publish human-readable Uniswap constraints as ENS text records.
-  // The MCP treats these records as the live safety gate before calling Uniswap API.
+  // These metadata guardrails are intentionally preflight gates for MCP/KeeperHub/UI;
+  // the V1 executor only verifies the signed target/selector/value policy digest.
+  // Owner ERC20 approval remains a separate wallet action outside registration.
   if (input.agentKind === "swapper" && input.swapPolicy) {
     records.push(...buildSwapPolicyTextRecords(input.swapPolicy));
   }

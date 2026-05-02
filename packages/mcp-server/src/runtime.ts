@@ -106,15 +106,17 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     const nonce = args.nonce === undefined ? await readExecutorBigint(client, config.executorAddress, "nextNonce", agentNode) : BigInt(args.nonce);
     const expiresAt = args.expiresAt === undefined ? await readExpiresAt(client, args.ttlSeconds) : BigInt(args.expiresAt);
     const taskHash = keccak256(stringToHex(task.description));
-    const callData = encodeFunctionData({
+    const defaultRecordTaskCalldata = encodeFunctionData({
       abi: TASK_LOG_ABI,
       functionName: "recordTask",
       args: [agentNode, ownerNode, taskHash, args.metadataURI]
     });
+    const callData = (args.callData ?? defaultRecordTaskCalldata) as Hex;
+    const target = args.callData ? policySnapshot.target : config.taskLogAddress;
     const intent: TaskIntentMessage = {
       agentNode,
       policyDigest: hashPolicySnapshot(agentNode, policySnapshot),
-      target: config.taskLogAddress,
+      target,
       callDataHash: hashCallData(callData),
       value: BigInt(task.valueWei ?? "0"),
       nonce,
@@ -151,6 +153,21 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
     const policySnapshot = normalizePolicySnapshotInput(args.policySnapshot);
     const serializedIntent = serializeTaskIntent(intent);
     const serializedPolicySnapshot = serializePolicySnapshot(policySnapshot);
+    const ownerFundedErc20 = args.ownerFundedErc20
+      ? { amount: String(args.ownerFundedErc20.amount), tokenIn: args.ownerFundedErc20.tokenIn as Hex }
+      : undefined;
+    const swapContext = args.swapContext
+      ? {
+          chainId: args.swapContext.chainId === undefined ? undefined : String(args.swapContext.chainId),
+          deadlineSeconds: args.swapContext.deadlineSeconds === undefined ? undefined : String(args.swapContext.deadlineSeconds),
+          recipient: args.swapContext.recipient as Hex | undefined,
+          slippageBps: args.swapContext.slippageBps === undefined ? undefined : String(args.swapContext.slippageBps),
+          tokenOut: args.swapContext.tokenOut as Hex | undefined
+        }
+      : undefined;
+    const functionArgs = ownerFundedErc20
+      ? [serializedIntent, serializedPolicySnapshot, args.callData, args.signature, ownerFundedErc20.tokenIn, ownerFundedErc20.amount]
+      : [serializedIntent, serializedPolicySnapshot, args.callData, args.signature];
     const payload = {
       agentName,
       agentNode: serializedIntent.agentNode,
@@ -158,11 +175,28 @@ export function createAgentPassportHandlers(config: McpServerConfig, client = cr
       requestedTarget: serializedIntent.target,
       requestedSelector: serializedPolicySnapshot.selector,
       valueWei: serializedIntent.value,
-      functionArgs: JSON.stringify([serializedIntent, serializedPolicySnapshot, args.callData, args.signature]),
+      functionArgs: JSON.stringify(functionArgs),
       callData: args.callData,
       intent: serializedIntent,
       policySnapshot: serializedPolicySnapshot,
       signature: args.signature,
+      ...(ownerFundedErc20
+        ? {
+            amount: ownerFundedErc20.amount,
+            ownerFundedErc20,
+            tokenIn: ownerFundedErc20.tokenIn
+          }
+        : {}),
+      ...(swapContext
+        ? {
+            chainId: swapContext.chainId,
+            deadlineSeconds: swapContext.deadlineSeconds,
+            recipient: swapContext.recipient,
+            slippageBps: swapContext.slippageBps,
+            swapContext,
+            tokenOut: swapContext.tokenOut
+          }
+        : {}),
       metadataURI: args.metadataURI,
       taskDescription: args.taskDescription
     };

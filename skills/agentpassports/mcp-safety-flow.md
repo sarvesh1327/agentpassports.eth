@@ -32,7 +32,7 @@ Only call tools exposed by the hosted server. Do not configure RPC URLs, chain c
 
 1. `build_task_intent`
    - Provide explicit task, metadata URI, and policy snapshot inputs.
-   - The tool builds `TaskLog.recordTask` calldata, unsigned intent JSON, and EIP-712 typed data.
+   - The tool builds `TaskLog.recordTask` calldata by default, or binds exact caller-provided `callData` for an already-prepared policy-approved router call.
    - It may read `AgentEnsExecutor.nextNonce(agentNode)` if no nonce is supplied. This is a nonce read, not an authorization check.
    - It does not verify that the policy snapshot is live or allowed.
 
@@ -53,6 +53,29 @@ Only call tools exposed by the hosted server. Do not configure RPC URLs, chain c
    - Provide the KeeperHub execution id returned by `submit_task`.
    - The tool reads KeeperHub status/logs and returns current or final status plus tx hashes when available.
    - Return KeeperHub execution id, status/logs, tx hash, or KeeperHub error to the user.
+
+## Owner-funded Uniswap branch
+
+Use this branch only when the user has explicitly approved a swap test or production swap. It still uses the same three MCP tools; there are no separate Uniswap-prefixed MCP tools in the thin flow.
+
+1. Preconditions
+   - Owner wallet holds `tokenIn` and approves `AgentEnsExecutor` for the intended spend.
+   - The agent wallet does not need gas token or user funds. Do not request Permit2 approval from the agent wallet.
+   - The registered policy target is `SwapRouter02` and the selector is `exactInputSingle` (`0x04e45aaf`) for the current Sepolia path.
+2. Build
+   - Build the router calldata outside MCP, then call `build_task_intent` with that exact `callData` and a policy snapshot for the router target/selector.
+   - The returned intent binds the calldata hash; do not edit the build output before signing.
+3. Sign
+   - Use `skills/agentpassports/sign-intent.ts` locally. The script signs any valid `build_task_intent` output, including owner-funded Uniswap calldata, but it does not submit or execute swaps.
+4. Submit
+   - Call `submit_task` with `intent`, `policySnapshot`, `callData`, `signature`, and public swap context:
+     - `ownerFundedErc20.tokenIn`
+     - `ownerFundedErc20.amount`
+     - `swapContext.tokenOut`
+     - optional `swapContext.recipient`, `swapContext.slippageBps`, `swapContext.deadlineSeconds`, and `swapContext.chainId`
+   - MCP forwards these fields to KeeperHub and constructs `functionArgs` for `AgentEnsExecutor.executeOwnerFundedERC20(serializedIntent, serializedPolicy, callData, signature, tokenIn, amount)`.
+5. Check status
+   - Use `check_task_status` and report KeeperHub evidence. Disallowed tokens should show the token-in-blocked stamp; missing allowance should fail safely at `agentens_execute`; success should include a tx hash.
 
 ## Stop conditions
 

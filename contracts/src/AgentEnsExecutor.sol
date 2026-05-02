@@ -28,6 +28,20 @@ interface INameWrapperV1 {
     function ownerOf(uint256 id) external view returns (address);
 }
 
+/// @notice Minimal ERC20 interface for owner-wallet funded swaps.
+interface IERC20OwnerFundedV1 {
+    /// @notice Returns spender allowance for an owner.
+    function allowance(address owner, address spender) external view returns (uint256);
+    /// @notice Returns an account token balance.
+    function balanceOf(address account) external view returns (uint256);
+    /// @notice Sets spender allowance.
+    function approve(address spender, uint256 amount) external returns (bool);
+    /// @notice Transfers tokens from the caller.
+    function transfer(address to, uint256 amount) external returns (bool);
+    /// @notice Transfers tokens using allowance from another owner.
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+}
+
 /// @title AgentEnsExecutor
 /// @notice Executes ENS-policy-limited tasks signed by the live ENS-resolved agent address.
 contract AgentEnsExecutor {
@@ -50,6 +64,7 @@ contract AgentEnsExecutor {
     error ReentrantCall();
     error ZeroAmount();
     error ZeroAddress();
+    error ERC20OperationFailed();
 
     event GasBudgetDeposited(bytes32 indexed agentNode, address from, uint256 amount);
     event GasBudgetWithdrawn(bytes32 indexed agentNode, address to, uint256 amount);
@@ -69,6 +84,13 @@ contract AgentEnsExecutor {
         bytes32 callDataHash,
         bytes32 policyDigest,
         uint256 nonce
+    );
+    event OwnerFundedERC20TaskExecuted(
+        bytes32 indexed agentNode,
+        address indexed owner,
+        address indexed tokenIn,
+        address target,
+        uint256 amountIn
     );
 
     /// @notice Policy fields supplied to execute and accepted only when they match ENS digest.
@@ -225,6 +247,74 @@ contract AgentEnsExecutor {
         _emitTaskExecuted(intent, policy.selector, resolvedAgent, reimbursement);
     }
 
+    /// @notice Executes a signed task by pulling ERC20 input from the current ENS manager wallet.
+    /// @dev This owner-wallet route deliberately makes AgentEnsExecutor the ERC20 spender: the
+    /// owner/current ENS manager approves this contract, never the agent signer. The relayer may
+    /// submit the transaction and sponsor gas, while the agent signer only authorizes exact calldata
+    /// through the existing EIP-712 intent and ENS-published policy digest checks.
+    /// @param tokenIn ERC20 held by the owner/current ENS manager and approved to this executor.
+    /// @param amountIn Exact input amount to pull from owner and temporarily approve to policy target.
+    function executeOwnerFundedERC20(
+        TaskIntent calldata intent,
+        PolicySnapshot calldata policy,
+        bytes calldata callData,
+        bytes calldata signature,
+        address tokenIn,
+        uint256 amountIn
+    ) external nonReentrant returns (bytes memory result) {
+        if (tokenIn == address(0)) revert ZeroAddress();
+        if (amountIn == 0) revert ZeroAmount();
+
+        uint256 gasStart = gasleft();
+        address resolver = _resolverFor(intent.agentNode);
+        address resolvedAgent = _resolveAgentAddress(intent.agentNode, resolver);
+
+        _requireEnsPolicy(intent, policy, resolver);
+        _requireIntent(intent, policy, callData);
+
+        address owner = _effectiveManager(intent.agentNode);
+        if (owner == address(0)) revert NotNameOwner();
+
+        address recovered = _recover(_hashIntent(intent), signature);
+        if (recovered != resolvedAgent) revert BadSignature();
+
+        IERC20OwnerFundedV1 input = IERC20OwnerFundedV1(tokenIn);
+        uint256 budgetBeforeCall = gasBudgetWei[intent.agentNode];
+
+        // Trust boundary: only the ENS-derived owner funds the swap. Arbitrary user input cannot
+        // redirect the transferFrom source, and the agent wallet can remain empty of user funds.
+        _safeTransferFrom(input, owner, address(this), amountIn);
+
+        // The router receives only a just-in-time allowance for this signed, policy-bound call.
+        // Clearing first handles ERC20s that require zeroing before allowance changes.
+        _safeApprove(input, intent.target, 0);
+        _safeApprove(input, intent.target, amountIn);
+
+        result = _callTarget(intent, callData);
+
+        // Remove residual router spend authority and return any unspent input to the owner.
+        _safeApprove(input, intent.target, 0);
+        uint256 leftover = input.balanceOf(address(this));
+        if (leftover > 0) {
+            _safeTransfer(input, owner, leftover);
+        }
+
+        uint256 reimbursement = _debitBudget(
+            intent.agentNode,
+            intent.value,
+            gasStart,
+            policy.maxGasReimbursementWei,
+            budgetBeforeCall
+        );
+        if (reimbursement > 0) {
+            (bool reimbursed,) = payable(msg.sender).call{ value: reimbursement }("");
+            if (!reimbursed) revert ReimbursementFailed();
+        }
+
+        _emitTaskExecuted(intent, policy.selector, resolvedAgent, reimbursement);
+        emit OwnerFundedERC20TaskExecuted(intent.agentNode, owner, tokenIn, intent.target, amountIn);
+    }
+
     /// @notice Emits the execution proof from a separate frame to keep execute stack-light.
     function _emitTaskExecuted(
         TaskIntent calldata intent,
@@ -301,6 +391,24 @@ contract AgentEnsExecutor {
         (bool ok, bytes memory result) = intent.target.call{ value: intent.value }(callData);
         if (!ok) revert TargetCallFailed(result);
         return result;
+    }
+
+    /// @notice Calls ERC20 transferFrom and accepts standard/non-standard success encodings.
+    function _safeTransferFrom(IERC20OwnerFundedV1 token, address from, address to, uint256 amount) internal {
+        (bool ok, bytes memory data) = address(token).call(abi.encodeCall(token.transferFrom, (from, to, amount)));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert ERC20OperationFailed();
+    }
+
+    /// @notice Calls ERC20 transfer and accepts standard/non-standard success encodings.
+    function _safeTransfer(IERC20OwnerFundedV1 token, address to, uint256 amount) internal {
+        (bool ok, bytes memory data) = address(token).call(abi.encodeCall(token.transfer, (to, amount)));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert ERC20OperationFailed();
+    }
+
+    /// @notice Calls ERC20 approve and accepts standard/non-standard success encodings.
+    function _safeApprove(IERC20OwnerFundedV1 token, address spender, uint256 amount) internal {
+        (bool ok, bytes memory data) = address(token).call(abi.encodeCall(token.approve, (spender, amount)));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert ERC20OperationFailed();
     }
 
     /// @notice Charges target call value and relayer reimbursement to one agent budget.

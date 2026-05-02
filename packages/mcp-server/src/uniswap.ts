@@ -27,6 +27,14 @@ export type ExecuteSwapRequest = SwapRequest & {
   quote: Record<string, unknown>;
 };
 
+export type OwnerFundedSwapMetadataInput = {
+  agent: Hex;
+  amount: string;
+  executor: Hex;
+  owner: Hex;
+  recipient: Hex;
+};
+
 const DEFAULT_UNISWAP_API_BASE_URL = "https://trade-api.gateway.uniswap.org/v1";
 const DEFAULT_QUOTE_PROTOCOLS = ["UNISWAPX_V2", "V4", "V3", "V2"] as const;
 
@@ -101,6 +109,37 @@ export function buildUniswapQuotePayload(agentAddress: Hex, request: SwapRequest
     tokenOutChainId: chainId,
     type: request.type ?? "EXACT_INPUT",
     urgency: "normal"
+  };
+}
+
+/**
+ * Builds a quote payload for owner-wallet funded execution.
+ *
+ * The Uniswap API `swapper` is the address that will call the router and hold
+ * router allowance at execution time. In the owner-funded route, that is the
+ * AgentEnsExecutor, not the owner wallet that supplies tokenIn via allowance
+ * and not the agent wallet that signs the intent.
+ */
+export function buildOwnerFundedUniswapQuotePayload(input: { executor: Hex; request: SwapRequest }) {
+  return buildUniswapQuotePayload(input.executor, input.request);
+}
+
+/**
+ * Canonical non-secret metadata for owner-funded swaps.
+ *
+ * This intentionally separates identities so downstream proof builders and UI
+ * copy do not regress to the older assumption that the agent wallet funds or
+ * approves the swap. No private keys, permit signatures, or live credentials
+ * are accepted by this helper.
+ */
+export function buildOwnerFundedSwapMetadata(input: OwnerFundedSwapMetadataInput) {
+  return {
+    agentSigner: normalizeAddress(input.agent),
+    amount: input.amount,
+    executorSpender: normalizeAddress(input.executor),
+    fundingSource: normalizeAddress(input.owner),
+    recipient: normalizeAddress(input.recipient),
+    schema: "agentpassport.ownerFundedSwap.v1" as const
   };
 }
 

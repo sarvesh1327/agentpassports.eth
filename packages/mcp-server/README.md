@@ -44,7 +44,7 @@ The server reads operational values from local environment variables:
 
 ```txt
 CHAIN_ID=11155111
-RPC_URL=https://...
+RPC_URL=[REDACTED_RPC_URL]
 ENS_REGISTRY=0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e
 EXECUTOR_ADDRESS=0xAgentEnsExecutor
 TASK_LOG_ADDRESS=0xTaskLog
@@ -63,11 +63,13 @@ The MCP server does not read or store agent private keys. External signing happe
 The public MCP tool surface is exactly:
 
 1. `build_task_intent`
-   - Builds `TaskLog.recordTask` calldata and unsigned EIP-712 intent JSON from explicit public arguments.
+   - Builds `TaskLog.recordTask` calldata by default, or binds exact caller-provided `callData` for a policy-approved target such as Uniswap `SwapRouter02.exactInputSingle`.
+   - Builds unsigned EIP-712 intent JSON from explicit public arguments.
    - May read only the executor nonce when a nonce is not supplied.
    - Does not resolve ENS, read Passport/Visa records, or decide whether the task is allowed.
 2. `submit_task`
    - Sends the externally signed payload to the configured KeeperHub workflow.
+   - For owner-funded ERC20 swaps, callers may include `ownerFundedErc20` (`tokenIn`, `amount`) and `swapContext` (`tokenOut`, recipient/slippage/deadline/chain context); MCP forwards these fields to KeeperHub and appends `tokenIn`/`amount` to `functionArgs` for `AgentEnsExecutor.executeOwnerFundedERC20`.
    - Returns a KeeperHub execution id quickly by default.
    - Does not wait for final workflow completion unless the caller explicitly opts into bounded waiting.
 3. `check_task_status`
@@ -104,11 +106,62 @@ Treat KeeperHub execution id, status, logs, and tx hash evidence as the source o
 - Prompt: `agentpassport_keeperhub_gate` guides agents through the thin KeeperHub flow.
 - Resource: `agentpassport://keeperhub/{agentName}` returns JSON guidance for tool order, safety boundaries, signing script location, and KeeperHub status checks.
 
-## Uniswap experimental module
+## Owner-funded Uniswap swaps
 
-Uniswap remains an experimental policy-gated action module, not the main KeeperHub demo path. Quote and policy-validation helpers can stay useful as proof metadata, but full gasless sponsored swaps are frozen because the current flow hits the initial ERC20 approval / Permit2 setup problem while the agent holds no gas token.
+The proven Sepolia swap path is owner-funded Uniswap, still through the same thin MCP tools. MCP does **not** quote, check allowance, resolve ENS, or decide whether the swap is allowed. KeeperHub validates Passport/Visa and Uniswap policy gates, then executes only after every gate passes.
 
-Do not present Uniswap as a completed sponsored-swap path until the initial approval/delegation architecture is proven separately.
+Safety model:
+
+- Owner wallet holds `tokenIn` and approves `AgentEnsExecutor`; registration and MCP never grant token approval.
+- The agent wallet signs the exact intent only, without the agent wallet holding gas token or user funds for this path.
+- No docs or helpers should require the agent wallet to approve Permit2.
+- No vault funding is required in this pass.
+- KeeperHub execution evidence is authoritative: `check_task_status` should show the execution id, final status, tx hash when present, blocked stamp such as `UNISWAP_TOKEN_IN_BLOCKED`, or failed node such as `agentens_execute`.
+
+Public Sepolia constants for the current live workflow:
+
+```txt
+KEEPERHUB_WORKFLOW_ID=kah3xyaxk2uskluggff4q
+AgentEnsExecutor=0xce3e365214568E96d4186464089438a89331941F
+TaskLog=0x9f384B659da5F24994BC5c2a10B4243F07aA889b
+SwapRouter02=0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E
+exactInputSingle selector=0x04e45aaf
+WETH=0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14
+UNI=0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+```
+
+High-level flow:
+
+1. Owner registers an AgentPassports Uniswap policy whose target is `SwapRouter02` and selector is `0x04e45aaf`.
+2. Owner approves `AgentEnsExecutor` for the exact `tokenIn` spend budget outside MCP.
+3. Caller builds `SwapRouter02.exactInputSingle` calldata for the approved token pair, amount, recipient, deadline, and slippage.
+4. Call `build_task_intent` with the exact router `callData` and a policy snapshot whose target/selector match the router call. The returned typed data binds the router calldata hash.
+5. Sign the returned intent locally with `skills/agentpassports/sign-intent.ts`; never send a private key to MCP.
+6. Call `submit_task` with the signed payload plus:
+
+```json
+{
+  "ownerFundedErc20": {
+    "tokenIn": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    "amount": "10000000000000"
+  },
+  "swapContext": {
+    "chainId": "11155111",
+    "tokenOut": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+    "recipient": "0xOwnerWallet",
+    "slippageBps": "50",
+    "deadlineSeconds": "1200"
+  }
+}
+```
+
+MCP forwards those public fields to KeeperHub and builds `functionArgs` for:
+
+```txt
+AgentEnsExecutor.executeOwnerFundedERC20(serializedIntent, serializedPolicy, callData, signature, tokenIn, amount)
+```
+
+Then call `check_task_status` for the execution id. A missing owner approval should fail safely at `agentens_execute` without a tx hash; a disallowed token should stop earlier with a blocked stamp like `UNISWAP_TOKEN_IN_BLOCKED`.
 
 ## Safety flow
 
