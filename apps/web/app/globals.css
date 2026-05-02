@@ -2725,3 +2725,550 @@ body {
   margin-top: 8px;
   padding: 5px 8px;
 }
+
+/* Product landing refresh */
+.agentpassports-logo-image {
+  aspect-ratio: 1;
+  border-radius: 999px;
+  display: inline-block;
+  object-fit: cover;
+}
+
+.site-header {
+  background: rgba(5, 8, 16, 0.82);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgb(255 255 255 / 0.09);
+  color: #f7f8ff;
+}
+
+.site-header__brand {
+  color: #ffffff;
+}
+
+.site-header__brand span {
+  display: grid;
+  gap: 1px;
+  line-height: 1.05;
+}
+
+.site-header__brand small {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.site-header__logo {
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgb(3 7 18 / 0.28);
+  padding: 2px;
+}
+
+.site-header__nav a,
+.site-header__nav button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.92rem;
+  font-weight: 800;
+  gap: 4px;
+  padding: 10px 12px 15px;
+  text-decoration: none;
+}
+
+.site-header__nav a:hover,
+.site-header__nav button:hover {
+  background: rgb(255 255 255 / 0.07);
+  border-color: transparent transparent #7c6cff;
+  color: #ffffff;
+}
+
+.site-header__nav a[aria-current="page"],
+.site-header__nav button[aria-current="page"] {
+  border-bottom-color: #72e2ff;
+  color: #ffffff;
+}
+
+.wallet-placeholder {
+  background: #ffffff;
+  border-color: rgb(255 255 255 / 0.75);
+  color: #07101f;
+}
+
+.wallet-placeholder--active {
+  cursor: pointer;
+}
+
+.wallet-identity {
+  background: rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 999px;
+}
+
+.wallet-identity__chain,
+.wallet-identity__account {
+  background: transparent;
+  color: #f8fafc;
+}
+
+.landing-site {
+  --landing-bg: #06070a;
+  --landing-panel: rgb(255 255 255 / 0.055);
+  --landing-panel-strong: rgb(255 255 255 / 0.085);
+  --landing-line: rgb(255 255 255 / 0.12);
+  --landing-line-soft: rgb(255 255 255 / 0.07);
+  --landing-ink: #f7f8ff;
+  --landing-muted: #a7b0c2;
+  --landing-soft: #768195;
+  --landing-accent: #7c6cff;
+  --landing-accent-2: #72e2ff;
+  --landing-success: #36d399;
+  background:
+    radial-gradient(circle at 16% 0%, rgb(74 91 255 / 0.34), transparent 34rem),
+    radial-gradient(circle at 82% 18%, rgb(114 226 255 / 0.18), transparent 28rem),
+    linear-gradient(180deg, #07080d 0%, #080b11 48%, #050609 100%);
+  color: var(--landing-ink);
+  min-height: calc(100vh - 73px);
+  overflow: hidden;
+  position: relative;
+}
+
+.landing-site::before {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+  background-size: 72px 72px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.72), transparent 80%);
+  pointer-events: none;
+  position: absolute;
+}
+
+.landing-shell {
+  margin: 0 auto;
+  max-width: 1180px;
+  padding-left: 24px;
+  padding-right: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.landing-hero-redesign {
+  align-items: center;
+  display: grid;
+  gap: 42px;
+  grid-template-columns: minmax(0, 1.03fr) minmax(360px, 0.97fr);
+  padding-bottom: 54px;
+  padding-top: clamp(54px, 8vw, 98px);
+}
+
+.landing-eyebrow,
+.landing-kicker {
+  align-items: center;
+  color: #dcd8ff;
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 900;
+  gap: 9px;
+  letter-spacing: 0.1em;
+  margin: 0 0 18px;
+  text-transform: uppercase;
+}
+
+.landing-eyebrow span {
+  background: var(--landing-success);
+  border-radius: 50%;
+  box-shadow: 0 0 0 6px rgb(54 211 153 / 0.12);
+  height: 8px;
+  width: 8px;
+}
+
+.landing-kicker {
+  color: #8fdfff;
+  margin-bottom: 12px;
+}
+
+.landing-hero-redesign h1,
+.landing-section h2,
+.landing-final-cta h2 {
+  letter-spacing: -0.062em;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.landing-hero-redesign h1 {
+  font-size: clamp(3rem, 7vw, 5.3rem);
+  line-height: 0.93;
+  max-width: 800px;
+}
+
+.landing-hero-redesign__lead {
+  color: #c8d0df;
+  font-size: clamp(1.06rem, 1.8vw, 1.2rem);
+  line-height: 1.65;
+  margin: 24px 0 0;
+  max-width: 690px;
+}
+
+.landing-hero-redesign__lead strong {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.landing-actions,
+.landing-wallet-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.landing-button,
+.landing-route-card__action {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  text-decoration: none;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.landing-button:hover,
+.landing-route-card__action:hover {
+  transform: translateY(-1px);
+}
+
+.landing-button--primary {
+  background: linear-gradient(135deg, #ffffff, #dce3ff);
+  color: #07080c;
+}
+
+.landing-button--secondary,
+.landing-button--ghost,
+.landing-route-card__action {
+  background: rgb(255 255 255 / 0.045);
+  border-color: var(--landing-line);
+  color: #ffffff;
+}
+
+.landing-route-note {
+  align-items: center;
+  color: var(--landing-muted);
+  display: flex;
+  font-size: 0.9rem;
+  gap: 8px;
+  margin: 15px 0 0;
+}
+
+.landing-product-card,
+.landing-flow-step,
+.landing-route-card,
+.landing-feature-card,
+.landing-final-cta {
+  background: var(--landing-panel);
+  border: 1px solid var(--landing-line-soft);
+  box-shadow: 0 24px 90px rgb(0 0 0 / 0.28);
+}
+
+.landing-product-card {
+  border-radius: 30px;
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  padding: 22px;
+}
+
+.landing-product-card__topline {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.landing-product-card__logo {
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgb(3 7 18 / 0.34);
+  padding: 3px;
+}
+
+.landing-product-card__topline div,
+.landing-passport-preview,
+.landing-visa-stack div {
+  display: grid;
+  gap: 4px;
+}
+
+.landing-product-card__topline strong,
+.landing-passport-preview strong,
+.landing-visa-stack strong {
+  overflow-wrap: anywhere;
+}
+
+.landing-product-card__topline span,
+.landing-passport-preview p,
+.landing-visa-stack span,
+.landing-stamp-row span,
+.landing-route-card small {
+  color: var(--landing-muted);
+  font-size: 0.86rem;
+}
+
+.landing-passport-preview {
+  background: linear-gradient(135deg, rgb(124 108 255 / 0.2), rgb(114 226 255 / 0.08));
+  border: 1px solid var(--landing-line);
+  border-radius: 24px;
+  padding: 22px;
+}
+
+.landing-passport-preview__label,
+.landing-route-card__label {
+  color: #9fe7ff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.landing-passport-preview p {
+  margin: 0;
+}
+
+.landing-visa-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-visa-stack div {
+  background: rgb(255 255 255 / 0.045);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.landing-stamp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.landing-stamp-row span {
+  align-items: center;
+  background: rgb(54 211 153 / 0.11);
+  border: 1px solid rgb(54 211 153 / 0.22);
+  border-radius: 999px;
+  color: #b8f7de;
+  display: inline-flex;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.landing-section {
+  padding-bottom: 64px;
+  padding-top: 64px;
+}
+
+.landing-section__intro {
+  max-width: 760px;
+}
+
+.landing-section__intro--split {
+  align-items: end;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(260px, 0.48fr);
+  max-width: none;
+}
+
+.landing-section h2,
+.landing-final-cta h2 {
+  font-size: clamp(2rem, 4.4vw, 3.9rem);
+  line-height: 1;
+}
+
+.landing-section__intro p,
+.landing-flow-step p,
+.landing-route-card p,
+.landing-feature-card p {
+  color: var(--landing-muted);
+  line-height: 1.62;
+}
+
+.landing-flow-grid,
+.landing-route-grid,
+.landing-feature-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+}
+
+.landing-flow-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.landing-route-grid,
+.landing-feature-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-feature-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-flow-step,
+.landing-route-card,
+.landing-feature-card {
+  border-radius: 22px;
+  padding: 22px;
+}
+
+.landing-flow-step span {
+  color: var(--landing-accent-2);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.landing-flow-step h3,
+.landing-route-card h3,
+.landing-feature-card h3 {
+  font-size: 1.12rem;
+  line-height: 1.2;
+  margin: 13px 0 0;
+}
+
+.landing-flow-step p,
+.landing-route-card p,
+.landing-feature-card p {
+  margin: 12px 0 0;
+}
+
+.landing-route-card {
+  min-height: 290px;
+}
+
+.landing-route-card__action {
+  margin-top: 22px;
+}
+
+.landing-route-card small {
+  display: block;
+  margin-top: 12px;
+}
+
+.landing-feature-band {
+  border-top: 1px solid var(--landing-line-soft);
+}
+
+.landing-final-cta {
+  align-items: center;
+  border-radius: 30px;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 80px;
+  padding: 30px;
+}
+
+.landing-wallet-modal {
+  align-items: center;
+  background: rgb(0 0 0 / 0.64);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 22px;
+  position: fixed;
+  z-index: 50;
+}
+
+.landing-wallet-modal__dialog {
+  background: #0b0f18;
+  border: 1px solid var(--landing-line);
+  border-radius: 28px;
+  box-shadow: 0 30px 120px rgb(0 0 0 / 0.58);
+  color: #ffffff;
+  max-width: 520px;
+  padding: 28px;
+  position: relative;
+  width: min(100%, 520px);
+}
+
+.landing-wallet-modal__dialog h2 {
+  font-size: 2rem;
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+
+.landing-wallet-modal__dialog p:not(.landing-kicker) {
+  color: var(--landing-muted);
+  line-height: 1.6;
+}
+
+.landing-wallet-modal__close {
+  align-items: center;
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid var(--landing-line);
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.45rem;
+  height: 36px;
+  justify-content: center;
+  line-height: 1;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  width: 36px;
+}
+
+@media (max-width: 980px) {
+  .landing-hero-redesign,
+  .landing-section__intro--split,
+  .landing-flow-grid,
+  .landing-route-grid,
+  .landing-feature-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-final-cta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .site-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .site-header__nav {
+    order: 3;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .landing-shell {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .landing-hero-redesign {
+    padding-top: 42px;
+  }
+
+  .landing-hero-redesign h1 {
+    font-size: clamp(2.55rem, 14vw, 4.1rem);
+  }
+}

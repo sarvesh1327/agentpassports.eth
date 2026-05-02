@@ -5,6 +5,12 @@ type IconProps = SVGProps<SVGSVGElement> & {
   title?: string;
 };
 
+type BrandLogoProps = {
+  className?: string;
+  size?: number;
+  title?: string;
+};
+
 type UiIconName =
   | "arrow-left"
   | "check"
@@ -24,14 +30,15 @@ type UiIconName =
   | "wallet"
   | "warning";
 
-export function AgentPassportsLogo(props: IconProps) {
+export function AgentPassportsLogo({ className, size = 32, title = "AgentPassports" }: BrandLogoProps) {
   return (
-    <svg {...svgProps(props)} viewBox="0 0 32 32">
-      {props.title ? <title>{props.title}</title> : null}
-      <circle cx="16" cy="16" r="13.25" fill="none" stroke="currentColor" strokeWidth="2" />
-      <path d="M4.75 16h22.5M16 2.75c3.5 3.35 5.25 7.77 5.25 13.25S19.5 25.9 16 29.25C12.5 25.9 10.75 21.48 10.75 16S12.5 6.1 16 2.75Z" fill="none" stroke="currentColor" strokeWidth="1.55" />
-      <path d="M7.2 9.1h17.6M7.2 22.9h17.6" fill="none" stroke="currentColor" strokeWidth="1.55" />
-    </svg>
+    <img
+      alt={title}
+      className={["agentpassports-logo-image", className].filter(Boolean).join(" ")}
+      height={size}
+      src="/brand/agentpassports-logo.png"
+      width={size}
+    />
   );
 }
 

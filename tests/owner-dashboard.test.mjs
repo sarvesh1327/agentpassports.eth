@@ -166,23 +166,27 @@ test("owner dashboard aggregates live agent state instead of showing placeholder
   assert.doesNotMatch(dashboardSource, /countStatusHint/);
 });
 
-test("primary UI flow points owners through the dashboard instead of legacy standalone pages", async () => {
-  await assertFile("apps/web/components/OwnerDashboardEntry.tsx");
-
+test("primary UI flow points owners through the landing dashboard/register gates", async () => {
   const homeSource = await readText("apps/web/app/page.tsx");
+  const landingSource = await readText("apps/web/components/LandingPage.tsx");
   const headerSource = await readText("apps/web/components/SiteHeader.tsx");
-  const entrySource = await readText("apps/web/components/OwnerDashboardEntry.tsx");
-  const source = `${homeSource}\n${headerSource}\n${entrySource}`;
+  const source = `${homeSource}\n${landingSource}\n${headerSource}`;
 
-  assert.match(homeSource, /OwnerDashboardEntry/);
-  assert.match(source, /Open owner dashboard/);
-  assert.match(source, /router\.push\(`\/owner\/\$\{encodeURIComponent\(normalizedOwnerName\)\}`\)/);
+  assert.match(homeSource, /LandingPage/);
+  assert.match(landingSource, /Open Dashboard/);
+  assert.match(landingSource, /Register an Agent/);
+  assert.match(landingSource, /route="Dashboard"/);
+  assert.match(landingSource, /route="Register Agent"/);
+  assert.match(landingSource, /Dashboard and registration are wallet-gated/);
+  assert.match(headerSource, /data-wallet-gated="dashboard"/);
+  assert.match(headerSource, /data-wallet-gated="register"/);
+  assert.match(headerSource, /openConnectModal/);
   assert.doesNotMatch(headerSource, /href="\/run"/);
   assert.doesNotMatch(headerSource, /href="\/revoke"/);
   assert.match(headerSource, /registerHref = ownerName \? `\/register\?owner=\$\{encodeURIComponent\(ownerName\)\}` : "\/register"/);
   assert.doesNotMatch(homeSource, /Run task/);
   assert.doesNotMatch(homeSource, /Revoke access/);
-  assert.doesNotMatch(homeSource, /Register agent/);
+  assert.doesNotMatch(source, /OwnerDashboardEntry/);
 });
 
 test("register route is dashboard scoped instead of a standalone legacy flow", async () => {
