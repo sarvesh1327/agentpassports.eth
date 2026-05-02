@@ -121,6 +121,26 @@ test("register page label and value rows can shrink and wrap without overlap", a
   assert.match(css, /\.record-table__toggle\s*{[^}]*width:\s*100%/s);
 });
 
+test("shared transaction progress modal uses dark portal overlay without breaking page layout", async () => {
+  const modal = await readText("apps/web/components/TransactionProgressModal.tsx");
+  const register = await readText("apps/web/components/RegisterAgentForm.tsx");
+  const management = await readText("apps/web/components/AgentManagementPanel.tsx");
+  const css = await readText("apps/web/app/globals.css");
+
+  assert.match(register, /TransactionProgressModal/);
+  assert.match(management, /TransactionProgressModal/);
+  assert.match(modal, /createPortal/);
+  assert.match(modal, /tx-progress-modal-open/);
+  assert.doesNotMatch(modal, /tx-progress-modal__card glass-panel/);
+  assert.match(css, /body\.tx-progress-modal-open\s*{[^}]*overflow:\s*hidden/s);
+  assert.match(css, /\.tx-progress-modal\s*{[^}]*isolation:\s*isolate/s);
+  assert.match(css, /\.tx-progress-modal__backdrop\s*{[^}]*rgba\(2,\s*6,\s*23,\s*0\.78\)/s);
+  assert.match(css, /\.tx-progress-modal__card\s*{[^}]*background:\s*linear-gradient/s);
+  assert.match(css, /\.tx-progress-modal__card\s*{[^}]*box-shadow:\s*0 32px 90px/s);
+  assert.match(css, /\.tx-progress-step\s*{[^}]*background:\s*rgba\(255,\s*255,\s*255,\s*0\.07\)/s);
+  assert.doesNotMatch(css, /\.tx-progress-step\s*{[^}]*background:\s*#ffffff/s);
+});
+
 test("MCP page uses polished setup cards and no demo wording", async () => {
   const mcp = await readText("apps/web/app/mcp/page.tsx");
   const css = await readText("apps/web/app/globals.css");
