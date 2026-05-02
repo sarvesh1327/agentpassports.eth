@@ -1,128 +1,145 @@
-# AgentPassport.eth — ENS-Native Agent Identity
+# AgentPassports.eth
 
-AgentPassport.eth is an ENS-first hackathon project that turns ENS into a public identity and control plane for onchain AI agents.
+**AgentPassports.eth is an ENS-native permission manager for autonomous agents.**
 
-A user binds an autonomous agent to an ENS subname such as `assistant.alice.eth`, publishes the agent address and metadata in ENS records, and funds a limited execution budget. The agent signs EIP-712 task intents. The executor contract resolves the current agent address from ENS at execution time, verifies the signature, checks policy, executes an allowed task, and reimburses the relayer from the owner-funded gas budget.
+Owners register an Agent Passport under their ENS name, issue scoped Visas for what that agent may do, and revoke access onchain. Agents sign exact EIP-712 task intents; KeeperHub validates the live Passport/Visa state and produces KeeperHub Stamps for allowed, blocked, failed, and successful executions.
 
-## Core demo
+The current product is Sepolia-first and includes:
 
-1. User owns an ENS name, for example `alice.eth` or a Sepolia test ENS name.
-2. User creates/configures an agent subname, for example `assistant.alice.eth`.
-3. ENS records are written for the agent:
-   - `addr(assistant.alice.eth) = 0xAgent`
-   - `text(agent_owner) = alice.eth`
-   - `text(agent_capabilities) = task-log,sponsored-execution`
-   - `text(agent_executor) = 0xAgentEnsExecutor`
-   - `text(agent_status) = active`
-4. User creates an onchain policy and deposits a gas budget.
-5. Agent signs an EIP-712 intent to record a task onchain.
-6. Relayer submits the transaction.
-7. `AgentEnsExecutor` resolves the agent address from ENS live, verifies the signature, checks policy, executes `TaskLog.recordTask`, and reimburses the relayer.
-8. User revokes the agent by changing the ENS address record or disabling policy.
-9. The same old signature now fails, proving ENS is part of authorization and revocation.
+- **Register Agent** — create an ENS-backed Agent Passport and publish Visa metadata.
+- **Owner Dashboard** — review Passports, Visa access, gas budget, and management actions.
+- **Agent profile** — inspect live Passport proof, Visa Scope, Uniswap Visa, and KeeperHub Stamps.
+- **AgentPassports MCP** — thin agent runtime for `build_task_intent` → local signing → `submit_task` → `check_task_status`.
+- **Owner-funded Uniswap path** — owner wallet holds/approves tokens; KeeperHub validates policy and calls `AgentEnsExecutor.executeOwnerFundedERC20` only after Passport/Visa gates pass.
 
 ## Why ENS is central
 
-ENS is not used as a decorative profile. It provides:
+ENS is the public identity and revocation layer, not decorative profile data.
 
-- Human-readable agent identity.
-- Live resolution of the authorized signer address.
-- Public metadata through text records.
-- Discoverability through ENS names/subnames.
-- Revocation by changing the ENS record.
-- A public control plane for delegated agent execution.
+- `assistant.alice.eth` is the human-readable Agent Passport.
+- `addr(agent)` is the currently authorized signer.
+- ENS text records expose owner, status, Visa digest, Visa URI, Visa target, Visa selector, and Visa Scope metadata.
+- Revocation is live: updating ENS or disabling a Visa changes authorization for the next execution.
+- Public resolver reads make Passport/Visa state inspectable by the app, KeeperHub, and auditors.
 
-The executor must resolve the agent address from ENS during `execute()`. Do not hard-code or permanently store the agent signer address in the executor.
-
-## Recommended MVP stack
-
-- Frontend: Next.js, TypeScript, wagmi, viem, RainbowKit, Tailwind.
-- Contracts: Solidity, Foundry, OpenZeppelin.
-- Agent runner: Node.js/TypeScript script that signs EIP-712 typed data.
-- Relayer: Next.js API route or small Node service.
-- Network: Sepolia first.
+The executor resolves live ENS state during execution instead of trusting a stale signer stored in an offchain database.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  Owner["Owner wallet"] --> Register["/register UI"]
-  Register --> ENS["ENS registry + ENS public resolver"]
-  Register --> Executor["AgentEnsExecutor"]
-  Executor --> Policy["Policy + gas budget"]
+  Owner["Owner wallet"] --> Register["Register Agent"]
+  Register --> ENS["ENS public resolver"]
+  Register --> Visa["Passport + Visa records"]
+  Register --> Budget["Gas budget / token approvals"]
 
-  Agent["Agent wallet"] --> Run["/run UI or agent-runner"]
-  Run --> Intent["EIP-712 TaskIntent signature"]
-  Intent --> Relayer["/api/relayer/execute"]
-  Relayer --> Execute["AgentEnsExecutor.execute"]
-  Execute --> ENSRead["Resolve live addr(agent) from ENS"]
-  ENSRead --> Verify["Verify recovered signer"]
-  Verify --> TaskLog["TaskLog.recordTask"]
-  Execute --> Reimburse["Capped relayer reimbursement"]
+  Agent["Agent signer"] --> MCP["AgentPassports MCP"]
+  MCP --> Build["build_task_intent"]
+  Build --> Sign["Local signing"]
+  Sign --> Submit["submit_task"]
+  Submit --> KeeperHub["KeeperHub workflow"]
 
-  Owner --> Revoke["/revoke UI"]
-  Revoke --> ENSChange["Change ENS addr or revoke policy"]
-  ENSChange --> OldSignature["Old signature retry fails"]
+  KeeperHub --> PassportGate["Validate Passport"]
+  PassportGate --> VisaGate["Validate Visa Scope"]
+  VisaGate --> Execute["AgentEnsExecutor"]
+  Execute --> ENSRead["Resolve live addr(agent)"]
+  Execute --> TaskLog["TaskLog.recordTask / approved target"]
+  Execute --> Stamp["KeeperHub Stamp"]
+
+  Owner --> Revoke["Revoke access onchain"]
+  Revoke --> ENS
+  ENS --> Retry["Old signature retry fails"]
 ```
 
-The important trust boundary is inside `AgentEnsExecutor`. The contract does not store the agent signer as policy authority. It resolves `addr(agentNode)` from ENS during every execution, then compares the recovered EIP-712 signer to that live ENS result.
+The key trust boundary is split cleanly:
 
-## Environment variables
-
-Keep secrets in local `.env` files only. Public values are prefixed with `NEXT_PUBLIC_` because the browser needs them to read Sepolia and render proof panels.
-
-| Variable | Used by | Purpose |
-|---|---|---|
-| `NEXT_PUBLIC_CHAIN_ID` | Web | Must be Sepolia `11155111` for the MVP. |
-| `NEXT_PUBLIC_ENS_REGISTRY` | Web | Sepolia ENS registry address. |
-| `NEXT_PUBLIC_NAME_WRAPPER` | Web/contracts | Sepolia NameWrapper address for wrapped-owner checks. |
-| `NEXT_PUBLIC_PUBLIC_RESOLVER` | Web | Resolver used when the app creates a new subname. |
-| `NEXT_PUBLIC_EXECUTOR_ADDRESS` | Web/relayer | Deployed `AgentEnsExecutor`. |
-| `NEXT_PUBLIC_TASK_LOG_ADDRESS` | Web/relayer | Deployed `TaskLog`. |
-| `NEXT_PUBLIC_TASK_LOG_START_BLOCK` | Web | Deployment block used to bound `TaskRecorded` event reads. |
-| `NEXT_PUBLIC_RPC_URL` | Web | Optional browser read RPC. Leave blank to use wagmi defaults. |
-| `RELAYER_PRIVATE_KEY` | Relayer API | Server-only key that broadcasts `execute(...)`. |
-| `AGENT_PRIVATE_KEY` | Agent runner | Agent signer used by the CLI runner. |
-| `PINATA_JWT` | Web API | Preferred server-only credential for generated policy metadata uploads. |
-| `PINATA_API_KEY` / `PINATA_SECRET_API_KEY` | Web API | Alternative server-only Pinata credential pair. |
-| `ETHERSCAN_API_KEY` | Contracts | Optional verification key for deployments. |
+- **MCP is thin**: it builds unsigned intents from explicit public inputs, accepts externally signed payloads, submits to KeeperHub, and polls status.
+- **KeeperHub is authoritative**: it validates Passport/Visa records, routes blocked stamps, and executes the workflow.
+- **AgentEnsExecutor is the onchain verifier**: it resolves the current ENS signer, verifies the EIP-712 signature, and executes only the approved target/calldata.
 
 ## Deployed addresses
 
+Current Sepolia deployment:
+
 | Item | Sepolia value |
 |---|---|
-| `AgentEnsExecutor` | `0xf6902c77f4dF81327ADF86cc484498C467335115` |
-| `TaskLog` | `0xe41f0aeeF4e0A84b46448913f51E60640F6c2Bf2` |
+| `AgentEnsExecutor` | `0xce3e365214568E96d4186464089438a89331941F` |
+| `TaskLog` | `0x9f384B659da5F24994BC5c2a10B4243F07aA889b` |
 | ENS registry | `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e` |
 | NameWrapper | `0x0635513f179D50A207757E05759CbD106d7dFcE8` |
+| Public resolver | `0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5` |
+| Uniswap SwapRouter02 | `0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E` |
+| SwapRouter02 `exactInputSingle` selector | `0x04e45aaf` |
+
+## Product flow
+
+1. Owner connects a wallet on `/register`.
+2. Owner registers an Agent Passport such as `assistant.alice.eth`.
+3. The app prepares ENS record writes for Passport identity and Visa metadata.
+4. Visa metadata is generated by the app and pinned through Pinata when configured.
+5. Owner reviews the wallet transaction queue and writes Passport/Visa records onchain.
+6. Agent uses MCP to build an unsigned task intent from explicit public task data.
+7. Agent signs locally; MCP never sees the private key.
+8. MCP submits the signed payload to KeeperHub.
+9. KeeperHub reads Passport/Visa state, stamps allowed or blocked evidence, and executes only if every gate passes.
+10. Owner can revoke access by disabling the Visa, changing the Passport signer, deleting the Passport, or withdrawing gas budget.
+
+Classic TaskLog demo path:
+
+```txt
+ENS name -> agent metadata -> signed task -> live ENS verification -> task execution -> revocation failure
+```
+
+The Uniswap path uses the same trust model with a different Visa target: the owner wallet holds `tokenIn`, approves the executor separately, and KeeperHub validates the Uniswap Visa before calling `executeOwnerFundedERC20`.
+
+## Environment variables
+
+Copy `.env.example` to `.env` and `apps/web/.env.example` to `apps/web/.env`. Keep all real secrets local.
+
+| Variable | Used by | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_CHAIN_ID` | Web | Sepolia chain id, currently `11155111`. |
+| `NEXT_PUBLIC_ENS_REGISTRY` | Web/contracts | Sepolia ENS registry. |
+| `NEXT_PUBLIC_NAME_WRAPPER` | Web/contracts | Sepolia NameWrapper for wrapped-owner checks. |
+| `NEXT_PUBLIC_PUBLIC_RESOLVER` | Web | Resolver used for subname/text record writes. |
+| `NEXT_PUBLIC_RPC_URL` | Web | Optional public/browser read RPC. Leave blank to use wallet/provider defaults. |
+| `NEXT_PUBLIC_EXECUTOR_ADDRESS` | Web | Current `AgentEnsExecutor`. |
+| `NEXT_PUBLIC_TASK_LOG_ADDRESS` | Web | Current `TaskLog`. |
+| `NEXT_PUBLIC_TASK_LOG_START_BLOCK` | Web | Start block for bounded `TaskRecorded` event reads. |
+| `AGENTPASSPORT_DB_PATH` / `AGENT_DIRECTORY_DB_PATH` | Web API | Optional local SQLite path override. |
+| `RELAYER_PRIVATE_KEY` | Relayer API | Server-only relayer key for direct TaskLog execution paths. |
+| `RELAYER_RESERVATION_REDIS_REST_URL` / `RELAYER_RESERVATION_REDIS_REST_TOKEN` | Relayer API | Optional production Redis reservation lock. |
+| `PINATA_JWT` or `PINATA_API_KEY` + `PINATA_SECRET_API_KEY` | Web API | Server-only credentials for Visa metadata uploads. |
+| `KEEPERHUB_API_KEY` | MCP/Web API | Server-only KeeperHub credential. |
+| `KEEPERHUB_API_BASE_URL` | MCP/Web API | Defaults to `https://app.keeperhub.com`. |
+| `KEEPERHUB_WORKFLOW_ID` | MCP/Web API | Local KeeperHub workflow id. Keep concrete values out of public docs. |
+| `EXECUTOR_ADDRESS` / `TASK_LOG_ADDRESS` | MCP/scripts | Runtime aliases for non-browser tools. |
+| `RPC_URL` / `SEPOLIA_RPC_URL` | Scripts/contracts | Server-only RPC endpoints. |
+| `PRIVATE_KEY` / `AGENT_PRIVATE_KEY` | Scripts/agent runner | Local deployment or signing keys. Never expose to MCP or the browser. |
+| `ETHERSCAN_API_KEY` | Contracts | Optional contract verification. |
+| `UNISWAP_API_KEY` / `UNISWAP_BASE_URL` | Optional helpers | Optional quote/build API helpers; KeeperHub still validates execution. |
 
 ## Setup
 
 Prerequisites:
 
-- Node.js 22 or newer.
-- pnpm 9 or newer.
-- Foundry for Solidity build, test, and deployment.
+- Node.js 22+
+- pnpm 9+
+- Foundry for Solidity tests and deployments
 
-Install JavaScript dependencies:
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-Copy environment templates before running local services:
+Create local env files:
 
 ```bash
 cp .env.example .env
-cp apps/web/.env.example apps/web/.env.local
+cp apps/web/.env.example apps/web/.env
 cp agent-runner/.env.example agent-runner/.env
 cp contracts/.env.example contracts/.env
-```
-
-Run the repository structure test:
-
-```bash
-pnpm test
 ```
 
 Run the web app:
@@ -131,116 +148,43 @@ Run the web app:
 pnpm --filter @agentpassport/web dev
 ```
 
-Run contract tests after contracts are implemented:
+Run the MCP server:
 
 ```bash
-forge test
-```
-
-Run the agent runner after the signing flow is implemented:
-
-```bash
-pnpm agent:run
+pnpm mcp:http
+# Streamable HTTP endpoint: http://localhost:3333/mcp
 ```
 
 ## Test commands
 
 ```bash
 pnpm test
-pnpm --filter @agentpassport/web typecheck
-pnpm --filter @agentpassport/web build
+pnpm --filter @agentpassport/web exec tsc --noEmit
+pnpm --filter @agentpassport/mcp-server exec tsc --noEmit
 forge test
 ```
 
 ## Reproduce the Sepolia demo
 
-The judge-facing sequence is:
-
-```txt
-ENS name -> agent metadata -> signed task -> live ENS verification -> task execution -> revocation failure
-```
-
-1. Start the web app with Sepolia `.env` values:
-
-   ```bash
-   pnpm --filter @agentpassport/web dev
-   ```
-
-2. Open `/register`, connect the owner wallet, enter the owner ENS name, agent label, agent address, gas budget, and reimbursement cap.
-3. Submit registration. The app generates the policy/profile JSON, uploads it through Pinata, writes the returned `ipfs://...` URI and hash into ENS, sets policy, and deposits gas budget.
-4. Open `/agent/<agent-name>` and confirm the profile shows live resolver, ENS address, policy, gas budget, text records, and task history.
-5. Switch to the agent wallet on `/run`, sign the EIP-712 task intent, and submit it to the relayer.
-6. Confirm the task appears in history from the DB and `TaskLog` events.
-7. Open `/revoke`, revoke the policy or update `addr(agent)`, then retry the saved old payload.
-8. Confirm the retry fails because the recovered signer no longer matches live ENS state or the policy is disabled.
+1. Start the web app with Sepolia environment values.
+2. Open `/register`, connect the owner wallet, and create an Agent Passport.
+3. Review the Prepared Passport and wallet transaction queue.
+4. Open `/owner/<owner-name>` to inspect registered Passports, Visa access, and gas budget.
+5. Open `/agent/<agent-name>` to inspect Passport proof, Visa Scope, Uniswap Visa, and KeeperHub Stamps.
+6. Connect an MCP-capable agent to `http://localhost:3333/mcp`.
+7. Call `build_task_intent`, sign the exact returned typed data locally, call `submit_task`, then poll `check_task_status`.
+8. Confirm the KeeperHub execution id, final status, tx hash when present, or blocked/failed KeeperHub Stamp.
+9. Revoke the Visa or update the Passport signer and retry the saved old payload; the retry fails because authorization uses live ENS/Passport state.
 
 ## Known limitations
 
-- Registration policy metadata is generated by the app and pinned through Pinata; Pinata credentials must stay server-only.
-- The MVP supports one allowed task target: `TaskLog.recordTask(...)`.
-- The browser can read TaskLog events directly, but production deployments should use a durable indexer.
-- SQLite persistence is intended for local demo operation, not multi-instance production hosting.
-- Sepolia is the only supported network in the current MVP; the app fails loudly instead of silently switching networks.
-- The public resolver path is used for the MVP. Custom resolver and CCIP Read support are out of scope.
-
-## Markdown docs in this package
-
-| File | Purpose |
-|---|---|
-| [`AGENTS.md`](./AGENTS.md) | Coding-agent instructions and project invariants. |
-| [`docs/PRD.md`](./docs/PRD.md) | Product requirements. |
-| [`docs/IMPLEMENTATION_SPEC.md`](./docs/IMPLEMENTATION_SPEC.md) | End-to-end technical spec. |
-| [`docs/ENS_RECORDS.md`](./docs/ENS_RECORDS.md) | ENS records, schema, and write/read behavior. |
-| [`docs/CONTRACTS_SPEC.md`](./docs/CONTRACTS_SPEC.md) | Solidity contract APIs, structs, events, and tests. |
-| [`docs/FRONTEND_SPEC.md`](./docs/FRONTEND_SPEC.md) | Frontend pages, components, and UX requirements. |
-| [`docs/RELAYER_AND_AGENT_RUNNER_SPEC.md`](./docs/RELAYER_AND_AGENT_RUNNER_SPEC.md) | Relayer endpoint and agent signing flow. |
-| [`docs/TASKS.md`](./docs/TASKS.md) | Implementation backlog for coding agents. |
-| [`docs/SECURITY_CHECKLIST.md`](./docs/SECURITY_CHECKLIST.md) | Security constraints and review checklist. |
-| [`docs/DEMO_SCRIPT.md`](./docs/DEMO_SCRIPT.md) | Hackathon demo script. |
-| [`docs/ACCEPTANCE_CRITERIA.md`](./docs/ACCEPTANCE_CRITERIA.md) | Definition of done. |
-
-## Minimal repository structure to generate
-
-```txt
-agent-passport-ens/
-  README.md
-  AGENTS.md
-  apps/
-    web/
-      app/
-      components/
-      lib/
-      pages/api/relayer/execute.ts
-  contracts/
-    src/
-      AgentEnsExecutor.sol
-      TaskLog.sol
-    test/
-      AgentEnsExecutor.t.sol
-      TaskLog.t.sol
-    script/
-      Deploy.s.sol
-  agent-runner/
-    src/
-      index.ts
-      signIntent.ts
-      planTask.ts
-  docs/
-```
-
-## Contract names
-
-- `AgentEnsExecutor.sol`
-- `TaskLog.sol`
-- Optional stretch: `AgentSubnameRegistrar.sol`
-
-## Most important implementation rule
-
-```txt
-The executor must resolve the current agent address and policy digest from ENS every time it verifies a task.
-```
-
-That single rule makes ENS the identity, authorization, and revocation mechanism.
+- Sepolia is the supported network for this deployment.
+- KeeperHub credentials, RPC URLs, Pinata credentials, and private keys must remain server-only/local.
+- Owner-funded Uniswap swaps require the owner wallet to hold `tokenIn` and approve the executor outside MCP.
+- MCP does not quote swaps, create keys, resolve ENS Passport state, validate Visas, or preflight KeeperHub decisions.
+- Browser event reads are bounded by `NEXT_PUBLIC_TASK_LOG_START_BLOCK`; production deployments should use durable indexing for high-volume history.
+- SQLite persistence is intended for local/demo operation unless replaced by production storage.
+- Custom resolver, CCIP Read, and multi-chain production routing are not part of the current Sepolia release.
 
 ## License
 

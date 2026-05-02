@@ -152,7 +152,7 @@ test("environment templates document required variables for Sepolia-first develo
   assert.match(webEnv, /^RPC_URL=$/m);
   assert.match(webEnv, /RELAYER_PRIVATE_KEY=/);
   assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_URL=/);
-  assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_TOKEN=/);
+  assert.match(webEnv, /^RELAYER_RESERVATION_REDIS_REST_TOKEN=$/m);
   assert.match(runnerEnv, /^RPC_URL=$/m);
   assert.match(runnerEnv, /^AGENT_ENS_NAME=$/m);
   assert.match(runnerEnv, /^OWNER_ENS_NAME=$/m);

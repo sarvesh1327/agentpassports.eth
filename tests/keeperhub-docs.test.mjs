@@ -52,9 +52,9 @@ test("MCP README documents the thin KeeperHub-authoritative flow", async () => {
 test("root env example documents KeeperHub live variables without secrets", async () => {
   const envExample = await readText(".env.example");
 
-  assert.match(envExample, /KEEPERHUB_API_KEY=/);
+  assert.match(envExample, /^KEEPERHUB_API_KEY=$/m);
   assert.match(envExample, /KEEPERHUB_API_BASE_URL=https:\/\/app\.keeperhub\.com/);
-  assert.match(envExample, /KEEPERHUB_WORKFLOW_ID=/);
+  assert.match(envExample, /KEEPERHUB_WORKFLOW_ID=kah3xyaxk2uskluggff4q/);
   assert.doesNotMatch(envExample, /kh_[A-Za-z0-9]/);
 });
 
