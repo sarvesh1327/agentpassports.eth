@@ -49,7 +49,8 @@ test("landing page matches product UI and dashboard navigation requirements", as
   assert.match(landing, /landing-safety-row/);
   assert.doesNotMatch(page, /LandingOwnerPreview/);
   assert.match(header, /href="\/mcp"/);
-  assert.match(header, /href="https:\/\/github\.com\/sarvesh1327\/agentpassports\.eth"/);
+  assert.match(header, /href="\/docs"/);
+  assert.doesNotMatch(header, /Docs <UiIcon/);
 });
 
 test("wallet connection prefers ENS name over raw address when reverse ENS is available", async () => {

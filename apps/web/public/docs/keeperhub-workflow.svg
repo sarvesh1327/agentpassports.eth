@@ -1,0 +1,87 @@
+<svg width="1400" height="820" viewBox="0 0 1400 820" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Simplified KeeperHub workflow map</title>
+  <desc id="desc">A simplified AgentPassports KeeperHub workflow from signed intent through Passport and Visa validation to execution and KeeperHub Stamp evidence.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07080D"/>
+      <stop offset="0.54" stop-color="#080B16"/>
+      <stop offset="1" stop-color="#040509"/>
+    </linearGradient>
+    <radialGradient id="cyan" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1140 78) rotate(140) scale(510 320)">
+      <stop stop-color="#72E2FF" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#72E2FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="violet" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(260 120) rotate(45) scale(520 350)">
+      <stop stop-color="#7C6CFF" stop-opacity="0.38"/>
+      <stop offset="1" stop-color="#7C6CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="white" stop-opacity="0.105"/>
+      <stop offset="1" stop-color="white" stop-opacity="0.035"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-25%" width="140%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="32" flood-color="#000000" flood-opacity="0.38"/>
+    </filter>
+    <marker id="arrow" markerWidth="16" markerHeight="16" refX="11" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 3L11 8L2 13" stroke="#72E2FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="820" rx="34" fill="url(#bg)"/>
+  <rect width="1400" height="820" rx="34" fill="url(#violet)"/>
+  <rect width="1400" height="820" rx="34" fill="url(#cyan)"/>
+  <path d="M0 196H1400M0 392H1400M0 588H1400M175 0V820M350 0V820M525 0V820M700 0V820M875 0V820M1050 0V820M1225 0V820" stroke="white" stroke-opacity="0.04"/>
+
+  <text x="78" y="86" fill="#F8FBFF" font-family="Inter, ui-sans-serif, system-ui" font-size="38" font-weight="800" letter-spacing="-1.6">KeeperHub workflow</text>
+  <text x="78" y="126" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="18">Simplified map: KeeperHub validates Passport + Visa before any owner-funded execution reaches chain.</text>
+  <rect x="1090" y="62" width="232" height="44" rx="22" fill="#72E2FF" fill-opacity="0.12" stroke="#72E2FF" stroke-opacity="0.28"/>
+  <text x="1112" y="90" fill="#DFF9FF" font-family="Inter, ui-sans-serif, system-ui" font-size="15" font-weight="800" letter-spacing="1.1">STAMPED EXECUTION</text>
+
+  <g filter="url(#shadow)">
+    <rect x="78" y="198" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="104" y="236" fill="#72E2FF" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">01 · INTENT</text>
+    <text x="104" y="272" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Signed task</text>
+    <text x="104" y="302" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Agent signs exact calldata locally.</text>
+
+    <rect x="410" y="198" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="436" y="236" fill="#72E2FF" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">02 · PASSPORT</text>
+    <text x="436" y="272" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Resolve ENS</text>
+    <text x="436" y="302" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Read signer and owner records.</text>
+
+    <rect x="742" y="198" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="768" y="236" fill="#72E2FF" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">03 · VISA</text>
+    <text x="768" y="272" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Check scope</text>
+    <text x="768" y="302" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Target, selector, amount, token.</text>
+
+    <rect x="1074" y="198" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="1100" y="236" fill="#72E2FF" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">04 · EXECUTE</text>
+    <text x="1100" y="272" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Call executor</text>
+    <text x="1100" y="302" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Owner-funded action onchain.</text>
+
+    <rect x="244" y="470" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="270" y="508" fill="#36D399" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">ALLOW PATH</text>
+    <text x="270" y="544" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Tx hash</text>
+    <text x="270" y="574" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Successful run gets evidence.</text>
+
+    <rect x="576" y="470" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="602" y="508" fill="#FBBF24" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">BLOCK PATH</text>
+    <text x="602" y="544" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Failed gate</text>
+    <text x="602" y="574" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Invalid Visa stops before chain.</text>
+
+    <rect x="908" y="470" width="250" height="126" rx="24" fill="url(#card)" stroke="white" stroke-opacity="0.11"/>
+    <text x="934" y="508" fill="#72E2FF" font-family="Inter, ui-sans-serif, system-ui" font-size="14" font-weight="900" letter-spacing="1.4">STAMP</text>
+    <text x="934" y="544" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui" font-size="24" font-weight="800">Audit record</text>
+    <text x="934" y="574" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="15">Shown on the Agent page.</text>
+  </g>
+
+  <path d="M328 261H397" stroke="#72E2FF" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M660 261H729" stroke="#72E2FF" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M992 261H1061" stroke="#72E2FF" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M1199 324C1199 408 1030 409 1030 458" stroke="#36D399" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M867 324C867 408 704 409 704 458" stroke="#FBBF24" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M494 533H563" stroke="#72E2FF" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+  <path d="M826 533H895" stroke="#72E2FF" stroke-width="3" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <rect x="78" y="682" width="1244" height="76" rx="24" fill="white" fill-opacity="0.055" stroke="white" stroke-opacity="0.09"/>
+  <text x="108" y="727" fill="#DFF9FF" font-family="Inter, ui-sans-serif, system-ui" font-size="19" font-weight="800">Rule of thumb:</text>
+  <text x="260" y="727" fill="#A7B0C2" font-family="Inter, ui-sans-serif, system-ui" font-size="19">MCP transports intent; KeeperHub decides; owner wallet can revoke the Passport or Visa onchain.</text>
+</svg>

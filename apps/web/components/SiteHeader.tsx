@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAccount, useEnsName } from "wagmi";
 import { WalletConnection } from "./WalletConnection";
-import { AgentPassportsLogo, UiIcon } from "./icons/UiIcons";
+import { AgentPassportsLogo } from "./icons/UiIcons";
 
 /**
  * Provides the compact product navigation shared by the frontend pages.
@@ -29,7 +29,9 @@ export function SiteHeader() {
       ? "dashboard"
       : pathname.startsWith("/mcp")
         ? "mcp"
-        : null;
+        : pathname.startsWith("/docs")
+          ? "docs"
+          : null;
 
   useEffect(() => {
     setWalletUiMounted(true);
@@ -62,7 +64,7 @@ export function SiteHeader() {
             label="Register Agent"
           />
           <Link aria-current={activeSection === "mcp" ? "page" : undefined} href="/mcp">MCP</Link>
-          <Link href="https://github.com/sarvesh1327/agentpassports.eth">Docs <UiIcon name="external" size={14} /></Link>
+          <Link aria-current={activeSection === "docs" ? "page" : undefined} href="/docs">Docs</Link>
         </nav>
       ) : (
         <ConnectButton.Custom>
@@ -87,7 +89,7 @@ export function SiteHeader() {
                   onConnect={openConnectModal}
                 />
                 <Link aria-current={activeSection === "mcp" ? "page" : undefined} href="/mcp">MCP</Link>
-                <Link href="https://github.com/sarvesh1327/agentpassports.eth">Docs <UiIcon name="external" size={14} /></Link>
+                <Link aria-current={activeSection === "docs" ? "page" : undefined} href="/docs">Docs</Link>
               </nav>
             );
           }}

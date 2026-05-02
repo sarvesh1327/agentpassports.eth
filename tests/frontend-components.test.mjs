@@ -187,6 +187,64 @@ test("home page renders the Register Agents marketing landing page with wallet-g
   assert.match(styles, /\.landing-wallet-modal\s*{/);
 });
 
+test("docs page explains the product flow with screenshots and KeeperHub workflow", async () => {
+  await assertFile("apps/web/app/docs/page.tsx");
+  await assertFile("apps/web/public/docs/landing.png");
+  await assertFile("apps/web/public/docs/register.png");
+  await assertFile("apps/web/public/docs/dashboard.png");
+  await assertFile("apps/web/public/docs/agent.png");
+  await assertFile("apps/web/public/docs/mcp.png");
+  await assertFile("apps/web/public/docs/keeperhub-workflow.svg");
+
+  const docs = await readText("apps/web/app/docs/page.tsx");
+  const styles = await readText("apps/web/app/globals.css");
+  const header = await readText("apps/web/components/SiteHeader.tsx");
+  const workflow = await readText("apps/web/public/docs/keeperhub-workflow.svg");
+
+  for (const label of [
+    "What is AgentPassports.eth?",
+    "Passport",
+    "Visa",
+    "KeeperHub Stamp",
+    "Flow of things",
+    "Create a local signer",
+    "Register the Passport",
+    "Issue a Visa",
+    "KeeperHub checks it",
+    "Show the Stamp",
+    "The main pages at a glance",
+    "KeeperHub is the execution border"
+  ]) {
+    assert.ok(docs.includes(label), `${label} should be in /docs`);
+  }
+
+  for (const asset of [
+    "/docs/landing.png",
+    "/docs/register.png",
+    "/docs/dashboard.png",
+    "/docs/agent.png",
+    "/docs/mcp.png",
+    "/docs/keeperhub-workflow.svg"
+  ]) {
+    assert.ok(docs.includes(asset), `${asset} should be rendered`);
+  }
+
+  assert.match(header, /pathname\.startsWith\("\/docs"\)/);
+  assert.match(header, /href="\/docs"/);
+  assert.match(header, /activeSection === "docs"/);
+  assert.doesNotMatch(header, /Docs <UiIcon/);
+  assert.match(styles, /\.page-shell--docs\s*{/);
+  assert.match(styles, /\.docs-hero\s*{/);
+  assert.match(styles, /\.docs-flow-grid\s*{/);
+  assert.match(styles, /\.docs-screenshot-grid\s*{/);
+  assert.match(styles, /\.docs-workflow-card\s*{/);
+  assert.match(workflow, /Simplified KeeperHub workflow map/);
+  assert.match(workflow, /MCP transports intent; KeeperHub decides; owner wallet can revoke/);
+  const forbiddenWorkflowId = ["kah3", "xyax", "k2us", "klugg", "ff4q"].join("");
+  assert.doesNotMatch(docs, new RegExp(forbiddenWorkflowId));
+  assert.doesNotMatch(workflow, new RegExp(forbiddenWorkflowId));
+});
+
 test("brand image is used for site logo and browser tab icon", async () => {
   await assertFile("apps/web/public/brand/agentpassports-logo.png");
   await assertFile("apps/web/public/brand/favicon-32.png");
