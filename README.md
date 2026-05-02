@@ -92,6 +92,51 @@ ENS name -> agent metadata -> signed task -> live ENS verification -> task execu
 
 The Uniswap path uses the same trust model with a different Visa target: the owner wallet holds `tokenIn`, approves the executor separately, and KeeperHub validates the Uniswap Visa before calling `executeOwnerFundedERC20`.
 
+## One-command agent install
+
+Give this to any agent runtime that needs to use AgentPassports:
+
+```bash
+curl -fsSL https://agentpassports.eth/install | bash
+```
+
+The installer downloads the AgentPassports Skill Pack from GitHub, installs the skill docs/scripts locally, and creates two helper commands:
+
+```bash
+agentpassports-create-key
+agentpassports-sign-intent --input build-task-intent.json
+```
+
+Use it like this:
+
+1. Run the installer command above.
+2. Run `agentpassports-create-key` in the agent's working directory.
+3. Register the printed public signer address in the AgentPassports web app.
+4. Ask the agent to read the installed `SKILL.md`.
+5. Use the thin MCP flow: `build_task_intent` -> local signing -> `submit_task` -> `check_task_status`.
+
+Safety rules:
+
+- The installer does not read or write `.env` files.
+- It does not create or overwrite a private key unless run with `--create-key`.
+- Private keys stay local in `.agentPassports/keys.txt`.
+- MCP never receives private keys and never validates Passport/Visa state locally.
+- KeeperHub remains authoritative for Passport/Visa checks and KeeperHub Stamps.
+
+The `/install` endpoint serves [`scripts/install-agentpassports.sh`](./scripts/install-agentpassports.sh). Agents can inspect it before running:
+
+```bash
+curl -fsSL https://agentpassports.eth/install -o install-agentpassports.sh
+less install-agentpassports.sh
+bash install-agentpassports.sh
+```
+
+If the hosted app route is unavailable, use the raw GitHub installer directly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sarvesh1327/agentpassports.eth/main/scripts/install-agentpassports.sh | bash
+```
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and `apps/web/.env.example` to `apps/web/.env`. Keep all real secrets local.

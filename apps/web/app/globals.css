@@ -3072,6 +3072,8 @@ body.tx-progress-modal-open {
 .landing-flow-step,
 .landing-route-card,
 .landing-feature-card,
+.landing-install-command-card,
+.landing-install-step,
 .landing-final-cta {
   background: var(--landing-panel);
   border: 1px solid var(--landing-line-soft);
@@ -3195,7 +3197,9 @@ body.tx-progress-modal-open {
 .landing-section__intro p,
 .landing-flow-step p,
 .landing-route-card p,
-.landing-feature-card p {
+.landing-feature-card p,
+.landing-install-command-card p,
+.landing-install-step p {
   color: var(--landing-muted);
   line-height: 1.62;
 }
@@ -3260,6 +3264,109 @@ body.tx-progress-modal-open {
 .landing-route-card small {
   display: block;
   margin-top: 12px;
+}
+
+.landing-agent-install {
+  border-top: 1px solid var(--landing-line-soft);
+}
+
+.landing-install-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  margin-top: 30px;
+}
+
+.landing-install-command-card,
+.landing-install-step {
+  border-radius: 24px;
+  padding: 22px;
+}
+
+.landing-install-command-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.landing-install-command-card > code {
+  background:
+    linear-gradient(135deg, rgb(2 6 23 / 0.94), rgb(15 23 42 / 0.84)),
+    radial-gradient(circle at 0% 0%, rgb(114 226 255 / 0.18), transparent 22rem);
+  border: 1px solid var(--landing-line);
+  border-radius: 20px;
+  color: #e8fbff;
+  display: block;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: clamp(0.82rem, 1.4vw, 1rem);
+  line-height: 1.55;
+  overflow-x: auto;
+  padding: 18px;
+  white-space: nowrap;
+}
+
+.landing-install-actions,
+.landing-safety-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.landing-install-actions .landing-button {
+  min-height: 44px;
+}
+
+.landing-install-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.landing-install-step {
+  align-items: flex-start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto 1fr;
+}
+
+.landing-install-step > span {
+  align-items: center;
+  background: rgb(114 226 255 / 0.1);
+  border: 1px solid rgb(114 226 255 / 0.24);
+  border-radius: 999px;
+  color: var(--landing-accent-2);
+  display: inline-flex;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  font-weight: 900;
+  height: 36px;
+  justify-content: center;
+  width: 44px;
+}
+
+.landing-install-step h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.landing-install-step p {
+  margin: 8px 0 0;
+}
+
+.landing-safety-row {
+  margin-top: 18px;
+}
+
+.landing-safety-row span {
+  align-items: center;
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid var(--landing-line-soft);
+  border-radius: 999px;
+  color: var(--landing-muted);
+  display: inline-flex;
+  font-size: 0.9rem;
+  gap: 7px;
+  padding: 9px 12px;
 }
 
 .landing-feature-band {
@@ -3333,7 +3440,8 @@ body.tx-progress-modal-open {
   .landing-section__intro--split,
   .landing-flow-grid,
   .landing-route-grid,
-  .landing-feature-grid {
+  .landing-feature-grid,
+  .landing-install-grid {
     grid-template-columns: 1fr;
   }
 

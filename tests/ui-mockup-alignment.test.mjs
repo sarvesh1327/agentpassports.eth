@@ -43,6 +43,10 @@ test("landing page matches product UI and dashboard navigation requirements", as
   assert.match(landing, /Dashboard and registration are wallet-gated/);
   assert.match(landing, /ProductPreview/);
   assert.match(landing, /WalletPromptModal/);
+  assert.match(landing, /Agent Skill Pack/);
+  assert.match(landing, /curl -fsSL https:\/\/agentpassports\.eth\/install \| bash/);
+  assert.match(landing, /landing-install-command-card/);
+  assert.match(landing, /landing-safety-row/);
   assert.doesNotMatch(page, /LandingOwnerPreview/);
   assert.match(header, /href="\/mcp"/);
   assert.match(header, /href="https:\/\/github\.com\/sarvesh1327\/agentpassports\.eth"/);

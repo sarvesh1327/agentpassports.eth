@@ -9,6 +9,31 @@ import { AgentPassportsLogo, UiIcon } from "./icons/UiIcons";
 
 type RouteIntent = "Dashboard" | "Register Agent";
 
+const INSTALL_COMMAND = "curl -fsSL https://agentpassports.eth/install | bash";
+
+const skillPackSteps = [
+  {
+    label: "01",
+    title: "Install Skill Pack",
+    copy: "Download the AgentPassports skill docs and local signing scripts from GitHub with one command."
+  },
+  {
+    label: "02",
+    title: "Create local signer",
+    copy: "Run agentpassports-create-key in the agent workspace; only the public signer address is printed."
+  },
+  {
+    label: "03",
+    title: "Register Agent",
+    copy: "Paste that public signer into the Register Agent flow so the owner wallet issues a Passport and Visa."
+  },
+  {
+    label: "04",
+    title: "Act through KeeperHub",
+    copy: "The agent builds an intent, signs locally, submits through thin MCP, and reads KeeperHub Stamps."
+  }
+] as const;
+
 type LandingGateActionProps = {
   children: ReactNode;
   className?: string;
@@ -68,6 +93,13 @@ export function LandingPage() {
   const dashboardHref = ownerName ? `/owner/${encodeURIComponent(ownerName)}` : "/";
   const registerHref = ownerName ? `/register?owner=${encodeURIComponent(ownerName)}` : "/register";
   const [pendingRoute, setPendingRoute] = useState<RouteIntent | null>(null);
+  const [installCopied, setInstallCopied] = useState(false);
+
+  async function copyInstallCommand() {
+    await navigator.clipboard.writeText(INSTALL_COMMAND);
+    setInstallCopied(true);
+    window.setTimeout(() => setInstallCopied(false), 1800);
+  }
 
   return (
     <main className="landing-site">
@@ -94,6 +126,53 @@ export function LandingPage() {
         </div>
 
         <ProductPreview ownerName={ownerName} />
+      </section>
+
+      <section className="landing-shell landing-section landing-agent-install" id="agent-skill-pack" aria-labelledby="agent-install-title">
+        <div className="landing-section__intro landing-section__intro--split">
+          <div>
+            <p className="landing-kicker">Agent Skill Pack</p>
+            <h2 id="agent-install-title">One command gives any agent the AgentPassports workflow.</h2>
+          </div>
+          <p>
+            Download the skill, create a local signer, register the public address, then use thin MCP to build,
+            locally sign, submit, and read KeeperHub Stamps.
+          </p>
+        </div>
+        <div className="landing-install-grid">
+          <article className="landing-install-command-card" aria-label="AgentPassports one-command install">
+            <span className="landing-route-card__label">One-command install</span>
+            <code>{INSTALL_COMMAND}</code>
+            <div className="landing-install-actions">
+              <button className="landing-button landing-button--primary" onClick={copyInstallCommand} type="button">
+                <UiIcon name="copy" size={17} /> {installCopied ? "Copied" : "Copy install command"}
+              </button>
+              <Link className="landing-button landing-button--secondary" href="https://github.com/sarvesh1327/agentpassports.eth/tree/main/skills/agentpassports" target="_blank">
+                <UiIcon name="external" size={17} /> View GitHub
+              </Link>
+            </div>
+            <p>
+              The installer serves <code>scripts/install-agentpassports.sh</code>, installs local helpers, and does not touch env files or create keys unless asked.
+            </p>
+          </article>
+          <div className="landing-install-steps" aria-label="Agent Skill Pack setup steps">
+            {skillPackSteps.map((step) => (
+              <article className="landing-install-step" key={step.label}>
+                <span>{step.label}</span>
+                <div>
+                  <h3>{step.title}</h3>
+                  <p>{step.copy}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="landing-safety-row" aria-label="Agent Skill Pack safety guarantees">
+          <span><UiIcon name="shield" size={15} /> Private key stays local</span>
+          <span><UiIcon name="queue" size={15} /> MCP stays thin</span>
+          <span><UiIcon name="check" size={15} /> KeeperHub validates Visa</span>
+          <span><UiIcon name="wallet" size={15} /> Owner wallet controls revoke</span>
+        </div>
       </section>
 
       <section className="landing-shell landing-section" id="how-it-works" aria-labelledby="flow-title">
