@@ -394,9 +394,9 @@ test("agent page exposes visible signer and policy management and refreshes afte
   assert.doesNotMatch(viewSource, /window\.prompt/);
 });
 
-test("agent page keeps explicit ENS proof and demo route intent visible in source", async () => {
+test("agent page keeps explicit ENS proof and debug route intent visible in source", async () => {
   const agentSource = await readText("apps/web/components/AgentProfileView.tsx");
-  const runPageSource = await readText("apps/web/app/run/page.tsx");
+  const runPageSource = await readText("apps/web/app/debug/run/page.tsx");
   const revokePageSource = await readText("apps/web/app/revoke/page.tsx");
 
   for (const token of [
@@ -409,7 +409,7 @@ test("agent page keeps explicit ENS proof and demo route intent visible in sourc
     assert.match(agentSource, new RegExp(token), `${token} should be visible in agent proof UI`);
   }
 
-  assert.match(runPageSource, /Intentional demo route/);
+  assert.match(runPageSource, /Debug-only demo route/);
   assert.match(revokePageSource, /Intentional demo route/);
 });
 

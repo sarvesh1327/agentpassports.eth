@@ -58,9 +58,13 @@ test("V1 docs describe local skill signing and thin KeeperHub MCP flow", async (
   }
 });
 
-test("web app exposes thin MCP instructions and repurposes /run away from browser agent signing", async () => {
+test("web app exposes thin MCP instructions and keeps run demos under /debug", async () => {
   const mcpPage = await readText("apps/web/app/mcp/page.tsx");
-  const runPage = await readText("apps/web/app/run/page.tsx");
+  const runPage = await readText("apps/web/app/debug/run/page.tsx");
+  const runDemoPage = await readText("apps/web/app/debug/rundemo/page.tsx");
+
+  await assert.rejects(() => readText("apps/web/app/run/page.tsx"), { code: "ENOENT" });
+  await assert.rejects(() => readText("apps/web/app/rundemo/page.tsx"), { code: "ENOENT" });
 
   assert.match(mcpPage, /AgentPassports MCP/);
   assert.match(mcpPage, /http:\/\/localhost:3333\/mcp/);
@@ -80,6 +84,8 @@ test("web app exposes thin MCP instructions and repurposes /run away from browse
   assert.match(runPage, /\/mcp/);
   assert.doesNotMatch(runPage, /RunTaskDemo/);
   assert.doesNotMatch(runPage, /buildDemoAgentProfile/);
+  assert.match(runDemoPage, /RunTaskDemo/);
+  assert.match(runDemoPage, /Debug-only legacy browser signing demo route/);
 });
 
 test("UI surfaces the exact V1 Policy source: ENS label", async () => {

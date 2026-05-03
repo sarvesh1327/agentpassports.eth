@@ -428,9 +428,9 @@ test("register preview contains dense Swapper records and keeps write copy owner
   assert.doesNotMatch(formSource, /<span className="pill pill--info">KeeperHub-readable<\/span>/);
 });
 
-test("dashboard-scoped register uses mockup defaults while revoke remains blank and run points to MCP", async () => {
+test("dashboard-scoped register uses mockup defaults while revoke remains blank and debug run points to MCP", async () => {
   const registerSource = await readText("apps/web/app/register/page.tsx");
-  const runSource = await readText("apps/web/app/run/page.tsx");
+  const runSource = await readText("apps/web/app/debug/run/page.tsx");
   const revokeSource = await readText("apps/web/app/revoke/page.tsx");
   const source = `${registerSource}\n${runSource}\n${revokeSource}`;
 
@@ -684,11 +684,15 @@ test("agent page uses the owner-management mockup layout instead of legacy passp
   assert.match(styles, /\.agent-delete-band/);
 });
 
-test("run page is repurposed as the MCP task execution guide", async () => {
-  await assertFile("apps/web/app/run/page.tsx");
+test("debug run routes are moved out of the public product surface", async () => {
+  await assertFile("apps/web/app/debug/run/page.tsx");
+  await assertFile("apps/web/app/debug/rundemo/page.tsx");
   await assertFile("apps/web/app/mcp/page.tsx");
+  await assert.rejects(() => stat(path.join(root, "apps/web/app/run/page.tsx")), { code: "ENOENT" });
+  await assert.rejects(() => stat(path.join(root, "apps/web/app/rundemo/page.tsx")), { code: "ENOENT" });
 
-  const runSource = await readText("apps/web/app/run/page.tsx");
+  const runSource = await readText("apps/web/app/debug/run/page.tsx");
+  const runDemoSource = await readText("apps/web/app/debug/rundemo/page.tsx");
   const mcpSource = await readText("apps/web/app/mcp/page.tsx");
 
   assert.match(runSource, /MCP demo/);
@@ -696,6 +700,9 @@ test("run page is repurposed as the MCP task execution guide", async () => {
   assert.match(runSource, /build unsigned intents/);
   assert.doesNotMatch(runSource, /RunTaskDemo/);
   assert.doesNotMatch(runSource, /buildDemoAgentProfile/);
+  assert.match(runDemoSource, /Debug-only legacy browser signing demo route/);
+  assert.match(runDemoSource, /RunTaskDemo/);
+  assert.match(runDemoSource, /debug route keeps the old RunTaskDemo surface available/);
 
   for (const label of [
     "AgentPassports MCP",

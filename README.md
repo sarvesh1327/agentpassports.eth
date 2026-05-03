@@ -221,6 +221,11 @@ forge test
 8. Confirm the KeeperHub execution id, final status, tx hash when present, or blocked/failed KeeperHub Stamp.
 9. Revoke the Visa or update the Passport signer and retry the saved old payload; the retry fails because authorization uses live ENS/Passport state.
 
+## Next iteration
+
+- **Visa-native KeeperHub workflow provisioning** — when an owner creates or edits a Visa, AgentPassports can create or reuse a KeeperHub workflow from the matching capability template, then attach the workflow pointer to the Visa metadata. KeeperHub API credentials stay server-side, the workflow id remains non-authoritative metadata, and live ENS Passport/Visa records remain the source of truth for execution.
+- **Template-aware routing** — Swapper, research, and future capability Visas can route to capability-specific KeeperHub workflows while preserving the same MCP flow: build unsigned intent, sign locally, submit to KeeperHub, poll KeeperHub Stamps.
+
 ## Known limitations
 
 - Sepolia is the supported network for this deployment.

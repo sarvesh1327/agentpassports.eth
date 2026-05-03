@@ -128,31 +128,42 @@ test("environment templates document required variables for Sepolia-first develo
   const runnerEnv = await readText("agent-runner/.env.example");
   const contractsEnv = await readText("contracts/.env.example");
 
-  for (const name of [
+  const envKeys = (template) =>
+    new Set(
+      template
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#") && line.includes("="))
+        .map((line) => line.split("=", 1)[0]),
+    );
+
+  const rootKeys = envKeys(rootEnv);
+  const webKeys = envKeys(webEnv);
+  const rootAndWebSharedKeys = [
     "NEXT_PUBLIC_CHAIN_ID",
     "NEXT_PUBLIC_ENS_REGISTRY",
     "NEXT_PUBLIC_NAME_WRAPPER",
     "NEXT_PUBLIC_PUBLIC_RESOLVER",
+    "NEXT_PUBLIC_RPC_URL",
     "NEXT_PUBLIC_EXECUTOR_ADDRESS",
     "NEXT_PUBLIC_TASK_LOG_ADDRESS",
-    "RELAYER_PRIVATE_KEY",
-    "RELAYER_RESERVATION_REDIS_REST_TOKEN",
-    "RELAYER_RESERVATION_REDIS_REST_URL",
-    "AGENTPASSPORT_DB_PATH",
-    "AGENT_PRIVATE_KEY",
-    "RPC_URL",
-    "SEPOLIA_RPC_URL",
-  ]) {
-    assert.match(rootEnv, new RegExp(`${name}=`), `${name} should be documented at the root`);
+    "NEXT_PUBLIC_TASK_LOG_START_BLOCK",
+    "NEXT_PUBLIC_DEMO_OWNER_ENS",
+    "NEXT_PUBLIC_DEMO_AGENT_LABEL",
+    "NEXT_PUBLIC_DEMO_AGENT_ADDRESS",
+    "NEXT_PUBLIC_DEMO_POLICY_URI",
+    "EXECUTOR_ADDRESS",
+    "TASK_LOG_ADDRESS",
+    "KEEPERHUB_API_BASE_URL",
+    "KEEPERHUB_WORKFLOW_ID",
+  ];
+
+  for (const name of rootAndWebSharedKeys) {
+    assert.equal(rootKeys.has(name), true, `${name} should be documented at the root`);
+    assert.equal(webKeys.has(name), true, `${name} should be documented in apps/web`);
   }
 
   assert.match(webEnv, /NEXT_PUBLIC_CHAIN_ID=11155111/);
-  assert.match(rootEnv, /^RPC_URL=$/m);
-  assert.match(rootEnv, /^SEPOLIA_RPC_URL=$/m);
-  assert.match(webEnv, /^RPC_URL=$/m);
-  assert.match(webEnv, /RELAYER_PRIVATE_KEY=/);
-  assert.match(webEnv, /RELAYER_RESERVATION_REDIS_REST_URL=/);
-  assert.match(webEnv, /^RELAYER_RESERVATION_REDIS_REST_TOKEN=$/m);
   assert.match(runnerEnv, /^RPC_URL=$/m);
   assert.match(runnerEnv, /^AGENT_ENS_NAME=$/m);
   assert.match(runnerEnv, /^OWNER_ENS_NAME=$/m);

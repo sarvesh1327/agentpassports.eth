@@ -34,7 +34,7 @@ test("ETH amount helpers parse registration ETH inputs into wei", async () => {
   assert.equal(formatWeiInputAsEth(""), "");
 });
 
-test("default Uniswap registration values target Sepolia Universal Router and owner recipient", async () => {
+test("default Uniswap registration values target Sepolia SwapRouter02 exactInputSingle and owner recipient", async () => {
   const { buildDefaultSwapPolicyFormValues } = await import("../apps/web/lib/registerAgent.ts");
   const ownerAddress = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
@@ -46,8 +46,8 @@ test("default Uniswap registration values target Sepolia Universal Router and ow
     maxAmountInWei: "10000000000000000",
     maxSlippageBps: "50",
     recipient: ownerAddress,
-    router: "0x8b844f885672f333bc0042cb669255f93a4c1e6b",
-    selector: "0x24856bc3"
+    router: "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
+    selector: "0x04e45aaf"
   });
   assert.equal(buildDefaultSwapPolicyFormValues(null).recipient, "");
 });

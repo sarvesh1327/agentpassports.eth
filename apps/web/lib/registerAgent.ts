@@ -42,6 +42,8 @@ export type SwapPolicyFormValues = {
 };
 
 const SEPOLIA_UNISWAP_ALLOWED_TOKEN_PAIR = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14" as const;
+const SEPOLIA_SWAP_ROUTER_02 = "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E" as const;
+const SWAP_ROUTER_02_EXACT_INPUT_SINGLE_SELECTOR = "0x04e45aaf" as const;
 
 /**
  * Returns the demo-ready Sepolia Uniswap defaults for the Swapper registration form.
@@ -55,8 +57,8 @@ export function buildDefaultSwapPolicyFormValues(ownerAddress?: Hex | null): Swa
     maxAmountInWei: "10000000000000000",
     maxSlippageBps: "50",
     recipient: ownerAddress ?? "",
-    router: "0x8b844f885672f333bc0042cb669255f93a4c1e6b",
-    selector: "0x24856bc3"
+    router: SEPOLIA_SWAP_ROUTER_02,
+    selector: SWAP_ROUTER_02_EXACT_INPUT_SINGLE_SELECTOR
   };
 }
 

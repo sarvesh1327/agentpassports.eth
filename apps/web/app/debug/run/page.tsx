@@ -1,10 +1,9 @@
 import Link from "next/link";
 
 /**
- * Intentional demo route: /run now points agents to the MCP execution path.
- * V1 repurposes /run as an MCP demo/instructions route. Agent task signing no
- * longer happens in the browser; the browser remains owner/admin UI while agents
- * use MCP plus local skill signing.
+ * Debug-only demo route: /debug/run points agents to the MCP execution path.
+ * V1 keeps browser agent signing out of the public product surface; the browser
+ * remains owner/admin UI while agents use MCP plus local skill signing.
  */
 export default function RunPage() {
   return (
