@@ -82,7 +82,7 @@ test("MCP flow skill teaches build_task_intent, submit_task, then check_task_sta
     skill,
     [
       "hosted MCP server|system MCP server",
-      "localhost:3333/mcp",
+      "mcp\\.agentpassports\\.xyz/mcp",
       "list.*tools",
       "build_task_intent",
       "submit_task",
@@ -213,7 +213,7 @@ test("fresh agent walkthrough explains the complete first-run thin MCP flow", as
       "\\.agentPassports/keys\\.txt",
       "public address",
       "AgentPassports UI",
-      "localhost:3333/mcp",
+      "mcp\\.agentpassports\\.xyz/mcp",
       "build_task_intent",
       "build-task-intent\\.json",
       "npm install.*viem.*tsx",

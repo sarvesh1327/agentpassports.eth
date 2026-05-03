@@ -12,10 +12,10 @@ The current architecture is **KeeperHub-authoritative**:
 
 ## Connect to the MCP server
 
-For local development in this repo, use the hosted MCP server / system MCP server endpoint:
+Use the hosted MCP server / system MCP server endpoint:
 
 ```text
-http://localhost:3333/mcp
+https://mcp.agentpassports.xyz/mcp
 ```
 
 List tools before acting. The only task tools expected from AgentPassports MCP are:

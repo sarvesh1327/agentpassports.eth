@@ -67,7 +67,7 @@ test("web app exposes thin MCP instructions and keeps run demos under /debug", a
   await assert.rejects(() => readText("apps/web/app/rundemo/page.tsx"), { code: "ENOENT" });
 
   assert.match(mcpPage, /AgentPassports MCP/);
-  assert.match(mcpPage, /http:\/\/localhost:3333\/mcp/);
+  assert.match(mcpPage, /https:\/\/mcp\.agentpassports\.xyz\/mcp/);
   assert.match(mcpPage, /agentpassport_keeperhub_gate/);
   assert.match(mcpPage, /build_task_intent/);
   assert.match(mcpPage, /submit_task/);

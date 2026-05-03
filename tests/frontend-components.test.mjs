@@ -706,7 +706,7 @@ test("debug run routes are moved out of the public product surface", async () =>
 
   for (const label of [
     "AgentPassports MCP",
-    "http://localhost:3333/mcp",
+    "https://mcp.agentpassports.xyz/mcp",
     "agentpassport_keeperhub_gate",
     "build_task_intent",
     "submit_task",

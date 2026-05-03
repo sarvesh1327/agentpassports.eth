@@ -60,15 +60,15 @@ export default function McpPage() {
           <span className="mcp-hero__eyebrow">Agent Permission Manager · MCP</span>
           <h1 id="mcp-title">AgentPassports MCP</h1>
           <p>
-            Connect your MCP-capable agent to <code className="code-pill">http://localhost:3333/mcp</code>. MCP stays thin: it builds unsigned task intents,
+            Connect your MCP-capable agent to <code className="code-pill">https://mcp.agentpassports.xyz/mcp</code>. MCP stays thin: it builds unsigned task intents,
             submits locally signed payloads, and polls KeeperHub for final status.
           </p>
           <p className="mcp-hero__authority">Passport/Visa authority: KeeperHub validates scope, routes execution, and emits KeeperHub Stamps.</p>
         </div>
         <div className="mcp-endpoint-card" aria-label="MCP endpoint summary">
-          <span className="status-pill status-pill--info">Local endpoint</span>
-          <code>http://localhost:3333/mcp</code>
-          <p>Agent runtime only. Owner wallet control stays in the web app and local signing environment.</p>
+          <span className="status-pill status-pill--info">Hosted endpoint</span>
+          <code>https://mcp.agentpassports.xyz/mcp</code>
+          <p>Public MCP runtime. Owner wallet control stays in the web app and local signing environment.</p>
         </div>
       </section>
 

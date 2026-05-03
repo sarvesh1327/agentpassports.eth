@@ -7,8 +7,9 @@ import { createAgentPassportsMcpServer } from "./server.ts";
  * AgentPassports stdio MCP entrypoint.
  *
  * Stdio remains useful for clients that launch MCP servers as subprocesses.
- * The localhost HTTP entrypoint lives in http.ts for clients that connect to an
- * already-running MCP server at http://127.0.0.1:3333/mcp.
+ * The HTTP entrypoint lives in http.ts for clients that connect to a deployed
+ * MCP server such as https://mcp.agentpassports.xyz/mcp, or a locally hosted
+ * equivalent during development.
  */
 async function main() {
   await createAgentPassportsMcpServer().connect(new StdioServerTransport());

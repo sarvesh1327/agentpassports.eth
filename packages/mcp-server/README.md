@@ -12,16 +12,16 @@ From the repo root:
 pnpm mcp:start
 ```
 
-Hosted local Streamable HTTP server:
+Hosted production Streamable HTTP endpoint:
+
+```txt
+https://mcp.agentpassports.xyz/mcp
+```
+
+Local development Streamable HTTP server:
 
 ```bash
 pnpm mcp:http
-```
-
-Endpoint:
-
-```txt
-http://localhost:3333/mcp
 ```
 
 Package-local commands:

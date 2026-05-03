@@ -46,10 +46,10 @@ Please register this address as the agent signer in the AgentPassports UI. After
 
 ## 3. Connect to the MCP server
 
-For local development, the MCP server should be hosted at:
+Use the hosted MCP server at:
 
 ```text
-http://localhost:3333/mcp
+https://mcp.agentpassports.xyz/mcp
 ```
 
 List tools before acting. The expected AgentPassports task tools are only:

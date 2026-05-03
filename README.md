@@ -193,11 +193,16 @@ Run the web app:
 pnpm --filter @agentpassport/web dev
 ```
 
-Run the MCP server:
+Use the hosted MCP server:
+
+```txt
+https://mcp.agentpassports.xyz/mcp
+```
+
+Run a local MCP server for development:
 
 ```bash
 pnpm mcp:http
-# Streamable HTTP endpoint: http://localhost:3333/mcp
 ```
 
 ## Test commands
@@ -216,7 +221,7 @@ forge test
 3. Review the Prepared Passport and wallet transaction queue.
 4. Open `/owner/<owner-name>` to inspect registered Passports, Visa access, and gas budget.
 5. Open `/agent/<agent-name>` to inspect Passport proof, Visa Scope, Uniswap Visa, and KeeperHub Stamps.
-6. Connect an MCP-capable agent to `http://localhost:3333/mcp`.
+6. Connect an MCP-capable agent to `https://mcp.agentpassports.xyz/mcp`.
 7. Call `build_task_intent`, sign the exact returned typed data locally, call `submit_task`, then poll `check_task_status`.
 8. Confirm the KeeperHub execution id, final status, tx hash when present, or blocked/failed KeeperHub Stamp.
 9. Revoke the Visa or update the Passport signer and retry the saved old payload; the retry fails because authorization uses live ENS/Passport state.
